@@ -1,0 +1,137 @@
+version: '1.0'
+stages:
+- prepare
+- build
+- deploy
+- publish
+
+steps:
+  main_clone:
+    title: Clone main repository
+    type: git-clone
+    stage: prepare
+    repo: '${{CF_REPO_OWNER}}/${{CF_REPO_NAME}}'
+    revision: '${{CF_BRANCH}}'
+    git: github
+
+  post_main_clone:
+    title: Post main clone
+    type: parallel
+    stage: prepare
+    steps:
+      cloning_cloudharness:
+        title: Cloning cloud-harness repository...
+        type: git-clone
+        stage: prepare
+        repo: https://github.com/MetaCell/cloud-harness.git
+        revision: '${{CLOUDHARNESS_BRANCH}}'
+        working_directory: .
+        git: github
+
+  prepare_deployment:
+    title: Prepare helm chart
+    image: python:3.10
+    stage: prepare
+    working_directory: .
+    commands:
+    - bash cloud-harness/install.sh
+    - harness-deployment cloud-harness . -t ${{CF_BUILD_ID}} -d ${{DOMAIN}} -r ${{REGISTRY}} -rs ${{REGISTRY_SECRET}} -n ${{NAMESPACE}} -e dev -i idp-arc
+
+  prepare_deployment_view:
+    title: View helm chart
+    image: codefresh/cfstep-helm:3.6.2
+    stage: prepare
+    environment:
+    - ACTION=auth
+    - KUBE_CONTEXT=${{CLUSTER_NAME}}
+    commands:
+    - helm template ./deployment/helm --debug -n ${{NAMESPACE}}
+
+  build_base_web_images:
+    title: Build web base images
+    type: parallel
+    stage: build
+    steps:
+      cloudharness-frontend-build:
+        type: build
+        stage: build
+        tag: '${{CF_BUILD_ID}}'
+        dockerfile: infrastructure/base-images/cloudharness-frontend-build/Dockerfile
+        registry: '${{CODEFRESH_REGISTRY}}'
+        buildkit: true
+        build_arguments:
+        - TAG=${{CF_BUILD_ID}}
+        - DOMAIN=${{DOMAIN}}
+        - NOCACHE=${{CF_BUILD_ID}}
+        - REGISTRY=${{REGISTRY}}/idp-arc
+        image_name: idp-arc/cloudharness-frontend-build
+        title: Cloudharness frontend build
+        working_directory: ./cloud-harness
+
+  build_application_images:
+    title: Build application images
+    type: parallel
+    stage: build
+    steps:
+      idp-arc:
+        type: build
+        stage: build
+        tag: '${{CF_BUILD_ID}}'
+        dockerfile: Dockerfile
+        registry: '${{CODEFRESH_REGISTRY}}'
+        buildkit: true
+        working_directory: ./applications/idp-arc
+        build_arguments:
+        - TAG=${{CF_BUILD_ID}}
+        - DOMAIN=${{DOMAIN}}
+        - NOCACHE=${{CF_BUILD_ID}}
+        - REGISTRY=${{REGISTRY}}/idp-arc
+        - CLOUDHARNESS_FRONTEND_BUILD=${{REGISTRY}}/idp-arc/cloudharness-frontend-build:${{CF_BUILD_ID}}
+        image_name: idp-arc/idp-arc
+        title: IDP-ARC Dev
+        no_cache: true
+        no_cf_cache: true
+
+  deployment:
+    stage: deploy
+    image: codefresh/cfstep-helm:3.6.2
+    title: Installing chart
+    environment:
+    - ACTION=install
+    - CHART_REF=./deployment/helm
+    - RELEASE_NAME=${{NAMESPACE}}
+    - KUBE_CONTEXT=${{CLUSTER_NAME}}
+    - NAMESPACE=${{NAMESPACE}}
+    - CHART_VERSION=${{CF_BUILD_ID}}
+    - HELM_REPO_USE_HTTP=false
+    - HELM_REPO_CONTEXT_PATH=
+    - TIMEOUT=600s
+    - VALUESFILE_values=./deployment/helm/values-dev.yaml
+
+  publish:
+    type: parallel
+    stage: publish
+    steps:
+      publish_cloudharness-frontend-build:
+        stage: publish
+        type: push
+        title: Cloudharness frontend build
+        candidate: '${{REGISTRY}}/idp-arc/cloudharness-frontend-build:${{CF_BUILD_ID}}'
+        tags:
+        - '${{DEPLOYMENT_PUBLISH_TAG}}'
+        - '${{CF_BUILD_ID}}'
+        registry: '${{REGISTRY_PUBLISH_URL}}'
+
+      publish_idp-arc:
+        stage: publish
+        type: push
+        title: IDP-ARC
+        candidate: '${{REGISTRY}}/idp-arc/idp-arc:${{CF_BUILD_ID}}'
+        tags:
+        - '${{DEPLOYMENT_PUBLISH_TAG}}'
+        - '${{CF_BUILD_ID}}'
+        registry: '${{REGISTRY_PUBLISH_URL}}'
+    when:
+      condition:
+        all:
+          whenVarExists: includes("${{DEPLOYMENT_PUBLISH_TAG}}", "{{DEPLOYMENT_PUBLISH_TAG}}") == false
