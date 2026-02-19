@@ -12,8 +12,8 @@ FROM nginxinc/nginx-unprivileged:stable-alpine
 
 USER root
 RUN rm -rf /usr/share/nginx/html/*
-
 COPY --from=build --chown=101:101 /app/dist/ /usr/share/nginx/html/
-
+COPY --chown=101:101 deploy/resources/default.conf /etc/nginx/conf.d/default.conf
 USER 101
+
 EXPOSE 8080
