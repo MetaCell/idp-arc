@@ -1,0 +1,28 @@
+harness:
+  subdomain: idp-arc
+  secured: false
+
+  service:
+    port: 8080
+    auto: true
+
+  deployment:
+    auto: true
+    port: 8080
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 1024Mi
+        cpu: 500m
+
+  dependencies:
+    build:
+      - cloudharness-frontend-build
+
+  ingress:
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
