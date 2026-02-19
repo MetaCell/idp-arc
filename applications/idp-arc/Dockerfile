@@ -13,7 +13,7 @@ FROM nginxinc/nginx-unprivileged:stable-alpine
 USER root
 RUN rm -rf /usr/share/nginx/html/*
 
-COPY --from=build /app/dist/ /usr/share/nginx/html/
+COPY --from=build --chown=101:101 /app/dist/ /usr/share/nginx/html/
 
 USER 101
 EXPOSE 8080

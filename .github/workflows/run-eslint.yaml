@@ -33,4 +33,4 @@ jobs:
     # Step 4: Run ESLint
     - name: Run ESLint
       working-directory: applications/idp-arc/frontend
-      run: yarn build
+      run: yarn lint
