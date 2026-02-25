@@ -1,0 +1,9 @@
+applications/idp-arc/frontend/node_modules
+applications/idp-arc/frontend/dist
+applications/idp-arc/frontend/build
+cloud-harness
+deployment/helm/
+skaffold.yaml
+.vscode
+.overrides
+.DS_Store
