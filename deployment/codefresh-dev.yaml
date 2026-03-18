@@ -33,6 +33,8 @@ steps:
     stage: prepare
     working_directory: .
     commands:
+    - pwd
+    - ls -la
     - bash cloud-harness/install.sh
     - harness-deployment ../cloud-harness . -d ${{DOMAIN}} -r ${{REGISTRY}} -rs '${{REGISTRY_SECRET}}'
       -n ${{NAMESPACE}} --write-env -e dev --cache-url '${{IMAGE_CACHE_URL}}' -i idp-arc
