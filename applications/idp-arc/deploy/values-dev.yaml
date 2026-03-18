@@ -12,13 +12,13 @@ harness:
     resources:
       requests:
         memory: 512Mi
-        cpu: 250m
+        cpu: 125m
       limits:
-        memory: 1024Mi
-        cpu: 500m
+        memory: 512Mi
 
   dependencies:
     build:
+      - cloudharness-base
       - cloudharness-frontend-build
 
   ingress:
