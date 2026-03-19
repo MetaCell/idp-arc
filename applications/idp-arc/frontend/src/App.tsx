@@ -3,7 +3,7 @@ import Keycloak from 'keycloak-js'
 import './App.css'
 
 const keycloak = new Keycloak({
-  url: 'https://accounts.v2dev.opensourcebrain.org/auth',
+  url: 'https://accounts.v2dev.opensourcebrain.org',
   realm: 'osb2dev',
   clientId: 'idp-arc',
 })
