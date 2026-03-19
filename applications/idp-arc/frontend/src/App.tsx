@@ -20,7 +20,7 @@ function App() {
       .init({
         onLoad: 'check-sso',
         pkceMethod: 'S256',
-        silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
+        checkLoginIframe: false,
       })
       .then((authenticated) => {
         setAuthState(authenticated ? 'authenticated' : 'unauthenticated')
