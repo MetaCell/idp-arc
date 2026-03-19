@@ -57,6 +57,7 @@ function App() {
     keycloak.updateToken(30)
       .then(() =>
         fetch(WORKSPACES_URL, {
+          credentials: 'include', // sends kc-access, kc-state and any other v2dev cookies
           headers: { Authorization: `Bearer ${keycloak.token}` },
         })
       )
