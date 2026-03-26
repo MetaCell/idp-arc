@@ -8,15 +8,6 @@ const keycloak = new Keycloak({
   clientId: 'idp-arc',
 })
 
-/** Read the kc-access cookie set by the OSBv2 web-client session.
- *  That token carries the correct audience, roles and administrator-scope
- *  that the OSBv2 backend APIs require.
- */
-function getOsbAccessToken(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)kc-access=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : null
-}
-
 const WORKSPACES_URL =
   'https://www.v2dev.opensourcebrain.org/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags='
 
@@ -44,7 +35,7 @@ function App() {
         onLoad: 'check-sso',
         pkceMethod: 'S256',
         checkLoginIframe: false,
-        scope: 'openid profile email',
+        scope: 'openid profile email administrator-scope',
       })
       .then((authenticated) => {
         setAuthState(authenticated ? 'authenticated' : 'unauthenticated')
@@ -65,17 +56,11 @@ function App() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setWorkspacesLoading(true)
     keycloak.updateToken(30)
-      .then(() => {
-        // Prefer the web-client token from the OSBv2 kc-access cookie — it carries
-        // the correct audience ("web-client"), roles (trusted) and administrator-scope
-        // that the OSBv2 backend APIs require.  Fall back to the idp-arc token only
-        // if the cookie is absent (i.e. the user hasn't also logged into OSBv2).
-        const bearerToken = getOsbAccessToken() ?? keycloak.token
-        return fetch(WORKSPACES_URL, {
-          credentials: 'include', // sends kc-access, kc-state and any other v2dev cookies
-          headers: { Authorization: `Bearer ${bearerToken}` },
+      .then(() =>
+        fetch(WORKSPACES_URL, {
+          headers: { Authorization: `Bearer ${keycloak.token}` },
         })
-      })
+      )
       .then((res) => {
         if (!res.ok) throw new Error(`API responded ${res.status} ${res.statusText}`)
         return res.json()
