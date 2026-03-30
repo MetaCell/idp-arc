@@ -1,6 +1,8 @@
 applications/idp-arc/frontend/node_modules
 applications/idp-arc/frontend/dist
 applications/idp-arc/frontend/build
+applications/idp-arc/frontend/test-results
+applications/idp-arc/frontend/playwright-report
 cloud-harness
 deployment/helm/
 skaffold.yaml
