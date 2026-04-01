@@ -2,9 +2,6 @@ name: UI Tests (Playwright)
 
 on:
   pull_request:
-    branches:
-      - main
-      - development
 
 jobs:
   e2e:

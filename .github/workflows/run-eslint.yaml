@@ -2,9 +2,6 @@ name: Run ESLint
 
 on:
   pull_request:
-    branches:
-      - main
-      - development
 
 jobs:
   eslint:
