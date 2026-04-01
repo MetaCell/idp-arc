@@ -40,10 +40,6 @@
   },
 
   "postCreateCommand": "yarn install && npx playwright install --with-deps",
-  
-  "postAttachCommand": {
-    "server": "yarn dev"
-  },
 
   "remoteUser": "node"
 }
