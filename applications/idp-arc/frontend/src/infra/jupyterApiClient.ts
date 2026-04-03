@@ -40,7 +40,7 @@ export class JupyterApiClient implements IJupyterApi {
       try {
         const probe = await fetch(contentsUrl, { credentials: 'include' })
         if (probe.ok) return true
-        // 4xx other than 502/503 means server is up but auth failed — stop waiting
+        // Any non-502/503 response means the server replied and is not in a transient retry state — stop waiting
         if (probe.status !== 503 && probe.status !== 502) break
       } catch {
         // Network / CORS error — keep retrying
