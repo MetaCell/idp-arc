@@ -1,0 +1,48 @@
+{
+    "app": {
+    "title": "IDP-ARC"
+  },
+  "auth": {
+    "initialising": "Initialising authentication…",
+    "notLoggedIn": "You are not logged in.",
+    "signIn": "Sign in with OSB",
+    "signOut": "Sign out",
+    "signedInAs": "Signed in as"
+  },
+  "errors": {
+    "authFailed": "Failed to initialise authentication. See console for details.",
+    "workspacesLoad": "Error: {{message}}"
+  },
+  "workspaces": {
+    "title": "OSB Workspaces",
+    "loading": "Loading workspaces…",
+    "empty": "No workspaces found.",
+    "newButton": "+ New workspace & upload file",
+    "table": {
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "created": "Created",
+      "noDescription": "—",
+      "noDate": "—"
+    }
+  },
+  "modal": {
+    "title": "New workspace & upload file",
+    "workspaceNameLabel": "Workspace name",
+    "workspaceNamePlaceholder": "My new workspace",
+    "fileLabel": "File to upload",
+    "fileInfo": "{{name}} ({{size}} KB)",
+    "cancel": "Cancel",
+    "createAndUpload": "Create & upload",
+    "close": "Close",
+    "retry": "Retry upload",
+    "workspaceId": "Workspace ID: ",
+    "uploadSuccess": "✓ File uploaded successfully!",
+    "openWorkspace": "Open workspace in JupyterLab ↗",
+    "uploadFailed": "Upload failed",
+    "workspaceCreated": "The workspace was created.",
+    "uploadManually": "Open it in JupyterLab ↗",
+    "uploadManuallyTrailing": "to upload the file manually."
+  }
+}

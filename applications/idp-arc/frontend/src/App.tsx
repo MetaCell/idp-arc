@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import './App.css'
 
 // ─── DI: import ONLY from the composition root, never from infra directly ─────
@@ -9,6 +10,7 @@ import type { AuthState, Workspace, UploadState } from './core/types'
 // All business logic lives in use-cases; all side-effects live in infra.
 
 function App() {
+  const { t } = useTranslation()
   const [authState, setAuthState] = useState<AuthState>('loading')
   const [tokenParsed, setTokenParsed] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -38,10 +40,10 @@ function App() {
       })
       .catch((err: Error) => {
         console.error('Keycloak init failed', err)
-        setError('Failed to initialise authentication. See console for details.')
+        setError(t('errors.authFailed'))
         setAuthState('unauthenticated')
       })
-  }, [])
+  }, [t])
 
   // useCallback gives a stable reference so the useEffect below doesn't
   // re-run on every render, and allows imperative calls after upload.
@@ -100,7 +102,7 @@ function App() {
   }
 
   if (authState === 'loading') {
-    return <div className="card"><p>Initialising authentication…</p></div>
+    return <div className="card"><p>{t('auth.initialising')}</p></div>
   }
 
   if (error) {
@@ -110,9 +112,9 @@ function App() {
   if (authState === 'unauthenticated') {
     return (
       <div className="card">
-        <h1>IDP-ARC</h1>
-        <p>You are not logged in.</p>
-        <button onClick={() => authClient.login()}>Sign in with OSB</button>
+        <h1>{t('app.title')}</h1>
+        <p>{t('auth.notLoggedIn')}</p>
+        <button onClick={() => authClient.login()}>{t('auth.signIn')}</button>
       </div>
     )
   }
@@ -127,31 +129,31 @@ function App() {
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
       <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <h1>IDP-ARC</h1>
-        <p>Signed in as <strong>{username}</strong></p>
-        <button onClick={() => authClient.logout()}>Sign out</button>
+        <h1>{t('app.title')}</h1>
+        <p>{t('auth.signedInAs')} <strong>{username}</strong></p>
+        <button onClick={() => authClient.logout()}>{t('auth.signOut')}</button>
       </div>
 
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h2 style={{ margin: 0 }}>OSB Workspaces</h2>
-          <button onClick={openModal}>+ New workspace &amp; upload file</button>
+          <h2 style={{ margin: 0 }}>{t('workspaces.title')}</h2>
+          <button onClick={openModal}>{t('workspaces.newButton')}</button>
         </div>
-        {workspacesLoading && <p>Loading workspaces…</p>}
+        {workspacesLoading && <p>{t('workspaces.loading')}</p>}
         {workspacesError && (
-          <p style={{ color: 'red' }}>Error: {workspacesError}</p>
+          <p style={{ color: 'red' }}>{t('errors.workspacesLoad', { message: workspacesError })}</p>
         )}
         {workspaces && workspaces.length === 0 && (
-          <p>No workspaces found.</p>
+          <p>{t('workspaces.empty')}</p>
         )}
         {workspaces && workspaces.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #ccc', textAlign: 'left' }}>
-                <th style={{ padding: '0.5rem' }}>ID</th>
-                <th style={{ padding: '0.5rem' }}>Name</th>
-                <th style={{ padding: '0.5rem' }}>Description</th>
-                <th style={{ padding: '0.5rem' }}>Created</th>
+                <th style={{ padding: '0.5rem' }}>{t('workspaces.table.id')}</th>
+                <th style={{ padding: '0.5rem' }}>{t('workspaces.table.name')}</th>
+                <th style={{ padding: '0.5rem' }}>{t('workspaces.table.description')}</th>
+                <th style={{ padding: '0.5rem' }}>{t('workspaces.table.created')}</th>
               </tr>
             </thead>
             <tbody>
@@ -159,11 +161,11 @@ function App() {
                 <tr key={ws.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: '0.5rem', color: '#888', fontSize: '0.8rem' }}>{ws.id}</td>
                   <td style={{ padding: '0.5rem' }}><strong>{ws.name}</strong></td>
-                  <td style={{ padding: '0.5rem' }}>{ws.description ?? '—'}</td>
+                  <td style={{ padding: '0.5rem' }}>{ws.description ?? t('workspaces.table.noDescription')}</td>
                   <td style={{ padding: '0.5rem', whiteSpace: 'nowrap' }}>
                     {ws.timestamp_created
                       ? new Date(ws.timestamp_created).toLocaleDateString()
-                      : '—'}
+                      : t('workspaces.table.noDate')}
                   </td>
                 </tr>
               ))}
@@ -188,23 +190,23 @@ function App() {
             className="card"
             style={{ width: '480px', maxWidth: '90vw', padding: '2rem', position: 'relative' }}
           >
-            <h2 style={{ marginTop: 0 }}>New workspace &amp; upload file</h2>
+            <h2 style={{ marginTop: 0 }}>{t('modal.title')}</h2>
 
             {uploadState.phase === 'idle' && (
               <>
                 <label style={{ display: 'block', marginBottom: '0.5rem' }}>
-                  <span style={{ fontWeight: 600 }}>Workspace name</span>
+                  <span style={{ fontWeight: 600 }}>{t('modal.workspaceNameLabel')}</span>
                   <input
                     type="text"
                     value={workspaceName}
                     onChange={(e) => setWorkspaceName(e.target.value)}
-                    placeholder="My new workspace"
+                    placeholder={t('modal.workspaceNamePlaceholder')}
                     style={{ display: 'block', width: '100%', marginTop: '0.25rem', padding: '0.4rem 0.6rem', boxSizing: 'border-box' }}
                   />
                 </label>
 
                 <label style={{ display: 'block', marginBottom: '1.5rem' }}>
-                  <span style={{ fontWeight: 600 }}>File to upload</span>
+                  <span style={{ fontWeight: 600 }}>{t('modal.fileLabel')}</span>
                   <input
                     type="file"
                     onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
@@ -212,18 +214,18 @@ function App() {
                   />
                   {selectedFile && (
                     <span style={{ fontSize: '0.85rem', color: '#555' }}>
-                      {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                      {t('modal.fileInfo', { name: selectedFile.name, size: (selectedFile.size / 1024).toFixed(1) })}
                     </span>
                   )}
                 </label>
 
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                  <button onClick={closeModal}>Cancel</button>
+                  <button onClick={closeModal}>{t('modal.cancel')}</button>
                   <button
                     onClick={handleCreateAndUpload}
                     disabled={!workspaceName.trim() || !selectedFile}
                   >
-                    Create &amp; upload
+                    {t('modal.createAndUpload')}
                   </button>
                 </div>
               </>
@@ -235,18 +237,18 @@ function App() {
                 <progress style={{ width: '100%' }} />
                 {uploadState.workspaceId && (
                   <p style={{ fontSize: '0.85rem', color: '#555' }}>
-                    Workspace ID: <strong>{uploadState.workspaceId}</strong>
+                    {t('modal.workspaceId')}<strong>{uploadState.workspaceId}</strong>
                   </p>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                  <button onClick={closeModal}>Cancel</button>
+                  <button onClick={closeModal}>{t('modal.cancel')}</button>
                 </div>
               </div>
             )}
 
             {uploadState.phase === 'done' && (
               <div>
-                <p style={{ color: 'green', fontWeight: 600 }}>✓ File uploaded successfully!</p>
+                <p style={{ color: 'green', fontWeight: 600 }}>{t('modal.uploadSuccess')}</p>
                 {uploadState.workspaceId && (
                   <p>
                     <a
@@ -254,36 +256,36 @@ function App() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Open workspace in JupyterLab ↗
+                      {t('modal.openWorkspace')}
                     </a>
                   </p>
                 )}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                  <button onClick={closeModal}>Close</button>
+                  <button onClick={closeModal}>{t('modal.close')}</button>
                 </div>
               </div>
             )}
 
             {uploadState.phase === 'error' && (
               <div>
-                <p style={{ color: 'red', fontWeight: 600 }}>Upload failed</p>
+                <p style={{ color: 'red', fontWeight: 600 }}>{t('modal.uploadFailed')}</p>
                 <p style={{ fontSize: '0.9rem', color: '#555' }}>{uploadState.error}</p>
                 {uploadState.workspaceId && (
                   <p style={{ fontSize: '0.9rem' }}>
-                    The workspace was created.{' '}
+                    {t('modal.workspaceCreated')}{' '}
                     <a
                       href={getWorkspaceUrl(uploadState.workspaceId!)}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Open it in JupyterLab ↗
+                      {t('modal.uploadManually')}
                     </a>{' '}
-                    to upload the file manually.
+                    {t('modal.uploadManuallyTrailing')}
                   </p>
                 )}
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                  <button onClick={closeModal}>Close</button>
-                  <button onClick={handleCreateAndUpload}>Retry upload</button>
+                  <button onClick={closeModal}>{t('modal.close')}</button>
+                  <button onClick={handleCreateAndUpload}>{t('modal.retry')}</button>
                 </div>
               </div>
             )}
