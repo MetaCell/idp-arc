@@ -41,7 +41,7 @@ function App() {
         setError('Failed to initialise authentication. See console for details.')
         setAuthState('unauthenticated')
       })
-  }, [])
+  }, [authClient])
 
   // useCallback gives a stable reference so the useEffect below doesn't
   // re-run on every render, and allows imperative calls after upload.
