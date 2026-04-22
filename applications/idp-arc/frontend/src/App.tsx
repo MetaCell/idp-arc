@@ -55,7 +55,7 @@ function App() {
         setWorkspacesError(err.message)
       })
       .finally(() => setWorkspacesLoading(false))
-  }, [])
+  }, [loadWorkspaces])
 
   useEffect(() => {
     if (authState !== 'authenticated') return
