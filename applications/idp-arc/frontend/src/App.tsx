@@ -1,67 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import Keycloak from 'keycloak-js'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 
-const keycloak = new Keycloak({
-  url: 'https://accounts.v2dev.opensourcebrain.org',
-  realm: 'osb2dev',
-  clientId: 'idp-arc',
-})
+// ─── DI: import ONLY from the composition root, never from infra directly ─────
+import { authClient, loadWorkspaces, createAndUpload, getWorkspaceUrl } from './app/container'
+import type { AuthState, Workspace, UploadState } from './core/types'
 
-const BASE_DOMAIN = 'v2dev.opensourcebrain.org'
-const WORKSPACES_URL =
-  `https://www.${BASE_DOMAIN}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
-const WORKSPACES_API = `https://www.${BASE_DOMAIN}/proxy/workspaces/api`
-const JUPYTER_BASE = `https://lab.${BASE_DOMAIN}`
-
-/** Try to refresh the token; if no refresh token is available, silently proceed with the current one. */
-async function safeUpdateToken(minValidity = 30) {
-  try {
-    await keycloak.updateToken(minValidity)
-  } catch {
-    // No refresh token available (e.g. check-sso without offline session).
-    // Proceed with the current token as long as it hasn't expired.
-    if (!keycloak.token) throw new Error('No access token available. Please sign in again.')
-  }
-}
-
-type AuthState = 'loading' | 'authenticated' | 'unauthenticated'
-
-interface Workspace {
-  id: string | number
-  name: string
-  description?: string
-  timestamp_created?: string
-  thumbnail?: string
-}
-
-type UploadPhase = 'idle' | 'creating' | 'spawning' | 'waiting' | 'uploading' | 'done' | 'error'
-
-interface UploadState {
-  phase: UploadPhase
-  message: string
-  error?: string
-  workspaceId?: number
-}
-
-const PHASE_LABELS: Record<UploadPhase, string> = {
-  idle: '',
-  creating: '1 / 4 — Creating workspace…',
-  spawning: '2 / 4 — Starting JupyterLab server…',
-  waiting: '3 / 4 — Waiting for JupyterLab to be ready…',
-  uploading: '4 / 4 — Uploading file…',
-  done: 'Done!',
-  error: 'Error',
-}
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => resolve((reader.result as string).split(',')[1])
-    reader.onerror = reject
-  })
-}
+// App.tsx has one responsibility: React state + rendering.
+// All business logic lives in use-cases; all side-effects live in infra.
 
 function App() {
   const [authState, setAuthState] = useState<AuthState>('loading')
@@ -83,56 +28,40 @@ function App() {
     if (keycloakInitialized.current) return
     keycloakInitialized.current = true
 
-    keycloak
-      .init({
-        onLoad: 'check-sso',
-        pkceMethod: 'S256',
-        checkLoginIframe: false,
-        scope: 'openid profile email administrator-scope',
-      })
-      .then((authenticated) => {
+    authClient
+      .init()
+      .then((authenticated: boolean) => {
         setAuthState(authenticated ? 'authenticated' : 'unauthenticated')
-        if (authenticated && keycloak.tokenParsed) {
-          setTokenParsed(keycloak.tokenParsed as Record<string, unknown>)
+        if (authenticated && authClient.tokenParsed) {
+          setTokenParsed(authClient.tokenParsed)
         }
       })
-      .catch((err) => {
+      .catch((err: Error) => {
         console.error('Keycloak init failed', err)
         setError('Failed to initialise authentication. See console for details.')
         setAuthState('unauthenticated')
       })
-  }, [])
+  }, [authClient])
 
-  useEffect(() => {
-    if (authState !== 'authenticated') return
-    loadWorkspaces()
-  }, [authState])
-
-  function loadWorkspaces() {
+  // useCallback gives a stable reference so the useEffect below doesn't
+  // re-run on every render, and allows imperative calls after upload.
+  const loadWorkspaceList = useCallback(() => {
     setWorkspacesLoading(true)
     setWorkspacesError(null)
-    safeUpdateToken(30)
-      .then(() =>
-        fetch(WORKSPACES_URL, {
-          headers: { Authorization: `Bearer ${keycloak.token}` },
-        })
-      )
-      .then((res) => {
-        if (!res.ok) throw new Error(`API responded ${res.status} ${res.statusText}`)
-        return res.json()
-      })
-      .then((data) => {
-        const list: Workspace[] = Array.isArray(data)
-          ? data
-          : (data.results ?? data.items ?? data.workspaces ?? [])
-        setWorkspaces(list)
-      })
+    loadWorkspaces()
+      .then(setWorkspaces)
       .catch((err: Error) => {
         console.error('Failed to fetch workspaces', err)
         setWorkspacesError(err.message)
       })
       .finally(() => setWorkspacesLoading(false))
-  }
+  }, [loadWorkspaces])
+
+  useEffect(() => {
+    if (authState !== 'authenticated') return
+    // async IIFE keeps setState calls off the synchronous effect body
+    void (async () => { loadWorkspaceList() })()
+  }, [authState, loadWorkspaceList])
 
   function openModal() {
     setWorkspaceName('')
@@ -149,122 +78,25 @@ function App() {
 
   async function handleCreateAndUpload() {
     if (!workspaceName.trim() || !selectedFile) return
-
-    const userId = tokenParsed?.sub as string
     abortRef.current = false
 
-    try {
-      // Step 1: Create workspace
-      setUploadState({ phase: 'creating', message: PHASE_LABELS.creating })
-      await safeUpdateToken(30)
-      const createRes = await fetch(`${WORKSPACES_API}/workspace`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${keycloak.token}`,
-          'Content-Type': 'application/json',
+    await createAndUpload(
+      {
+        workspaceName: workspaceName.trim(),
+        file: selectedFile,
+        userId: tokenParsed?.sub as string,
+        // Called right after the workspace is created — before the 30 s PVC
+        // wait — so the browser still treats this as a user-gesture and allows
+        // window.open() without triggering the popup blocker.
+        onWorkspaceCreated: (wsId) => {
+          window.open(getWorkspaceUrl(wsId), '_blank')
         },
-        body: JSON.stringify({ name: workspaceName.trim(), description: workspaceName.trim() }),
-      })
-      if (!createRes.ok) {
-        throw new Error(`Failed to create workspace: ${createRes.status} ${createRes.statusText}`)
-      }
-      const ws = await createRes.json()
-      const wsId: number = ws.id
-      // JupyterHub named-server convention used by OSB: {workspaceId}lab
-      const serverName = `${wsId}lab`
-      const wsOpenUrl = `https://www.${BASE_DOMAIN}/workspaces/open/${wsId}/jupyter`
+      },
+      setUploadState,
+      abortRef,
+    )
 
-      // Open the new workspace in a background tab immediately after creation
-      const newTab = window.open(wsOpenUrl, '_blank')
-      if (newTab) window.focus()
-
-      if (abortRef.current) return
-
-      // Step 2: Set the accessToken cookie so JupyterHub can authenticate the user,
-      // then trigger the server spawn via a no-cors GET to the hub spawn URL.
-      setUploadState({ phase: 'spawning', message: PHASE_LABELS.spawning, workspaceId: wsId })
-      document.cookie = `accessToken=${keycloak.token};path=/;domain=.${BASE_DOMAIN};SameSite=Lax`
-
-      // Fire-and-forget: the hub login handler reads the cookie and creates a session.
-      // no-cors is intentional — we don't need the response, just to trigger auth + spawn.
-      void fetch(`${JUPYTER_BASE}/hub/chlogin?next=%2Fhub%2Fspawn%2F${userId}%2F${serverName}`, {
-        credentials: 'include',
-        mode: 'no-cors',
-      })
-
-      // Wait 30 s for the PVC to be provisioned before starting to poll
-      for (let i = 30; i > 0; i--) {
-        if (abortRef.current) return
-        setUploadState({
-          phase: 'spawning',
-          message: `2 / 4 — Waiting for PVC to initialise… ${i}s`,
-          workspaceId: wsId,
-        })
-        await new Promise((r) => setTimeout(r, 1_000))
-      }
-
-      if (abortRef.current) return
-
-      // Step 3: Poll until JupyterLab Contents API responds (server is ready)
-      setUploadState({ phase: 'waiting', message: PHASE_LABELS.waiting, workspaceId: wsId })
-      const contentsBaseUrl = `${JUPYTER_BASE}/user/${userId}/${serverName}/api/contents/`
-      const deadline = Date.now() + 240_000 // 2-minute timeout
-      let serverReady = false
-
-      while (!abortRef.current && Date.now() < deadline) {
-        try {
-          const probe = await fetch(contentsBaseUrl, { credentials: 'include' })
-          if (probe.ok) {
-            serverReady = true
-            break
-          }
-          // 4xx other than 503 (not ready yet) usually means server is up but auth failed
-          if (probe.status !== 503 && probe.status !== 502) break
-        } catch {
-          // network / CORS error — keep trying
-        }
-        await new Promise((r) => setTimeout(r, 4_000))
-      }
-
-      if (abortRef.current) return
-
-      if (!serverReady) {
-        throw new Error(
-          'Could not reach the JupyterLab server within the timeout. ' +
-          'This may be due to CORS restrictions or a slow cold-start. ' +
-          'The workspace was created — you can open it in JupyterLab and upload the file manually.'
-        )
-      }
-
-      // Step 4: Upload via JupyterLab Contents API
-      setUploadState({ phase: 'uploading', message: PHASE_LABELS.uploading, workspaceId: wsId })
-      const fileContent = await readFileAsBase64(selectedFile)
-      const uploadRes = await fetch(
-        `${JUPYTER_BASE}/user/${userId}/${serverName}/api/contents/${encodeURIComponent(selectedFile.name)}`,
-        {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: selectedFile.name,
-            path: selectedFile.name,
-            type: 'file',
-            format: 'base64',
-            content: fileContent,
-          }),
-        }
-      )
-      if (!uploadRes.ok) {
-        throw new Error(`Upload failed: ${uploadRes.status} ${uploadRes.statusText}`)
-      }
-
-      setUploadState({ phase: 'done', message: PHASE_LABELS.done, workspaceId: wsId })
-      // Refresh workspace list so the new workspace appears
-      loadWorkspaces()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setUploadState((prev) => ({ ...prev, phase: 'error', error: msg }))
-    }
+    loadWorkspaceList()
   }
 
   if (authState === 'loading') {
@@ -280,7 +112,7 @@ function App() {
       <div className="card">
         <h1>IDP-ARC</h1>
         <p>You are not logged in.</p>
-        <button onClick={() => keycloak.login()}>Sign in with OSB</button>
+        <button onClick={() => authClient.login()}>Sign in with OSB</button>
       </div>
     )
   }
@@ -297,7 +129,7 @@ function App() {
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <h1>IDP-ARC</h1>
         <p>Signed in as <strong>{username}</strong></p>
-        <button onClick={() => keycloak.logout()}>Sign out</button>
+        <button onClick={() => authClient.logout()}>Sign out</button>
       </div>
 
       <div className="card">
@@ -418,7 +250,7 @@ function App() {
                 {uploadState.workspaceId && (
                   <p>
                     <a
-                      href={`https://www.${BASE_DOMAIN}/workspaces/open/${uploadState.workspaceId}/jupyter`}
+                      href={getWorkspaceUrl(uploadState.workspaceId!)}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -440,7 +272,7 @@ function App() {
                   <p style={{ fontSize: '0.9rem' }}>
                     The workspace was created.{' '}
                     <a
-                      href={`https://www.${BASE_DOMAIN}/workspaces/open/${uploadState.workspaceId}/jupyter`}
+                      href={getWorkspaceUrl(uploadState.workspaceId!)}
                       target="_blank"
                       rel="noreferrer"
                     >

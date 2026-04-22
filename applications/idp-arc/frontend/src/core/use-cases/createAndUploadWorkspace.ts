@@ -1,0 +1,116 @@
+import type { IAuthClient } from '../ports/IAuthClient'
+import type { IWorkspaceApi } from '../ports/IWorkspaceApi'
+import type { IJupyterApi } from '../ports/IJupyterApi'
+import type { UploadState } from '../types'
+import { PHASE_LABELS } from '../types'
+
+/** Callback the use-case calls at each phase transition; the UI uses it to drive React state. */
+export type OnProgress = (state: UploadState) => void
+
+export interface CreateAndUploadInput {
+  workspaceName: string
+  file: File
+  /** Subject claim (`sub`) from the token payload — identifies the JupyterHub user. */
+  userId: string
+  /**
+   * Called synchronously the moment the workspace id is known (right after
+   * Step 1, before the long PVC wait). Use this to open the workspace tab
+   * while still inside the user-gesture async chain so the browser allows it.
+   */
+  onWorkspaceCreated?: (wsId: number) => void
+}
+
+/**
+ * createAndUploadWorkspace use-case
+ *
+ * Owns the *sequence* and *error handling* of the 4-step workflow:
+ *   1. Create workspace via REST API
+ *   2. Trigger JupyterHub spawn
+ *   3. Poll until JupyterLab is ready
+ *   4. Upload file via JupyterLab Contents API
+ *
+ * DI: every side-effect (auth, HTTP, browser APIs) is injected through ports.
+ * Testing: pass plain fake objects — no vi.mock() required.
+ *
+ * @example
+ * const run = createCreateAndUploadUseCase(auth, workspaceApi, jupyterApi)
+ * await run({ workspaceName: 'My WS', file, userId }, setUploadState, abortRef)
+ */
+export function createCreateAndUploadUseCase(
+  auth: Pick<IAuthClient, 'getToken'>,
+  workspaceApi: Pick<IWorkspaceApi, 'createWorkspace'>,
+  jupyterApi: Pick<IJupyterApi, 'triggerSpawn' | 'waitUntilReady' | 'uploadFile'>,
+) {
+  return async function createAndUpload(
+    input: CreateAndUploadInput,
+    onProgress: OnProgress,
+    abortRef: { current: boolean },
+  ): Promise<number | null> {
+    const { workspaceName, file, userId, onWorkspaceCreated } = input
+
+    try {
+      // ── Step 1: Create workspace ──────────────────────────────────────────
+      onProgress({ phase: 'creating', message: PHASE_LABELS.creating })
+      const token = await auth.getToken(30)
+      const wsId = await workspaceApi.createWorkspace(token, workspaceName)
+
+      // Notify the caller immediately — this fires before the long PVC wait
+      // so it is still within the browser's user-gesture async chain, which
+      // means window.open() passed here will NOT be blocked as a popup.
+      onWorkspaceCreated?.(wsId)
+
+      if (abortRef.current) return null
+
+      // ── Step 2: Trigger JupyterHub spawn ──────────────────────────────────
+      const serverName = `${wsId}lab`
+      onProgress({ phase: 'spawning', message: PHASE_LABELS.spawning, workspaceId: wsId })
+
+      const spawnToken = await auth.getToken(30)
+      jupyterApi.triggerSpawn(spawnToken, userId, serverName)
+
+      // Wait 30 s for the PVC to initialise before polling
+      for (let i = 30; i > 0; i--) {
+        if (abortRef.current) return null
+        onProgress({
+          phase: 'spawning',
+          message: `2 / 4 — Waiting for PVC to initialise… ${i}s`,
+          workspaceId: wsId,
+        })
+        await sleep(1_000)
+      }
+
+      if (abortRef.current) return null
+
+      // ── Step 3: Poll until JupyterLab is ready ────────────────────────────
+      onProgress({ phase: 'waiting', message: PHASE_LABELS.waiting, workspaceId: wsId })
+      const deadline = Date.now() + 240_000 // 4-minute total timeout
+
+      const ready = await jupyterApi.waitUntilReady(userId, serverName, deadline, abortRef)
+
+      if (abortRef.current) return null
+
+      if (!ready) {
+        throw new Error(
+          'Could not reach the JupyterLab server within the timeout. ' +
+          'This may be due to CORS restrictions or a slow cold-start. ' +
+          'The workspace was created — you can open it in JupyterLab and upload the file manually.',
+        )
+      }
+
+      // ── Step 4: Upload file ───────────────────────────────────────────────
+      onProgress({ phase: 'uploading', message: PHASE_LABELS.uploading, workspaceId: wsId })
+      await jupyterApi.uploadFile(userId, serverName, file)
+
+      onProgress({ phase: 'done', message: PHASE_LABELS.done, workspaceId: wsId })
+      return wsId
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      onProgress({ phase: 'error', message: PHASE_LABELS.error, error: msg })
+      return null
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
