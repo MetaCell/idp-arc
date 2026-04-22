@@ -20,7 +20,7 @@ export class JupyterApiClient implements IJupyterApi {
 
   triggerSpawn(token: string, userId: string, serverName: string): void {
     // Set the session cookie so JupyterHub can authenticate the user
-    document.cookie = `accessToken=${token};path=/;domain=.${this.baseDomain};SameSite=Lax`
+    document.cookie = `accessToken=${token};path=/;domain=.${this.baseDomain};SameSite=Lax;Secure`
     // Fire-and-forget — no-cors is intentional, we only need to trigger auth + spawn
     void fetch(
       `${this.jupyterBase}/hub/chlogin?next=%2Fhub%2Fspawn%2F${userId}%2F${serverName}`,

@@ -43,7 +43,7 @@ function App() {
         setError(t('errors.authFailed'))
         setAuthState('unauthenticated')
       })
-  }, [t])
+  }, [authClient, t])
 
   // useCallback gives a stable reference so the useEffect below doesn't
   // re-run on every render, and allows imperative calls after upload.
@@ -57,7 +57,7 @@ function App() {
         setWorkspacesError(err.message)
       })
       .finally(() => setWorkspacesLoading(false))
-  }, [])
+  }, [loadWorkspaces])
 
   useEffect(() => {
     if (authState !== 'authenticated') return
