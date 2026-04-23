@@ -141,7 +141,7 @@ export default function Workspaces() {
         <div
           style={{
             position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.75)',
+            background: 'var(--mui-palette-black-200)',
             backdropFilter: 'blur(2px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             zIndex: 1000,

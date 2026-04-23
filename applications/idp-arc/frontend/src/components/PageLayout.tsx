@@ -72,7 +72,7 @@ export default function PageLayout({
       zIndex: 10,
       transition: 'background 0.3s, border-color 0.3s',
       background: scrolled ? 'var(--mui-palette-background-default)' : 'transparent',
-      borderBottom: scrolled ? '1px solid var(--mui-palette-surface-medium)' : 'none',
+      borderBottom: scrolled ? '1px solid var(--mui-palette-white-200)' : 'none',
     },
     toolbar: { padding: '0 !important' },
     logoStack: { alignItems: 'center', gap: 0.5, cursor: 'pointer', flexShrink: 0 },
@@ -84,8 +84,8 @@ export default function PageLayout({
       ml: 'auto',
     },
     navButton: (path: string) => ({
-      bgcolor: isActive(path) ? 'var(--mui-palette-surface-medium)' : 'transparent',
-      '&:hover': { bgcolor: 'var(--mui-palette-surface-high)' },
+      bgcolor: isActive(path) ? 'var(--mui-palette-white-200)' : 'transparent',
+      '&:hover': { bgcolor: 'var(--mui-palette-white-300)' },
     }),
     menuIconButton: {
       display: { xs: 'flex', md: 'none' },
@@ -147,7 +147,7 @@ export default function PageLayout({
       position: 'relative',
       zIndex: 1,
       borderTop: '1px solid',
-      borderColor: 'var(--mui-palette-surface-medium)',
+      borderColor: 'var(--mui-palette-white-200)',
     },
     footerStack: {
       justifyContent: 'space-between',

@@ -73,10 +73,10 @@ export default function LandingPage() {
                   key={name}
                   sx={{
                     cursor: 'pointer',
-                    borderBottom: '1px solid rgba(255,255,255,0.05)',
+                    borderBottom: '1px solid var(--mui-palette-white-200)',
                     transition: 'border-color 0.2s, padding 0.2s',
                     '&:hover': {
-                      borderBottomColor: 'rgba(255,255,255,0.15)',
+                      borderBottomColor: 'var(--mui-palette-stroke-hover)',
                       backgroundColor: 'transparent',
                       px: 6,
                       '& .download-btn': { opacity: 1 },

@@ -475,7 +475,7 @@ export const theme = createTheme({
         root: {
           '& .MuiBackdrop-root': {
             backdropFilter: 'blur(0.25rem)',
-            background: 'rgba(0, 0, 0, 0.6)',
+            background: 'var(--mui-palette-black-100)',
           },
           '& .MuiDialogTitle-root': {
             borderBottom: `1px solid ${'var(--mui-palette-background-paper)'}`,
