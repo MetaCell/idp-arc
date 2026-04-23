@@ -56,8 +56,11 @@
     "logoTitle": "ARC Platform",
     "protocols": "Protocols",
     "about": "About",
+    "myWorkspaces": "My workspaces",
     "login": "Login",
-    "dataUpload": "Data upload"
+    "logout": "Logout",
+    "dataUpload": "Data upload",
+    "loggedInAs": "OSB logged in as"
   },
   "footer": {
     "copyright": "Copyright © 2026 ARC Platform by IDP",

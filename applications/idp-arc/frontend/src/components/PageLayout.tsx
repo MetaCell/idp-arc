@@ -8,7 +8,10 @@ import {
   Container,
   Drawer,
   IconButton,
+  Menu,
+  MenuItem,
   Stack,
+  Tooltip,
   Toolbar,
   Typography,
   useScrollTrigger,
@@ -17,6 +20,8 @@ import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { authClient } from '../app/container'
+import { useAppContext } from '../AppContext'
 import { Logo } from '../Icons'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
@@ -40,12 +45,17 @@ export default function PageLayout({
   const { t } = useTranslation('landingPage')
   const scrolled = useScrollTrigger({ disableHysteresis: true, threshold: 50 })
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [avatarAnchor, setAvatarAnchor] = useState<HTMLElement | null>(null)
+  const avatarMenuOpen = Boolean(avatarAnchor)
   const navigate = useNavigate()
   const location = useLocation()
+  const { authState, username } = useAppContext()
+  const isAuthenticated = authState === 'authenticated'
 
   const navItems = [
     { label: t('nav.protocols'), path: '/protocols' },
     { label: t('nav.about'), path: '/about' },
+    ...(isAuthenticated ? [{ label: t('nav.myWorkspaces'), path: '/workspaces' }] : []),
   ]
 
   const isActive = (path: string) => location.pathname === path
@@ -156,6 +166,25 @@ export default function PageLayout({
     },
     footerLinks: { gap: 1.5 },
     footerLink: { cursor: 'pointer', '&:hover': { color: 'var(--mui-palette-text-primary)' } },
+    avatar: {
+      width: '2rem',
+      height: '2rem',
+      borderRadius: '6.25rem',
+      flexShrink: 0,
+      marginLeft: 1,
+      cursor: 'pointer',
+      border: 'none',
+      padding: 0,
+      backdropFilter: 'blur(2px)',
+      background:
+        'linear-gradient(90deg, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.3) 100%), linear-gradient(131.69deg, #ffff00 2.94%, #ffa900 26.66%, #ff5300 50.37%, #802980 74.08%, #0000ff 97.79%)',
+      '&:hover': { opacity: 0.85 },
+    },
+    avatarMenu: {
+      background: 'var(--mui-palette-background-default)',
+      border: '1px solid var(--mui-palette-white-200)',
+      minWidth: 160,
+    },
   }
 
   return (
@@ -198,7 +227,9 @@ export default function PageLayout({
                   {label}
                 </Button>
               ))}
-              <Button variant="text">{t('nav.login')}</Button>
+              {
+                !isAuthenticated && <Button variant="text" onClick={() => authClient.login()}>{t('nav.login')}</Button>
+              }
               <Button
                 variant="contained"
                 endIcon={<ArrowIcon />}
@@ -206,6 +237,35 @@ export default function PageLayout({
               >
                 {t('nav.dataUpload')}
               </Button>
+              {isAuthenticated && (
+                <>
+                  <Tooltip title={`${t('nav.loggedInAs')} ${username}`}>
+                    <Box
+                      component="button"
+                      id="avatar-button"
+                      aria-controls={avatarMenuOpen ? 'avatar-menu' : undefined}
+                      aria-haspopup="true"
+                      aria-expanded={avatarMenuOpen ? 'true' : undefined}
+                      onClick={(e) => setAvatarAnchor(e.currentTarget)}
+                      sx={styles.avatar}
+                      aria-label={username}
+                    />
+                  </Tooltip>
+                  <Menu
+                    id="avatar-menu"
+                    anchorEl={avatarAnchor}
+                    open={avatarMenuOpen}
+                    onClose={() => setAvatarAnchor(null)}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                    slotProps={{ paper: { sx: styles.avatarMenu } }}
+                  >
+                    <MenuItem onClick={() => { setAvatarAnchor(null); authClient.logout() }}>
+                      {t('nav.logout')}
+                    </MenuItem>
+                  </Menu>
+                </>
+              )}
             </Stack>
 
             <IconButton
@@ -249,14 +309,25 @@ export default function PageLayout({
                 {label}
               </Button>
             ))}
-            <Button
-              variant="text"
-              fullWidth
-              sx={styles.drawerNavButton}
-              onClick={() => setDrawerOpen(false)}
-            >
-              {t('nav.login')}
-            </Button>
+            {isAuthenticated ? (
+              <Button
+                variant="text"
+                fullWidth
+                sx={styles.drawerNavButton}
+                onClick={() => { setDrawerOpen(false); authClient.logout() }}
+              >
+                {t('nav.logout')}
+              </Button>
+            ) : (
+              <Button
+                variant="text"
+                fullWidth
+                sx={styles.drawerNavButton}
+                onClick={() => { setDrawerOpen(false); authClient.login() }}
+              >
+                {t('nav.login')}
+              </Button>
+            )}
             <Button
               variant="contained"
               endIcon={<ArrowIcon />}
