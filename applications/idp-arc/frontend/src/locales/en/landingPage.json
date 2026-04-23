@@ -1,0 +1,71 @@
+{
+  "banner": {
+    "title": "Adversity & Resilience Consortium Platform",
+    "ctaProtocols": "Protocols",
+    "ctaDataUpload": "Data upload"
+  },
+  "features": [
+    {
+      "title": "Download standard protocol & code",
+      "desc": "Download the standardized protocol and analysis code required to perform experiments according to ARC standards. These protocols considered not only likelihood of success, but also ethological relevance, and ease of access to both low and high budget research labs.",
+      "cta": "Protocols",
+      "ctaPath": "/protocols"
+    },
+    {
+      "title": "Upload data",
+      "desc": "Share your experimental results with the research community. Sign in to upload datasets to the platform.",
+      "cta": "Data upload",
+      "ctaPath": "/workspaces"
+    },
+    {
+      "title": "Visualization and analysis tools",
+      "desc": "Explore and analyze community data and your uploaded data with our integration with Open Source Brain (OSB). OSB lets you use interactive visualizations and powerful analysis tools with Jupyterlab, NetPyNE and NWB Explorer.",
+      "cta": "Go to Open Source Brain",
+      "ctaPath": "https://www.opensourcebrain.org/"
+    }
+  ],
+  "protocols": {
+    "sectionTitle": "Protocols",
+    "downloadZip": "Download .zip",
+    "items": [
+      { "name": "Two arm bandit task", "desc": "Test the flexibility using MED" },
+      { "name": "ASST digging task", "desc": "Guidelines for recording and analyzing neural ensemble activity using multi-electrode arrays" },
+      { "name": "Four-choice reversal digging task", "desc": "Techniques for measuring the electrical currents of neurons with high temporal resolution" },
+      { "name": "Open field task", "desc": "Methods for controlling neuronal activity using light-sensitive proteins." },
+      { "name": "Elevated plus maze", "desc": "Methods for controlling neuronal activity using light-sensitive proteins." },
+      { "name": "Foraging task", "desc": "Methods for controlling neuronal activity using light-sensitive proteins." }
+    ]
+  },
+  "about": {
+    "sectionTitle": "About ARC Platform",
+    "body1": "The Adversity Project develops a statistical framework for studying how early-life adversity shapes behavioral phenotypes. Rather than analyzing behavioral measures individually, the framework models behavior as a multivariate system embedded in a latent behavioral space. By applying dimensionality-reduction methods to high-dimensional behavioral datasets, structured patterns of behavioral variation can be identified and compared across experimental groups.",
+    "body2": "Within this framework, treatment effects are represented as systematic displacements in behavioral space, allowing adversity-related changes to be quantified and compared across experiments. This approach provides a principled way to characterize resilience as a continuous behavioral dimension and establishes a foundation for standardized behavioral analysis across laboratories and datasets.",
+    "learnMore": "Learn more"
+  },
+  "collaborators": {
+    "sectionTitle": "Collaborators",
+    "body": "ARC Platform is built by Adversity and Resilience Consortium, a consortium consisting of 4 different institutions.",
+    "items": [
+      { "alt": "UC Berkeley", "src": "/UCBerkeley.png" },
+      { "alt": "Emory University", "src": "/Emory.png" },
+      { "alt": "UCL", "src": "/UCL.png" },
+      { "alt": "UC Santa Cruz", "src": "/UCSantaCruz.png" }
+    ]
+  },
+  "nav": {
+    "logoTitle": "ARC Platform",
+    "protocols": "Protocols",
+    "about": "About",
+    "login": "Login",
+    "dataUpload": "Data upload"
+  },
+  "footer": {
+    "copyright": "Copyright © 2026 ARC Platform by IDP",
+    "links": {
+      "legal": "Legal",
+      "docs": "Docs",
+      "about": "About",
+      "contact": "Contact"
+    }
+  }
+}

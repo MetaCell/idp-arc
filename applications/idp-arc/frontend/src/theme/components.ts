@@ -1,6 +1,5 @@
-import { common } from '@mui/material/colors';
 import { createTheme } from '@mui/material/styles';
-import { customThemeVariables } from './palette';
+import { arcPalette } from './palette';
 
 export const fontFamilies = {
   body: ['Inter', 'sans-serif'].join(', '),
@@ -10,24 +9,7 @@ export const fontFamilies = {
 export const theme = createTheme({
   cssVariables: true,
   palette: {
-    background: {
-      default: customThemeVariables.background,
-      paper: customThemeVariables.paper,
-    },
-    primary: {
-      main: customThemeVariables.accent,
-      contrastText: common.white,
-    },
-    secondary: {
-      main: common.white,
-      contrastText: customThemeVariables.background,
-    },
-    text: {
-      primary: common.white,
-      secondary: customThemeVariables.textSecondary,
-      disabled: customThemeVariables.textDisabled,
-    },
-    divider: customThemeVariables.divider,
+    ...arcPalette,
   },
   typography: {
     fontFamily: fontFamilies.body,
@@ -152,6 +134,7 @@ export const theme = createTheme({
         *::-webkit-scrollbar-track {
           background: transparent;
         }
+
       `,
     },
 
@@ -207,7 +190,7 @@ export const theme = createTheme({
         text: {
           color: 'var(--mui-palette-text-primary)',
           '&:hover': {
-            backgroundColor: 'var(--mui-palette-background-paper)',
+            backgroundColor: 'transparent',
             color: 'var(--mui-palette-text-primary)',
           },
         },
@@ -278,6 +261,8 @@ export const theme = createTheme({
           backgroundColor: 'transparent',
           backgroundImage: 'none',
           boxShadow: 'none',
+          border: 'none',
+          '--AppBar-color': 'transparent !important',
         },
       },
     },
