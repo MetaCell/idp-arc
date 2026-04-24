@@ -44,5 +44,15 @@
     "workspaceCreated": "The workspace was created.",
     "uploadManually": "Open it in JupyterLab ↗",
     "uploadManuallyTrailing": "to upload the file manually."
+  },
+    "collaborators": {
+    "sectionTitle": "Collaborators",
+    "body": "ARC Platform is built by Adversity and Resilience Consortium, a consortium consisting of 4 different institutions.",
+    "items": [
+      { "alt": "UC Berkeley", "src": "/UCBerkeley.png" },
+      { "alt": "Emory University", "src": "/Emory.png" },
+      { "alt": "UCL", "src": "/UCL.png" },
+      { "alt": "UC Santa Cruz", "src": "/UCSantaCruz.png" }
+    ]
   }
 }

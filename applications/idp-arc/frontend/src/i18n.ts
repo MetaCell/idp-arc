@@ -2,13 +2,14 @@ import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
 import en from './locales/en/common.json'
+import enAbout from './locales/en/about.json'
 import enLandingPage from './locales/en/landingPage.json'
 
 i18n
   .use(initReactI18next)
   .init({
     resources: {
-      en: { translation: en, landingPage: enLandingPage },
+      en: { translation: en, common: en, landingPage: enLandingPage, about: enAbout },
     },
     lng: 'en',
     fallbackLng: 'en',

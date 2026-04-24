@@ -18,13 +18,15 @@ const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} /
 
 export default function LandingPage() {
   const { t } = useTranslation('landingPage')
+  const { t: tCommon } = useTranslation('common')
+
   const navigate = useNavigate()
 
   const features = t('features', { returnObjects: true }) as Array<{ title: string; desc: string; cta: string; ctaPath: string }>
 
   const protocols = t('protocols.items', { returnObjects: true }) as Array<{ name: string; desc: string }>
 
-  const collaborators = t('collaborators.items', { returnObjects: true }) as Array<{ alt: string; src: string }>
+  const collaborators = tCommon('collaborators.items', { returnObjects: true }) as Array<{ alt: string; src: string }>
 
   const cta = (
     <Stack direction="row" sx={{ gap: 1 }}>
@@ -100,7 +102,7 @@ export default function LandingPage() {
             </List>
           </Stack>
           <Stack direction={{ xs: 'column', lg: 'row' }} sx={{ gap: { xs: 6, lg: '100px' }, alignItems: 'flex-start' }}>
-            <Stack sx={{ flex: '1 0 0', gap: 3, maxWidth: 685 }}>
+            <Stack sx={{ flex: '1 0 0', gap: 3, maxWidth: { xs: '100%', lg: '50%' } }}>
               <Typography variant="h2" sx={{ letterSpacing: '0.04rem' }}>{t('about.sectionTitle')}</Typography>
               <Typography variant="body1">{t('about.body1')}</Typography>
               <Typography variant="body1">{t('about.body2')}</Typography>
@@ -109,9 +111,9 @@ export default function LandingPage() {
               </Button>
             </Stack>
           </Stack>
-          <Stack sx={{ gap: 3, maxWidth: 851 }}>
-            <Typography variant="h2" sx={{ letterSpacing: '0.04rem' }}>{t('collaborators.sectionTitle')}</Typography>
-            <Typography variant="body1">{t('collaborators.body')}</Typography>
+          <Stack sx={{ gap: 3, maxWidth: { xs: '100%', lg: '60%' } }}>
+            <Typography variant="h2" sx={{ letterSpacing: '0.04rem' }}>{tCommon('collaborators.sectionTitle')}</Typography>
+            <Typography variant="body1">{tCommon('collaborators.body')}</Typography>
             <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
               {collaborators.map(({ src, alt }) => (
                 <Box key={alt} component="img" src={src} alt={alt} sx={{ width: '11.25rem', objectFit: 'contain', opacity: 0.7 }} />

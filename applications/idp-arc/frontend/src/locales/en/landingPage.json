@@ -42,16 +42,6 @@
     "body2": "Within this framework, treatment effects are represented as systematic displacements in behavioral space, allowing adversity-related changes to be quantified and compared across experiments. This approach provides a principled way to characterize resilience as a continuous behavioral dimension and establishes a foundation for standardized behavioral analysis across laboratories and datasets.",
     "learnMore": "Learn more"
   },
-  "collaborators": {
-    "sectionTitle": "Collaborators",
-    "body": "ARC Platform is built by Adversity and Resilience Consortium, a consortium consisting of 4 different institutions.",
-    "items": [
-      { "alt": "UC Berkeley", "src": "/UCBerkeley.png" },
-      { "alt": "Emory University", "src": "/Emory.png" },
-      { "alt": "UCL", "src": "/UCL.png" },
-      { "alt": "UC Santa Cruz", "src": "/UCSantaCruz.png" }
-    ]
-  },
   "nav": {
     "logoTitle": "ARC Platform",
     "protocols": "Protocols",
