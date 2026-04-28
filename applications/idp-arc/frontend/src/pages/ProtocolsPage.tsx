@@ -1,4 +1,5 @@
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
+import PauseRoundedIcon from '@mui/icons-material/PauseRounded'
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
 import {
   Box,
@@ -11,7 +12,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import PageLayout from '../components/PageLayout'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
@@ -62,27 +63,28 @@ const protocolCardSx = {
   border: '1px solid',
   borderColor: 'var(--mui-palette-stroke-default)',
   borderRadius: '12px',
-  background: `linear-gradient(
-    90deg,
-    var(--mui-palette-white-200) 0%,
-    var(--mui-palette-white-200) 100%
-  ),
-  linear-gradient(
-    90deg,
-    var(--mui-palette-brand-200) 0%,
-    var(--mui-palette-brand-200) 100%
-  ),
-  linear-gradient(
-    90deg,
-    var(--mui-palette-background-default) 0%,
-    var(--mui-palette-background-default) 100%
-  )`,
+  background: `#1f1d1d`,
   overflow: 'hidden',
+  padding: '3.125rem 6.25rem'
 }
 
 export default function ProtocolsPage() {
   const [activeProtocol, setActiveProtocol] = useState(0)
   const active = protocols[activeProtocol]
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [isPlaying, setIsPlaying] = useState(true)
+
+  const togglePlay = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) {
+      video.play()
+      setIsPlaying(true)
+    } else {
+      video.pause()
+      setIsPlaying(false)
+    }
+  }, [])
 
   return (
     <PageLayout title="Protocols" height={477}>
@@ -114,12 +116,6 @@ export default function ProtocolsPage() {
                       borderBottom: '1px solid var(--mui-palette-white-200)',
                       transition: 'border-color 0.2s, padding 0.2s',
                       borderLeft: isActive ? '1px solid var(--mui-palette-primary-main)' : '1px solid transparent',
-                      '& .download-btn': {
-                        color: 'text.secondary',
-                        display: isActive ? 'block' : 'none',
-                        transition: 'display 0.5s',
-                        flexShrink: 0
-                      },
                       '& .MuiTypography-root': {
                         color: isActive ? 'text.primary' : 'text.secondary',
                         fontWeight: isActive ? 500 : 400,
@@ -135,13 +131,6 @@ export default function ProtocolsPage() {
                     <ListItemText primary={name} sx={{
                       display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
                     }} />
-                    <Button
-                      className="download-btn"
-                      variant="text"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Download
-                    </Button>
                   </ListItem>
                 )
               })}
@@ -194,10 +183,8 @@ export default function ProtocolsPage() {
               {active.name}
             </Typography>
 
-            <Box sx={{ ...protocolCardSx, aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center', px: 6, py: 3 }}>
-              <Typography variant="body2" color="textSecondary" sx={{ textAlign: 'center', fontStyle: 'italic' }}>
-                Protocol illustration / figure
-              </Typography>
+            <Box sx={{ ...protocolCardSx, aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box component="img" src={`/protocol1.png`} alt={active.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </Box>
 
             <Typography variant="body1" color='textPrimary'>
@@ -207,28 +194,54 @@ export default function ProtocolsPage() {
             <Stack sx={{ gap: 2 }}>
               <Typography variant="h3">Protocol video</Typography>
               <Box
+                onClick={togglePlay}
                 sx={{
                   ...protocolCardSx,
                   aspectRatio: '16/9',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  padding: 0,
+                  overflow: 'hidden',
+                  position: 'relative',
                   cursor: 'pointer',
-                  '&:hover': { bgcolor: 'var(--mui-palette-white-200)' },
+                  '&:hover .video-overlay': { opacity: 1 },
                 }}
               >
-                <IconButton
+                <Box
+                  ref={videoRef}
+                  component="video"
+                  src="https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+                <Box
+                  className="video-overlay"
                   sx={{
-                    border: '1px solid',
-                    borderColor: 'var(--mui-palette-stroke-default)',
-                    bgcolor: 'var(--mui-palette-white-200)',
-                    width: 48,
-                    height: 48,
-                    '&:hover': { bgcolor: 'var(--mui-palette-white-300)' },
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: isPlaying ? 0 : 1,
+                    transition: 'opacity 0.2s',
                   }}
                 >
-                  <PlayArrowRoundedIcon sx={{ color: 'text.primary', fontSize: '1.5rem' }} />
-                </IconButton>
+                  <IconButton
+                    sx={{
+                      border: '1px solid',
+                      borderColor: 'var(--mui-palette-stroke-default)',
+                      bgcolor: 'var(--mui-palette-white-200)',
+                      width: 48,
+                      height: 48,
+                      '&:hover': { bgcolor: 'var(--mui-palette-white-300)' },
+                    }}
+                  >
+                    {isPlaying
+                      ? <PauseRoundedIcon sx={{ color: 'text.primary', fontSize: '1.5rem' }} />
+                      : <PlayArrowRoundedIcon sx={{ color: 'text.primary', fontSize: '1.5rem' }} />}
+                  </IconButton>
+                </Box>
               </Box>
             </Stack>
 
