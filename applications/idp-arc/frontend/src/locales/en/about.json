@@ -1,0 +1,68 @@
+{
+  "pageTitle": "About",
+  "sections": [
+    { "id": "overview",        "label": "Overview" },
+    { "id": "objectives",      "label": "Project Objectives" },
+    { "id": "phenotypes",      "label": "Behavioral Phenotypes as Multivariate Systems" },
+    { "id": "quantifying",     "label": "Quantifying Behavioral Effects" },
+    { "id": "resilience",      "label": "Resilience as a Continuous Dimension" },
+    { "id": "standardization", "label": "Standardization Across Cohorts" },
+    { "id": "platform",        "label": "Toward a Shared Behavioral Analysis Platform" },
+    { "id": "collaborators",   "label": "Collaborators" }
+  ],
+  "overview": {
+    "title": "Overview",
+    "body1": "The Adversity & Resilience Consortium Platform (ARC) develops a statistical framework for analyzing how early-life adversity shapes behavioral phenotypes. Behavioral outcomes arise from the interaction of multiple cognitive and motivational processes and are therefore inherently multidimensional. However, behavioral data are often analyzed using methods that treat individual measures independently, which limits the ability to detect coordinated patterns of behavioral change.",
+    "body2": "The project addresses this challenge by modeling behavior as a multivariate phenotype embedded within a latent behavioral space. By applying dimensionality-reduction methods to high-dimensional behavioral datasets, the framework allows structured patterns of behavioral variation to be identified and compared across experimental groups."
+  },
+  "objectives": {
+    "title": "Project Objectives",
+    "items": [
+      "Determine whether food insecurity (FI) induces a reproducible displacement in behavioral phenotype space.",
+      "Test whether distinct adversity paradigms (FI, FR, ALG) produce shared versus distinct shifts.",
+      "Define resilience as continuous variation along an adversity axis.",
+      "Establish a framework scalable to multi-laboratory standardization."
+    ],
+    "conclusion": "By addressing these objectives within a unified analytical framework, the project aims to establish systematic methods for quantifying the behavioral consequences of early-life adversity."
+  },
+  "phenotypes": {
+    "title": "Behavioral Phenotypes as Multivariate Systems",
+    "subTitle": "Modeling Behavior in Latent Space",
+    "body1": "Behavior cannot be fully characterized through isolated measurements. Instead, it reflects the interaction of multiple behavioral processes that collectively shape observable phenotypes.",
+    "body2_before": "To capture this structure, the framework analyzes large sets of behavioral features simultaneously and embeds them into a ",
+    "body2_highlight": "latent behavioral space",
+    "body2_after": " using dimensionality-reduction methods such as principal component analysis (PCA). This representation preserves the dominant structure of behavioral variation while allowing complex datasets to be interpreted geometrically.",
+    "figurePlaceholder": "Figure: Latent behavioral geometry framework",
+    "figureCaption_label": "Figure 1: ",
+    "figureCaption_title": "Latent behavioral geometry framework",
+    "figureCaption_body": ". Behavioral features are first cohort-corrected, then embedded into a low-dimensional latent space (PCA). Group effects are expressed as centroid displacement vectors relative to ALS controls. Individual resilience is defined as projection onto the FI displacement axis, enabling continuous within-group variation and that lets us create a scalable framework for cross-laboratory comparison."
+  },
+  "quantifying": {
+    "title": "Quantifying Behavioral Effects",
+    "subTitle": "Geometric Representation of Treatment Effects",
+    "body1_before": "Within the latent behavioral space, the effects of experimental manipulations can be represented as ",
+    "body1_highlight": "displacement vectors relative to control populations",
+    "body1_after": ".",
+    "body2": "These vectors summarize both the magnitude and direction of behavioral change, allowing researchers to identify which behavioral systems are most strongly affected by adversity. This geometric representation provides a systematic method for comparing behavioral phenotypes across experiments and adversity paradigms."
+  },
+  "resilience": {
+    "title": "Resilience as a Continuous Dimension",
+    "body1": "A central objective of the framework is to move beyond binary classifications of behavioral outcomes.",
+    "body2_before": "Rather than categorizing individuals as simply affected or unaffected, resilience is defined as a ",
+    "body2_highlight": "continuous axis within the latent behavioral space",
+    "body2_after": ". Each individual's behavioral phenotype can be projected onto this axis, providing a quantitative measure of vulnerability or resilience relative to control populations.",
+    "body3": "This formulation allows individual variability in behavioral response to be measured directly and compared across populations."
+  },
+  "standardization": {
+    "title": "Standardization Across Cohorts",
+    "body1": "Behavioral data are often collected across different cohorts and experimental conditions, introducing sources of technical variability that complicate comparisons between studies.",
+    "body2_before": "To address this challenge, the framework incorporates ",
+    "body2_highlight": "cohort correction procedures",
+    "body2_after": " that remove systematic baseline differences before multivariate analysis. This allows behavioral datasets from different cohorts or laboratories to be analyzed within a consistent statistical framework."
+  },
+  "platform": {
+    "title": "Toward a Shared Behavioral Analysis Platform",
+    "body1": "The analytical framework developed through the Adversity Project establishes the conceptual basis for a shared behavioral analysis infrastructure.",
+    "body2": "By combining standardized behavioral feature sets, cohort-corrected datasets, and latent-space representations of behavioral phenotypes, the system enables behavioral data from multiple laboratories to be analyzed within a unified framework. This approach supports scalable analysis pipelines and collaborative datasets for studying the behavioral consequences of developmental adversity."
+  }
+}
