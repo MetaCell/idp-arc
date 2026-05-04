@@ -65,7 +65,13 @@ export default function PageLayout({
       bgcolor: 'var(--mui-palette-background-default)',
       minHeight: '100vh',
       position: 'relative',
+    },
+    gutterWrapper: {
+      position: 'absolute',
+      inset: 0,
       overflow: 'hidden',
+      pointerEvents: 'none',
+      zIndex: 0,
     },
     gutterLine: (offset: string) => ({
       position: 'absolute',
@@ -153,7 +159,7 @@ export default function PageLayout({
     pageBannerTitle: { maxWidth: { xs: '100%', lg: '40%' } },
     content: { position: 'relative', zIndex: 1 },
     footer: {
-      marginTop: 58,
+      // marginTop: 58,
       position: 'relative',
       zIndex: 1,
       borderTop: '1px solid',
@@ -189,13 +195,14 @@ export default function PageLayout({
 
   return (
     <Box sx={styles.root}>
-      {['-860px', '860px'].map((offset) => (
-        <Box
-          key={offset}
-          aria-hidden
-          sx={styles.gutterLine(offset)}
-        />
-      ))}
+      <Box aria-hidden sx={styles.gutterWrapper}>
+        {['-860px', '860px'].map((offset) => (
+          <Box
+            key={offset}
+            sx={styles.gutterLine(offset)}
+          />
+        ))}
+      </Box>
 
       <AppBar
         position="fixed"
