@@ -40,11 +40,6 @@ export default defineConfig({
       usePolling: true
     },
     proxy: {
-      '/keycloak-proxy': {
-        target: 'https://accounts.v2dev.opensourcebrain.org',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/keycloak-proxy/, ''),
-      },
       '/api-proxy': {
         target: 'https://www.v2dev.opensourcebrain.org',
         changeOrigin: true,
