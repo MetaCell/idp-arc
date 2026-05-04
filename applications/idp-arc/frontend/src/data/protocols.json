@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Two arm bandit task",
+    "desc": "Test the flexibility using MED",
+    "description": "The two-armed bandit task is a classic paradigm in behavioral neuroscience used to study decision-making under uncertainty. In this task, participants are presented with two options, each associated with a different probability of reward. By repeatedly choosing between the two options, participants learn to exploit the option with the higher reward probability while also exploring the other option to ensure that they are not missing out on a potentially better source of reward. This task has been used to investigate the neural mechanisms underlying reinforcement learning, exploration-exploitation trade-offs, and the role of different brain regions in decision-making."
+  },
+  {
+    "name": "ASST digging task",
+    "desc": "Attentional set-shifting task",
+    "description": "The attentional set-shifting task (ASST) is a rodent analogue of the Cambridge Neuropsychological Test Automated Battery (CANTAB) IED task. It assesses the ability to shift attention between perceptual dimensions of compound stimuli. The task requires animals to learn sequential discriminations, measuring the cost of shifting attention from one perceptual dimension to another."
+  },
+  {
+    "name": "Four-choice reversal digging task",
+    "desc": "Reversal learning assessment",
+    "description": "The four-choice reversal digging task expands on the two-armed paradigm by introducing four distinct odor-digging options. Animals must identify the rewarded option and adapt when contingencies reverse. This task is particularly sensitive to orbitofrontal cortex dysfunction and provides multiple reversal learning indices."
+  },
+  {
+    "name": "Open field task",
+    "desc": "Locomotion and anxiety assessment",
+    "description": "The open field task is a widely used behavioral assay for measuring locomotion, anxiety-like behavior, and exploratory activity in rodents. Animals are placed in a novel arena and their movement patterns, time spent in the center versus periphery, and rearing behavior are recorded and analyzed."
+  },
+  {
+    "name": "Elevated plus maze",
+    "desc": "Anxiety and risk-taking behavior",
+    "description": "The elevated plus maze (EPM) is a standard test for anxiety-like behavior in rodents. The maze consists of two open and two enclosed arms elevated above the floor. Anxious animals spend more time in the enclosed arms, while exploratory animals venture into the open arms. This task is sensitive to anxiolytic and anxiogenic compounds."
+  },
+  {
+    "name": "Foraging task",
+    "desc": "Patch-leaving and optimal foraging",
+    "description": "The foraging task models naturalistic patch-leaving decisions based on optimal foraging theory. Animals must decide when to leave a depleting food patch and travel to a new one, balancing exploitation of current resources against exploration of potentially richer alternatives. This task probes cost–benefit decision-making circuits."
+  }
+]
