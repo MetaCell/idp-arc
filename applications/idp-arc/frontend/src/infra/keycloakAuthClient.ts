@@ -1,12 +1,23 @@
 import Keycloak from 'keycloak-js'
 import type { IAuthClient } from '../core/ports/IAuthClient'
 
-/**
- * KeycloakAuthClient — concrete implementation of IAuthClient backed by keycloak-js.
- *
- * This is the ONLY file in the codebase that imports keycloak-js.
- * Replacing Keycloak with Auth0 means writing a new class here — nothing else changes.
- */
+// In dev, keycloak-js AJAX calls (token exchange, discovery) are cross-origin
+// and blocked by CORS. We intercept those fetches and route them through the
+// Vite dev server proxy (/keycloak-proxy → accounts.v2dev.opensourcebrain.org)
+// so they are same-origin. Browser navigations (login redirect) are unaffected
+// because they don't go through fetch.
+if (import.meta.env.DEV) {
+  const _fetch = window.fetch
+  window.fetch = (input, init) => {
+    const url = input instanceof Request ? input.url : String(input)
+    if (url.startsWith('https://accounts.v2dev.opensourcebrain.org/')) {
+      const proxied = url.replace('https://accounts.v2dev.opensourcebrain.org', '/keycloak-proxy')
+      return _fetch(input instanceof Request ? new Request(proxied, input) : proxied, init)
+    }
+    return _fetch(input, init)
+  }
+}
+
 export class KeycloakAuthClient implements IAuthClient {
   private readonly kc: Keycloak
 
@@ -41,7 +52,7 @@ export class KeycloakAuthClient implements IAuthClient {
   }
 
   logout(): void {
-    void this.kc.logout()
+    void this.kc.logout({ redirectUri: window.location.origin + '/' })
   }
 
   get tokenParsed(): Record<string, unknown> | null {

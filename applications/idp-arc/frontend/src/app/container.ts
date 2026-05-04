@@ -26,9 +26,10 @@ import { createCreateAndUploadUseCase } from '../core/use-cases/createAndUploadW
 // All environment-specific URLs live here (or read from import.meta.env in Vite).
 
 const BASE_DOMAIN    = 'v2dev.opensourcebrain.org'
-const WORKSPACES_API = `https://www.${BASE_DOMAIN}/proxy/workspaces/api`
+const WWW_BASE       = import.meta.env.DEV ? '/api-proxy' : `https://www.${BASE_DOMAIN}`
+const WORKSPACES_API = `${WWW_BASE}/proxy/workspaces/api`
 const WORKSPACES_LIST_URL =
-  `https://www.${BASE_DOMAIN}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
+  `${WWW_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
 const JUPYTER_BASE   = `https://lab.${BASE_DOMAIN}`
 const FRONTEND_BASE  = `https://www.${BASE_DOMAIN}`
 

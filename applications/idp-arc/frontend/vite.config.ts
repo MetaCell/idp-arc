@@ -26,7 +26,7 @@ function mockContainerPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [mockContainerPlugin(), react()],
+  plugins: [react()],
   build: {
     sourcemap: true,
     outDir: 'dist',
@@ -38,7 +38,19 @@ export default defineConfig({
     strictPort: true,
     watch: {
       usePolling: true
-    }
+    },
+    proxy: {
+      '/keycloak-proxy': {
+        target: 'https://accounts.v2dev.opensourcebrain.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/keycloak-proxy/, ''),
+      },
+      '/api-proxy': {
+        target: 'https://www.v2dev.opensourcebrain.org',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-proxy/, ''),
+      },
+    },
   },
   resolve: {
     alias: {
