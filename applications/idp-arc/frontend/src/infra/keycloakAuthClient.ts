@@ -36,6 +36,10 @@ export class KeycloakAuthClient implements IAuthClient {
     return this.kc.token
   }
 
+  getLoginUrl(redirectUri: string): Promise<string> {
+    return this.kc.createLoginUrl({ redirectUri })
+  }
+
   login(): void {
     void this.kc.login()
   }

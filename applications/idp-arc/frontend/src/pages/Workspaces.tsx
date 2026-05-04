@@ -22,7 +22,10 @@ export default function Workspaces() {
     setWorkspacesLoading(true)
     setWorkspacesError(null)
     loadWorkspaces()
-      .then(setWorkspaces)
+      .then((list) => {
+        console.log('[IDP-ARC] Workspaces loaded:', list)
+        setWorkspaces(list)
+      })
       .catch((err: Error) => {
         console.error('Failed to fetch workspaces', err)
         setWorkspacesError(err.message)

@@ -5,7 +5,12 @@ import {
   AppBar,
   Box,
   Button,
+  CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Drawer,
   IconButton,
   Menu,
@@ -17,7 +22,7 @@ import {
   useScrollTrigger,
 } from '@mui/material'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { authClient } from '../app/container'
@@ -47,6 +52,29 @@ export default function PageLayout({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [avatarAnchor, setAvatarAnchor] = useState<HTMLElement | null>(null)
   const avatarMenuOpen = Boolean(avatarAnchor)
+  const [waitingForLogin, setWaitingForLogin] = useState(false)
+  const popupRef = useRef<Window | null>(null)
+
+  async function handleLogin() {
+    const loginUrl = await authClient.getLoginUrl(`${window.location.origin}/`)
+    const w = 480, h = 600
+    const left = Math.round((screen.width - w) / 2)
+    const top = Math.round((screen.height - h) / 2)
+    popupRef.current = window.open(loginUrl, 'kc-login', `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`)
+    setWaitingForLogin(true)
+
+    const poll = setInterval(() => {
+      if (popupRef.current?.closed) {
+        clearInterval(poll)
+        setWaitingForLogin(false)
+      }
+    }, 500)
+  }
+
+  function cancelLogin() {
+    popupRef.current?.close()
+    setWaitingForLogin(false)
+  }
   const navigate = useNavigate()
   const location = useLocation()
   const { authState, username } = useAppContext()
@@ -235,7 +263,7 @@ export default function PageLayout({
                 </Button>
               ))}
               {
-                !isAuthenticated && <Button variant="text" onClick={() => authClient.login()}>{t('nav.login')}</Button>
+                !isAuthenticated && <Button variant="text" onClick={handleLogin}>{t('nav.login')}</Button>
               }
               <Button
                 variant="contained"
@@ -330,7 +358,7 @@ export default function PageLayout({
                 variant="text"
                 fullWidth
                 sx={styles.drawerNavButton}
-                onClick={() => { setDrawerOpen(false); authClient.login() }}
+                onClick={() => { setDrawerOpen(false); void handleLogin() }}
               >
                 {t('nav.login')}
               </Button>
@@ -417,6 +445,19 @@ export default function PageLayout({
           </Stack>
         </Container>
       </Box>
+
+      <Dialog open={waitingForLogin} onClose={cancelLogin}>
+        <DialogTitle>{t('nav.signingIn')}</DialogTitle>
+        <DialogContent>
+          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+            <CircularProgress size={20} />
+            <Typography variant="body2">{t('nav.completeSignIn')}</Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelLogin}>{t('nav.cancel')}</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

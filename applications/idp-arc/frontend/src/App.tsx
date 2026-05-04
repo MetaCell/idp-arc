@@ -34,17 +34,38 @@ function App() {
     authClient
       .init()
       .then((authenticated: boolean) => {
+        // If running inside the login popup, signal the parent and close.
+        if (authenticated && window.opener) {
+          window.opener.postMessage({ type: 'keycloak-login-complete' }, window.location.origin)
+          window.close()
+          return
+        }
         setAuthState(authenticated ? 'authenticated' : 'unauthenticated')
         if (authenticated && authClient.tokenParsed) {
           setTokenParsed(authClient.tokenParsed)
         }
       })
       .catch((err: Error) => {
+        // Clear stale auth fragment so a page refresh doesn't retry a failed token exchange.
+        if (window.location.hash) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search)
+        }
         console.error('Keycloak init failed', err)
         setAuthError(t('errors.authFailed'))
         setAuthState('unauthenticated')
       })
   }, [t])
+
+  // Reload after popup login so check-sso picks up the new Keycloak session.
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.origin === window.location.origin && event.data?.type === 'keycloak-login-complete') {
+        window.location.reload()
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [])
 
   const username =
     (tokenParsed?.preferred_username as string) ??

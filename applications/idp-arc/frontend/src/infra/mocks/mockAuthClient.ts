@@ -17,6 +17,10 @@ export class MockAuthClient implements IAuthClient {
     family_name: 'User',
   }
 
+  async getLoginUrl(_redirectUri: string): Promise<string> {
+    return '/'
+  }
+
   async init(): Promise<boolean> {
     console.info('[MockAuthClient] init() → authenticated')
     return true
