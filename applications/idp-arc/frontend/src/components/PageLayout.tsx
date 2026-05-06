@@ -28,6 +28,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { authClient } from '../app/container'
 import { useAppContext } from '../AppContext'
 import { Logo } from '../Icons'
+import DataUploadDialog from './DataUploadDialog'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
 
@@ -54,6 +55,7 @@ export default function PageLayout({
   const avatarMenuOpen = Boolean(avatarAnchor)
   const [waitingForLogin, setWaitingForLogin] = useState(false)
   const popupRef = useRef<Window | null>(null)
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
 
   async function handleLogin() {
     const loginUrl = await authClient.getLoginUrl(`${window.location.origin}/`)
@@ -268,7 +270,7 @@ export default function PageLayout({
               <Button
                 variant="contained"
                 endIcon={<ArrowIcon />}
-                onClick={() => navigate('/workspaces')}
+                onClick={() => setUploadDialogOpen(true)}
               >
                 {t('nav.dataUpload')}
               </Button>
@@ -367,8 +369,8 @@ export default function PageLayout({
               variant="contained"
               endIcon={<ArrowIcon />}
               onClick={() => {
-                navigate('/workspaces')
                 setDrawerOpen(false)
+                setUploadDialogOpen(true)
               }}
             >
               {t('nav.dataUpload')}
@@ -445,6 +447,8 @@ export default function PageLayout({
           </Stack>
         </Container>
       </Box>
+
+      <DataUploadDialog open={uploadDialogOpen} onClose={() => setUploadDialogOpen(false)} />
 
       <Dialog open={waitingForLogin} onClose={cancelLogin}>
         <DialogTitle>{t('nav.signingIn')}</DialogTitle>

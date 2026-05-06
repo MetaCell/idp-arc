@@ -12,6 +12,8 @@ export interface CreateAndUploadInput {
   file: File
   /** Subject claim (`sub`) from the token payload — identifies the JupyterHub user. */
   userId: string
+  /** When provided the workspace creation step is skipped and the file is uploaded to this workspace. */
+  workspaceId?: number
   /**
    * Called synchronously the moment the workspace id is known (right after
    * Step 1, before the long PVC wait). Use this to open the workspace tab
@@ -49,15 +51,17 @@ export function createCreateAndUploadUseCase(
     const { workspaceName, file, userId, onWorkspaceCreated } = input
 
     try {
-      // ── Step 1: Create workspace ──────────────────────────────────────────
-      onProgress({ phase: 'creating', message: PHASE_LABELS.creating })
       const token = await auth.getToken(30)
-      const wsId = await workspaceApi.createWorkspace(token, workspaceName)
 
-      // Notify the caller immediately — this fires before the long PVC wait
-      // so it is still within the browser's user-gesture async chain, which
-      // means window.open() passed here will NOT be blocked as a popup.
-      onWorkspaceCreated?.(wsId)
+      // ── Step 1: Create workspace (skipped when uploading to an existing one) ─
+      let wsId: number
+      if (input.workspaceId) {
+        wsId = input.workspaceId
+      } else {
+        onProgress({ phase: 'creating', message: PHASE_LABELS.creating })
+        wsId = await workspaceApi.createWorkspace(token, workspaceName)
+        onWorkspaceCreated?.(wsId)
+      }
 
       if (abortRef.current) return null
 
