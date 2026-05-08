@@ -26,7 +26,7 @@ export class JupyterApiClient implements IJupyterApi {
     void fetch(
       `${this.jupyterBase}/hub/chkclogin?accessToken=${encodeURIComponent(token)}&next=${next}`,
       { credentials: 'include', mode: 'no-cors' },
-    )
+    ).catch(() => {})
   }
 
   async waitUntilReady(
