@@ -12,6 +12,9 @@ export interface IAuthClient {
   /** Returns the current bearer token, refreshing it if it will expire within `minValidity` seconds. */
   getToken(minValidity?: number): Promise<string>
 
+  /** Returns the IdP login URL so callers can open it in a popup rather than redirecting. */
+  getLoginUrl(redirectUri: string): Promise<string>
+
   /** Redirects the user to the IdP login page. */
   login(): void
 

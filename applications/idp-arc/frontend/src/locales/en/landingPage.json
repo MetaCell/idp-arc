@@ -50,7 +50,10 @@
     "login": "Login",
     "logout": "Logout",
     "dataUpload": "Data upload",
-    "loggedInAs": "OSB logged in as"
+    "loggedInAs": "OSB logged in as",
+    "signingIn": "Signing in",
+    "completeSignIn": "Complete sign in in the popup window.",
+    "cancel": "Cancel"
   },
   "footer": {
     "copyright": "Copyright © 2026 ARC Platform by IDP",
