@@ -31,6 +31,7 @@ const WORKSPACES_API = `${WWW_BASE}/proxy/workspaces/api`
 const WORKSPACES_LIST_URL =
   `${WWW_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
 const JUPYTER_BASE   = `https://lab.${BASE_DOMAIN}`
+const HUB_BASE       = `https://www.${BASE_DOMAIN}`
 const FRONTEND_BASE  = `https://www.${BASE_DOMAIN}`
 
 // ─── Infrastructure singletons ────────────────────────────────────────────────
@@ -42,7 +43,7 @@ export const authClient = new KeycloakAuthClient({
 })
 
 const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
-const jupyterApi   = new JupyterApiClient(JUPYTER_BASE, BASE_DOMAIN)
+const jupyterApi   = new JupyterApiClient(JUPYTER_BASE, HUB_BASE, BASE_DOMAIN)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────
 

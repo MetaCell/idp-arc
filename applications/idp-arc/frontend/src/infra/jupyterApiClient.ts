@@ -15,6 +15,7 @@ import type { IJupyterApi } from '../core/ports/IJupyterApi'
 export class JupyterApiClient implements IJupyterApi {
   constructor(
     private readonly jupyterBase: string,  // e.g. "https://lab.v2dev.opensourcebrain.org"
+    private readonly hubBase: string,      // e.g. "https://www.v2dev.opensourcebrain.org"
     private readonly baseDomain: string,   // e.g. "v2dev.opensourcebrain.org"
   ) {}
 
@@ -23,7 +24,7 @@ export class JupyterApiClient implements IJupyterApi {
     document.cookie = `accessToken=${token};path=/;domain=.${this.baseDomain};SameSite=Lax;Secure`
     // Fire-and-forget — no-cors is intentional, we only need to trigger auth + spawn
     void fetch(
-      `${this.jupyterBase}/hub/chlogin?next=%2Fhub%2Fspawn%2F${userId}%2F${serverName}`,
+      `${this.hubBase}/hub/chlogin?next=%2Fhub%2Fspawn%2F${userId}%2F${serverName}`,
       { credentials: 'include', mode: 'no-cors' },
     )
   }
@@ -40,8 +41,9 @@ export class JupyterApiClient implements IJupyterApi {
       try {
         const probe = await fetch(contentsUrl, { credentials: 'include' })
         if (probe.ok) return true
-        // Any non-502/503 response means the server replied and is not in a transient retry state — stop waiting
-        if (probe.status !== 503 && probe.status !== 502) break
+        // 404 = named server not yet registered in the proxy (transient during spawn)
+        // 502/503 = server starting up; anything else is a definitive failure
+        if (probe.status !== 503 && probe.status !== 502 && probe.status !== 404) break
       } catch {
         // Network / CORS error — keep retrying
       }
