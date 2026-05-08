@@ -14,17 +14,17 @@ import type { IJupyterApi } from '../core/ports/IJupyterApi'
  */
 export class JupyterApiClient implements IJupyterApi {
   constructor(
-    private readonly jupyterBase: string,  // e.g. "https://lab.v2dev.opensourcebrain.org"
-    private readonly hubBase: string,      // e.g. "https://www.v2dev.opensourcebrain.org"
-    private readonly baseDomain: string,   // e.g. "v2dev.opensourcebrain.org"
+    private readonly jupyterBase: string,  // e.g. "/jupyter-proxy"
   ) {}
 
   triggerSpawn(token: string, userId: string, serverName: string): void {
-    // Set the session cookie so JupyterHub can authenticate the user
-    document.cookie = `accessToken=${token};path=/;domain=.${this.baseDomain};SameSite=Lax;Secure`
-    // Fire-and-forget — no-cors is intentional, we only need to trigger auth + spawn
+    // chkclogin reads 'kc-access' or 'accessToken' cookie. From a cross-domain origin
+    // (e.g. metacell.us → opensourcebrain.org) the browser blocks cookie writes, so the
+    // cookie approach fails silently. We pass the token as a URL param instead — the
+    // Nginx reverse proxy injects it as a Cookie header before forwarding to JupyterHub.
+    const next = encodeURIComponent(`/hub/spawn/${userId}/${serverName}`)
     void fetch(
-      `${this.hubBase}/hub/chlogin?next=%2Fhub%2Fspawn%2F${userId}%2F${serverName}`,
+      `${this.jupyterBase}/hub/chkclogin?accessToken=${encodeURIComponent(token)}&next=${next}`,
       { credentials: 'include', mode: 'no-cors' },
     )
   }
@@ -39,13 +39,16 @@ export class JupyterApiClient implements IJupyterApi {
 
     while (!abortRef.current && Date.now() < deadlineMs) {
       try {
-        const probe = await fetch(contentsUrl, { credentials: 'include' })
+        const probe = await fetch(contentsUrl, {
+          credentials: 'include',
+          redirect: 'error',  // treat auth redirects as "not ready" rather than looping
+        })
         if (probe.ok) return true
         // 404 = named server not yet registered in the proxy (transient during spawn)
         // 502/503 = server starting up; anything else is a definitive failure
         if (probe.status !== 503 && probe.status !== 502 && probe.status !== 404) break
       } catch {
-        // Network / CORS error — keep retrying
+        // Network / CORS error or redirect — keep retrying
       }
       await sleep(4_000)
     }
