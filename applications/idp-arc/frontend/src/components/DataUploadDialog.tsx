@@ -81,14 +81,16 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
     setForm((prev) => ({ ...prev, step: 'uploading' }))
     abortRef.current = false
 
-    const numericId = typeof workspaceId === 'string' ? parseInt(workspaceId, 10) : workspaceId
-    const selectedWorkspace = workspaces.find(w => w.id === workspaceId)
+    const selectedWorkspace = workspaces.find(w => String(w.id) === String(workspaceId))
     const newWorkspaceName = [behavioralTask, protocol].filter(Boolean).join(' — ') || 'New Workspace'
+    const resolvedId = selectedWorkspace
+      ? (typeof selectedWorkspace.id === 'string' ? parseInt(selectedWorkspace.id, 10) : selectedWorkspace.id)
+      : undefined
 
     await createAndUpload(
       {
         workspaceName: selectedWorkspace?.name ?? newWorkspaceName,
-        workspaceId: !isNaN(numericId as number) ? (numericId as number) : undefined,
+        workspaceId: resolvedId,
         file,
         userId: tokenParsed?.sub as string,
       },
