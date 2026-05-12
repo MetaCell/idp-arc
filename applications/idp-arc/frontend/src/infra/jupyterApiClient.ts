@@ -18,15 +18,25 @@ export class JupyterApiClient implements IJupyterApi {
   ) {}
 
   triggerSpawn(token: string, userId: string, serverName: string): void {
-    // chkclogin reads 'kc-access' or 'accessToken' cookie. From a cross-domain origin
-    // (e.g. metacell.us → opensourcebrain.org) the browser blocks cookie writes, so the
-    // cookie approach fails silently. We pass the token as a URL param instead — the
-    // Nginx reverse proxy injects it as a Cookie header before forwarding to JupyterHub.
-    const next = encodeURIComponent(`/hub/spawn/${userId}/${serverName}`)
+    // Two-step fire-and-forget:
+    // 1. chkclogin — Nginx injects the accessToken URL param as a Cookie header so
+    //    JupyterHub can validate it. redirect:'manual' stops at the 302 response so we
+    //    don't chase the login → OAuth → spawn-pending redirect chain, but the browser
+    //    still stores the Set-Cookie from that 302 (the JupyterHub auth cookie).
+    // 2. spawn — tells JupyterHub to start the named server. redirect:'manual' again
+    //    stops us from following the spawn-pending polling loop; waitUntilReady handles
+    //    readiness independently.
     void fetch(
-      `${this.jupyterBase}/hub/chkclogin?accessToken=${encodeURIComponent(token)}&next=${next}`,
-      { credentials: 'include', mode: 'no-cors' },
-    ).catch(() => {})
+      `${this.jupyterBase}/hub/chkclogin?accessToken=${encodeURIComponent(token)}`,
+      { credentials: 'include', redirect: 'manual' },
+    )
+      .then(() =>
+        fetch(
+          `${this.jupyterBase}/hub/spawn/${userId}/${serverName}`,
+          { credentials: 'include', redirect: 'manual' },
+        ),
+      )
+      .catch(() => {})
   }
 
   async waitUntilReady(
