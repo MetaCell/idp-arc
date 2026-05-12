@@ -13,30 +13,46 @@ import type { IJupyterApi } from '../core/ports/IJupyterApi'
  * Use-cases only see IJupyterApi — they have no idea these browser APIs exist.
  */
 export class JupyterApiClient implements IJupyterApi {
+  private jupyterToken: string | null = null
+
   constructor(
     private readonly jupyterBase: string,  // e.g. "/jupyter-proxy"
   ) {}
 
-  triggerSpawn(token: string, userId: string, serverName: string): void {
-    // Two-step fire-and-forget:
-    // 1. chkclogin — Nginx injects the accessToken URL param as a Cookie header so
-    //    JupyterHub can validate it. redirect:'manual' stops at the 302 response so we
-    //    don't chase the login → OAuth → spawn-pending redirect chain, but the browser
-    //    still stores the Set-Cookie from that 302 (the JupyterHub auth cookie).
-    // 2. spawn — tells JupyterHub to start the named server. redirect:'manual' again
-    //    stops us from following the spawn-pending polling loop; waitUntilReady handles
-    //    readiness independently.
-    void fetch(
+  async triggerSpawn(token: string, userId: string, serverName: string): Promise<void> {
+    // Step 1: chkclogin — Nginx injects accessToken as Cookie header so JupyterHub
+    // validates it and sets the jupyterhub-hub-login session cookie.
+    // redirect:'manual' stops at the 302; the browser still stores Set-Cookie from it.
+    await fetch(
       `${this.jupyterBase}/hub/chkclogin?accessToken=${encodeURIComponent(token)}`,
       { credentials: 'include', redirect: 'manual' },
-    )
-      .then(() =>
-        fetch(
-          `${this.jupyterBase}/hub/spawn/${userId}/${serverName}`,
-          { credentials: 'include', redirect: 'manual' },
-        ),
+    ).catch(() => {})
+
+    // Step 2: Obtain a JupyterHub API token using the hub session cookie.
+    // This token bypasses the per-server OAuth flow that cannot complete through the
+    // proxy (Keycloak callback URL is hardcoded to lab.v2dev.opensourcebrain.org).
+    try {
+      const res = await fetch(
+        `${this.jupyterBase}/hub/api/users/${userId}/tokens`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: 'idp-arc upload' }),
+        },
       )
-      .catch(() => {})
+      if (res.ok) {
+        const data = await res.json() as { token: string }
+        this.jupyterToken = data.token
+      }
+    } catch {}
+
+    // Step 3: Spawn the named server. redirect:'manual' stops before the
+    // spawn-pending polling loop; waitUntilReady handles readiness independently.
+    await fetch(
+      `${this.jupyterBase}/hub/spawn/${userId}/${serverName}`,
+      { credentials: 'include', redirect: 'manual' },
+    ).catch(() => {})
   }
 
   async waitUntilReady(
@@ -52,6 +68,7 @@ export class JupyterApiClient implements IJupyterApi {
         const probe = await fetch(contentsUrl, {
           credentials: 'include',
           redirect: 'error',  // treat auth redirects as "not ready" rather than looping
+          headers: this.authHeaders(),
         })
         if (probe.ok) return true
         // 404 = named server not yet registered in the proxy (transient during spawn)
@@ -73,7 +90,7 @@ export class JupyterApiClient implements IJupyterApi {
       {
         method: 'PUT',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...this.authHeaders() },
         body: JSON.stringify({
           name: file.name,
           path: file.name,
@@ -86,6 +103,10 @@ export class JupyterApiClient implements IJupyterApi {
     if (!res.ok) {
       throw new Error(`Upload failed: ${res.status} ${res.statusText}`)
     }
+  }
+
+  private authHeaders(): Record<string, string> {
+    return this.jupyterToken ? { Authorization: `token ${this.jupyterToken}` } : {}
   }
 }
 

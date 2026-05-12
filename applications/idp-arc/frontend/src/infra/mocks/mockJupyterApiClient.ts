@@ -8,7 +8,7 @@ import type { IJupyterApi } from '../../core/ports/IJupyterApi'
  * • uploadFile()     logs and resolves immediately
  */
 export class MockJupyterApiClient implements IJupyterApi {
-  triggerSpawn(_token: string, userId: string, serverName: string): void {
+  async triggerSpawn(_token: string, userId: string, serverName: string): Promise<void> {
     console.info(
       `[MockJupyterApiClient] triggerSpawn(userId="${userId}", serverName="${serverName}")`,
     )

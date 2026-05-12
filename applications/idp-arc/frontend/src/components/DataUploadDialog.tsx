@@ -83,10 +83,11 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
 
     const numericId = typeof workspaceId === 'string' ? parseInt(workspaceId, 10) : workspaceId
     const selectedWorkspace = workspaces.find(w => w.id === workspaceId)
+    const newWorkspaceName = [behavioralTask, protocol].filter(Boolean).join(' — ') || 'New Workspace'
 
     await createAndUpload(
       {
-        workspaceName: selectedWorkspace?.name ?? 'New Workspace',
+        workspaceName: selectedWorkspace?.name ?? newWorkspaceName,
         workspaceId: !isNaN(numericId as number) ? (numericId as number) : undefined,
         file,
         userId: tokenParsed?.sub as string,
@@ -103,7 +104,7 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
   }
 
   const stepIndex = step === 'select' ? 0 : 1
-  const canGoNext = !!behavioralTask && !!protocol && workspaceId !== ''
+  const canGoNext = !!behavioralTask && !!protocol
   const canUpload = !!file
 
   return (
@@ -171,7 +172,7 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
             Select behavioral task
           </Typography>
           <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: 'text.secondary', mt: 0.5 }}>
-            Select a behavioral task, protocol and workspace
+            Select a behavioral task and protocol. Optionally pick an existing workspace, or leave it empty to create a new one.
           </Typography>
         </Box>
       ) : (
@@ -235,7 +236,7 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
                   displayEmpty
                   sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px' }}
                   renderValue={(v) => {
-                    if (!v && v !== 0) return <span style={{ opacity: 0.4 }}>Select workspace to upload data to..</span>
+                    if (!v && v !== 0) return <span style={{ opacity: 0.4 }}>Leave empty to create a new workspace</span>
                     return workspaces.find(w => w.id === v)?.name ?? String(v)
                   }}
                 >

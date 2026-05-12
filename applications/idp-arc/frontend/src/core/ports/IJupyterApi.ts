@@ -12,7 +12,7 @@ export interface IJupyterApi {
    * @param userId     Subject claim from the token (used in hub URL).
    * @param serverName Named-server identifier (e.g. `"42lab"`).
    */
-  triggerSpawn(token: string, userId: string, serverName: string): void
+  triggerSpawn(token: string, userId: string, serverName: string): Promise<void>
 
   /**
    * Sets the session cookie required by JupyterHub and fires the spawn trigger.

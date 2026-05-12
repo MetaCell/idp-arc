@@ -70,7 +70,7 @@ export function createCreateAndUploadUseCase(
       onProgress({ phase: 'spawning', message: PHASE_LABELS.spawning, workspaceId: wsId })
 
       const spawnToken = await auth.getToken(30)
-      jupyterApi.triggerSpawn(spawnToken, userId, serverName)
+      await jupyterApi.triggerSpawn(spawnToken, userId, serverName)
 
       // Wait 30 s for the PVC to initialise before polling
       for (let i = 30; i > 0; i--) {
