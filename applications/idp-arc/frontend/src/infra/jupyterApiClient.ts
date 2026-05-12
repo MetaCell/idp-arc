@@ -23,29 +23,40 @@ export class JupyterApiClient implements IJupyterApi {
     // Step 1: chkclogin — Nginx injects accessToken as Cookie header so JupyterHub
     // validates it and sets the jupyterhub-hub-login session cookie.
     // redirect:'manual' stops at the 302; the browser still stores Set-Cookie from it.
-    await fetch(
+    const chkRes = await fetch(
       `${this.jupyterBase}/hub/chkclogin?accessToken=${encodeURIComponent(token)}`,
       { credentials: 'include', redirect: 'manual' },
-    ).catch(() => {})
+    ).catch((err) => { console.warn('[JupyterApiClient] chkclogin error:', err); return null })
+    console.info('[JupyterApiClient] chkclogin status:', chkRes?.status, 'type:', chkRes?.type)
 
     // Step 2: Obtain a JupyterHub API token using the hub session cookie.
     // This token bypasses the per-server OAuth flow that cannot complete through the
     // proxy (Keycloak callback URL is hardcoded to lab.v2dev.opensourcebrain.org).
+    // redirect:'manual' avoids silently following an auth redirect to an HTML page
+    // that would make res.ok=true but break JSON parsing.
     try {
       const res = await fetch(
         `${this.jupyterBase}/hub/api/users/${userId}/tokens`,
         {
           method: 'POST',
           credentials: 'include',
+          redirect: 'manual',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ note: 'idp-arc upload' }),
         },
       )
+      console.info('[JupyterApiClient] token fetch status:', res.status, 'type:', res.type)
       if (res.ok) {
         const data = await res.json() as { token: string }
         this.jupyterToken = data.token
+        console.info('[JupyterApiClient] hub token obtained')
+      } else {
+        const body = await res.text().catch(() => '(unreadable)')
+        console.warn('[JupyterApiClient] token fetch failed:', res.status, body)
       }
-    } catch {}
+    } catch (err) {
+      console.warn('[JupyterApiClient] token fetch threw:', err)
+    }
 
     // Step 3: Spawn the named server. redirect:'manual' stops before the
     // spawn-pending polling loop; waitUntilReady handles readiness independently.
@@ -71,9 +82,11 @@ export class JupyterApiClient implements IJupyterApi {
           headers: this.authHeaders(),
         })
         if (probe.ok) return true
+        console.info('[JupyterApiClient] probe status:', probe.status, 'token set:', !!this.jupyterToken)
         // 404 = named server not yet registered in the proxy (transient during spawn)
-        // 502/503 = server starting up; anything else is a definitive failure
-        if (probe.status !== 503 && probe.status !== 502 && probe.status !== 404) break
+        // 403 = server is up but per-server auth failed (token not obtained yet)
+        // 502/503 = server starting up
+        if (probe.status !== 503 && probe.status !== 502 && probe.status !== 404 && probe.status !== 403) break
       } catch {
         // Network / CORS error or redirect — keep retrying
       }
