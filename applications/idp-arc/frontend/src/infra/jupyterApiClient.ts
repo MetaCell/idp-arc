@@ -13,6 +13,11 @@ import type { IJupyterApi } from '../core/ports/IJupyterApi'
  * Use-cases only see IJupyterApi — they have no idea these browser APIs exist.
  */
 export class JupyterApiClient implements IJupyterApi {
+  // Captured from the first successful contents probe; Nginx echoes the _xsrf
+  // cookie value as X-XSRF-Token so we can read it even when the cookie path
+  // makes it inaccessible via document.cookie.
+  private xsrfToken = ''
+
   constructor(
     private readonly jupyterBase: string,  // e.g. "/jupyter-proxy"
     private readonly baseDomain: string,   // e.g. "v2dev.opensourcebrain.org"
@@ -54,7 +59,10 @@ export class JupyterApiClient implements IJupyterApi {
           credentials: 'include',
           redirect: 'error',  // treat auth redirects as "not ready" rather than looping
         })
-        if (probe.ok) return true
+        if (probe.ok) {
+          this.xsrfToken = probe.headers.get('X-XSRF-Token') ?? getXsrfToken()
+          return true
+        }
         if (probe.status === 403) {
           // Server is running but the per-server OAuth cookie is missing.
           // Fetch the HTML endpoint with redirect:'follow': Nginx proxy_redirect rewrites
@@ -83,7 +91,7 @@ export class JupyterApiClient implements IJupyterApi {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'X-XSRFToken': getXsrfToken(),
+          'X-XSRFToken': this.xsrfToken || getXsrfToken(),
         },
         body: JSON.stringify({
           name: file.name,
