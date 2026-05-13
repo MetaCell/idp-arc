@@ -81,7 +81,10 @@ export class JupyterApiClient implements IJupyterApi {
       {
         method: 'PUT',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-XSRFToken': getXsrfToken(),
+        },
         body: JSON.stringify({
           name: file.name,
           path: file.name,
@@ -95,6 +98,11 @@ export class JupyterApiClient implements IJupyterApi {
       throw new Error(`Upload failed: ${res.status} ${res.statusText}`)
     }
   }
+}
+
+function getXsrfToken(): string {
+  const match = document.cookie.match(/(?:^|;)\s*_xsrf=([^;]+)/)
+  return match ? decodeURIComponent(match[1]) : ''
 }
 
 function sleep(ms: number): Promise<void> {
