@@ -15,9 +15,12 @@ import type { IJupyterApi } from '../core/ports/IJupyterApi'
 export class JupyterApiClient implements IJupyterApi {
   constructor(
     private readonly jupyterBase: string,  // e.g. "/jupyter-proxy"
+    private readonly baseDomain: string,   // e.g. "v2dev.opensourcebrain.org"
   ) {}
 
   async triggerSpawn(token: string, userId: string, serverName: string): Promise<void> {
+    // Set the session cookie so JupyterHub can authenticate the user
+    document.cookie = `accessToken=${token};path=/;domain=.${this.baseDomain};SameSite=Lax;Secure`
     // Step 1: chkclogin — Nginx injects accessToken as Cookie header so JupyterHub
     // validates it and sets the jupyterhub-hub-login session cookie.
     // redirect:'manual' stops at the 302; the browser still stores Set-Cookie from it.

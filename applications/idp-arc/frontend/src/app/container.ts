@@ -42,7 +42,7 @@ export const authClient = new KeycloakAuthClient({
 })
 
 const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
-const jupyterApi   = new JupyterApiClient(JUPYTER_BASE)
+const jupyterApi   = new JupyterApiClient(JUPYTER_BASE, BASE_DOMAIN)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────
 
