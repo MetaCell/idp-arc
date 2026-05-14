@@ -83,6 +83,18 @@ export class JupyterApiClient implements IJupyterApi {
   }
 
   async uploadFile(userId: string, serverName: string, file: File): Promise<void> {
+    // Diagnostic: verify JupyterLab is reachable immediately before upload
+    const contentsUrl = `${this.jupyterBase}/user/${userId}/${serverName}/api/contents/`
+    try {
+      const probe = await fetch(contentsUrl, { credentials: 'include', redirect: 'error' })
+      console.log('[upload-probe] status:', probe.status, 'ok:', probe.ok)
+      console.log('[upload-probe] X-XSRF-Token header:', probe.headers.get('X-XSRF-Token'))
+      console.log('[upload-probe] xsrfToken in memory:', this.xsrfToken)
+      console.log('[upload-probe] document.cookie _xsrf:', document.cookie.match(/(?:^|;)\s*_xsrf=([^;]*)/)?.[0] ?? '(not found)')
+    } catch (e) {
+      console.log('[upload-probe] fetch threw (redirect or network):', e)
+    }
+
     const content = await readFileAsBase64(file)
     const res = await fetch(
       `${this.jupyterBase}/user/${userId}/${serverName}/api/contents/${encodeURIComponent(file.name)}`,
