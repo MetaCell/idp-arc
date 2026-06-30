@@ -22,12 +22,14 @@ import {
   useScrollTrigger,
 } from '@mui/material'
 import type { ReactNode } from 'react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { authClient } from '../app/container'
 import { useAppContext } from '../AppContext'
 import { Logo } from '../Icons'
+import DataUploadDialog from './DataUploadDialog'
+import { registerUploadOpener } from './UploadContext'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
 
@@ -54,9 +56,18 @@ export default function PageLayout({
   const avatarMenuOpen = Boolean(avatarAnchor)
   const [waitingForLogin, setWaitingForLogin] = useState(false)
   const popupRef = useRef<Window | null>(null)
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
 
   async function handleLogin() {
-    const loginUrl = await authClient.getLoginUrl(`${window.location.origin}/`)
+    let loginUrl: string
+    try {
+      loginUrl = await authClient.getLoginUrl(`${window.location.origin}/`)
+    } catch {
+      // keycloak-js 26 + PKCE can throw if internal state is unset (e.g. after
+      // token expiry). Fall back to a full-page redirect via kc.login().
+      authClient.login()
+      return
+    }
     const w = 480, h = 600
     const left = Math.round((screen.width - w) / 2)
     const top = Math.round((screen.height - h) / 2)
@@ -80,10 +91,16 @@ export default function PageLayout({
   const { authState, username } = useAppContext()
   const isAuthenticated = authState === 'authenticated'
 
+  useEffect(() => {
+    registerUploadOpener(() =>
+      isAuthenticated ? setUploadDialogOpen(true) : void handleLogin()
+    )
+  }, [isAuthenticated])
+
   const navItems = [
     { label: t('nav.protocols'), path: '/protocols' },
     { label: t('nav.about'), path: '/about' },
-    ...(isAuthenticated ? [{ label: t('nav.myWorkspaces'), path: '/workspaces' }] : []),
+    ...(isAuthenticated ? [{ label: t('nav.myWorkspaces'), path: 'https://www.v2dev.opensourcebrain.org/', external: true }] : []),
   ]
 
   const isActive = (path: string) => location.pathname === path
@@ -252,11 +269,11 @@ export default function PageLayout({
               direction="row"
               sx={styles.desktopNav}
             >
-              {navItems.map(({ label, path }) => (
+              {navItems.map(({ label, path, external }) => (
                 <Button
                   key={label}
                   variant="text"
-                  onClick={() => navigate(path)}
+                  onClick={() => external ? window.open(path, '_blank')?.focus() : navigate(path)}
                   sx={styles.navButton(path)}
                 >
                   {label}
@@ -268,7 +285,7 @@ export default function PageLayout({
               <Button
                 variant="contained"
                 endIcon={<ArrowIcon />}
-                onClick={() => navigate('/workspaces')}
+                onClick={() => isAuthenticated ? setUploadDialogOpen(true) : void handleLogin()}
               >
                 {t('nav.dataUpload')}
               </Button>
@@ -330,14 +347,18 @@ export default function PageLayout({
             <CloseIcon />
           </IconButton>
           <Stack sx={styles.drawerNavStack}>
-            {navItems.map(({ label, path }) => (
+            {navItems.map(({ label, path, external }) => (
               <Button
                 key={label}
                 variant="text"
                 fullWidth
                 sx={styles.drawerNavButton}
                 onClick={() => {
-                  navigate(path)
+                  if (external) {
+                    window.open(path, '_blank')?.focus()
+                  } else {
+                    navigate(path)
+                  }
                   setDrawerOpen(false)
                 }}
               >
@@ -367,8 +388,9 @@ export default function PageLayout({
               variant="contained"
               endIcon={<ArrowIcon />}
               onClick={() => {
-                navigate('/workspaces')
                 setDrawerOpen(false)
+                if (isAuthenticated) setUploadDialogOpen(true)
+                else handleLogin()
               }}
             >
               {t('nav.dataUpload')}
@@ -445,6 +467,8 @@ export default function PageLayout({
           </Stack>
         </Container>
       </Box>
+
+      <DataUploadDialog open={uploadDialogOpen} onClose={() => setUploadDialogOpen(false)} onAuthRequired={handleLogin} />
 
       <Dialog open={waitingForLogin} onClose={cancelLogin}>
         <DialogTitle>{t('nav.signingIn')}</DialogTitle>

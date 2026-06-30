@@ -8,11 +8,15 @@
 export interface IJupyterApi {
   /**
    * Sets the session cookie required by JupyterHub and fires the spawn trigger.
-   * @param token      Current access token.
-   * @param userId     Subject claim from the token (used in hub URL).
-   * @param serverName Named-server identifier (e.g. `"42lab"`).
+   * @param token       Current access token.
+   * @param userId      Subject claim from the token (used in hub URL).
+   * @param serverName  Named-server identifier (e.g. `"42lab"`).
+   * @param workspaceId Numeric workspace ID (e.g. `"42"`) — the JupyterHub
+   *                    spawner hook reads this from the `workspaceId` cookie to
+   *                    mount the correct PVC. Distinct from `serverName` which
+   *                    includes the appname suffix.
    */
-  triggerSpawn(token: string, userId: string, serverName: string): void
+  triggerSpawn(token: string, userId: string, serverName: string, workspaceId: string): Promise<void>
 
   /**
    * Sets the session cookie required by JupyterHub and fires the spawn trigger.
@@ -28,6 +32,7 @@ export interface IJupyterApi {
 
   /**
    * Uploads a file using the JupyterLab Contents API (PUT, base64-encoded).
+   * @param token Keycloak access token forwarded as Authorization: Bearer for nginx auth.
    */
-  uploadFile(userId: string, serverName: string, file: File): Promise<void>
+  uploadFile(token: string, userId: string, serverName: string, file: File): Promise<void>
 }

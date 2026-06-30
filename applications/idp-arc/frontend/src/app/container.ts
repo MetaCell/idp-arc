@@ -30,7 +30,10 @@ const WWW_BASE       = import.meta.env.DEV ? '/api-proxy' : `https://www.${BASE_
 const WORKSPACES_API = `${WWW_BASE}/proxy/workspaces/api`
 const WORKSPACES_LIST_URL =
   `${WWW_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
-const JUPYTER_BASE   = `https://lab.${BASE_DOMAIN}`
+const JUPYTER_BASE          = '/jupyter-proxy'
+// JupyterHub named-server suffix — the subdomain appname of the JupyterHub host.
+// For lab.v2dev.opensourcebrain.org workspace 764 spawns as server "764lab".
+const JUPYTER_SERVER_SUFFIX = 'lab'
 const FRONTEND_BASE  = `https://www.${BASE_DOMAIN}`
 
 // ─── Infrastructure singletons ────────────────────────────────────────────────
@@ -50,7 +53,7 @@ const jupyterApi   = new JupyterApiClient(JUPYTER_BASE, BASE_DOMAIN)
 export const loadWorkspaces = createLoadWorkspacesUseCase(authClient, workspaceApi)
 
 /** Runs the 4-step create-workspace + file-upload workflow. */
-export const createAndUpload = createCreateAndUploadUseCase(authClient, workspaceApi, jupyterApi)
+export const createAndUpload = createCreateAndUploadUseCase(authClient, workspaceApi, jupyterApi, JUPYTER_SERVER_SUFFIX)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
