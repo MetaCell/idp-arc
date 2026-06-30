@@ -42,6 +42,10 @@ export function createCreateAndUploadUseCase(
   auth: Pick<IAuthClient, 'getToken'>,
   workspaceApi: Pick<IWorkspaceApi, 'createWorkspace'>,
   jupyterApi: Pick<IJupyterApi, 'triggerSpawn' | 'waitUntilReady' | 'uploadFile'>,
+  // JupyterHub named-server suffix: the subdomain appname of the JupyterHub
+  // deployment. For lab.v2dev.opensourcebrain.org the server name is
+  // "{workspaceId}lab" — i.e. the suffix is "lab".
+  serverSuffix = '',
 ) {
   return async function createAndUpload(
     input: CreateAndUploadInput,
@@ -66,11 +70,11 @@ export function createCreateAndUploadUseCase(
       if (abortRef.current) return null
 
       // ── Step 2: Trigger JupyterHub spawn ──────────────────────────────────
-      const serverName = `${wsId}lab`
+      const serverName = `${wsId}${serverSuffix}`
       onProgress({ phase: 'spawning', message: PHASE_LABELS.spawning, workspaceId: wsId })
 
       const spawnToken = await auth.getToken(30)
-      await jupyterApi.triggerSpawn(spawnToken, userId, serverName)
+      await jupyterApi.triggerSpawn(spawnToken, userId, serverName, `${wsId}`)
 
       // Wait 30 s for the PVC to initialise before polling
       for (let i = 30; i > 0; i--) {
@@ -85,25 +89,16 @@ export function createCreateAndUploadUseCase(
 
       if (abortRef.current) return null
 
-      // ── Step 3: Poll until JupyterLab is ready ────────────────────────────
+      // ── Step 3: Poll until JupyterLab is ready and per-server session is established ──
       onProgress({ phase: 'waiting', message: PHASE_LABELS.waiting, workspaceId: wsId })
-      const deadline = Date.now() + 240_000 // 4-minute total timeout
-
+      const deadline = Date.now() + 240_000
       const ready = await jupyterApi.waitUntilReady(userId, serverName, deadline, abortRef)
-
-      if (abortRef.current) return null
-
-      if (!ready) {
-        throw new Error(
-          'Could not reach the JupyterLab server within the timeout. ' +
-          'This may be due to CORS restrictions or a slow cold-start. ' +
-          'The workspace was created — you can open it in JupyterLab and upload the file manually.',
-        )
-      }
+      if (!ready) { throw new Error('Could not reach JupyterLab within the timeout.') }
 
       // ── Step 4: Upload file ───────────────────────────────────────────────
       onProgress({ phase: 'uploading', message: PHASE_LABELS.uploading, workspaceId: wsId })
-      await jupyterApi.uploadFile(userId, serverName, file)
+      const uploadToken = await auth.getToken(30)
+      await jupyterApi.uploadFile(uploadToken, userId, serverName, file)
 
       onProgress({ phase: 'done', message: PHASE_LABELS.done, workspaceId: wsId })
       return wsId

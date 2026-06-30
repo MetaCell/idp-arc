@@ -13,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import PageLayout from '../components/PageLayout'
+import { openUpload } from '../components/UploadContext'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
 
@@ -33,7 +34,7 @@ export default function LandingPage() {
       <Button variant="outlined" onClick={() => navigate('/protocols')}>
         {t('banner.ctaProtocols')}
       </Button>
-      <Button variant="contained" endIcon={<ArrowIcon />} onClick={() => navigate('/workspaces')}>
+      <Button variant="contained" endIcon={<ArrowIcon />} onClick={openUpload}>
         {t('banner.ctaDataUpload')}
       </Button>
     </Stack>
@@ -60,7 +61,17 @@ export default function LandingPage() {
                   </Box>
                 </Stack>
                 <Box sx={{ pl: 3 }}>
-                  <Button variant="contained" endIcon={<ArrowIcon />} onClick={() => navigate(ctaPath)}>
+                  <Button
+                    variant="contained"
+                    endIcon={<ArrowIcon />}
+                    onClick={() =>
+                      ctaPath === '/workspaces'
+                        ? openUpload()
+                        : ctaPath.startsWith('http')
+                          ? window.open(ctaPath, '_blank')
+                          : navigate(ctaPath)
+                    }
+                  >
                     {cta}
                   </Button>
                 </Box>

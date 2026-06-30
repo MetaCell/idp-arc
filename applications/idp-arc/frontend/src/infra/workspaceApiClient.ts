@@ -1,6 +1,10 @@
 import type { IWorkspaceApi } from '../core/ports/IWorkspaceApi'
 import type { Workspace } from '../core/types'
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 /**
  * WorkspaceApiClient — concrete IWorkspaceApi implementation.
  *
@@ -27,18 +31,44 @@ export class WorkspaceApiClient implements IWorkspaceApi {
   }
 
   async createWorkspace(token: string, name: string): Promise<number> {
-    const res = await fetch(`${this.baseApiUrl}/workspace`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name: name.trim(), description: name.trim() }),
-    })
-    if (!res.ok) {
-      throw new Error(`Failed to create workspace: ${res.status} ${res.statusText}`)
+    const RETRYABLE = new Set([502, 503, 504])
+    const MAX_ATTEMPTS = 3
+    let lastError: Error = new Error('Workspace creation failed')
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) await sleep(attempt * 2_000)
+
+      const res = await fetch(`${this.baseApiUrl}/workspace`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: name.trim(), description: name.trim() }),
+      })
+
+      if (res.ok) {
+        const ws = (await res.json()) as { id: number }
+        return ws.id
+      }
+
+      let detail = ''
+      try {
+        const body = await res.json() as Record<string, unknown>
+        detail = (body.description ?? body.message ?? body.detail ?? '') as string
+      } catch { /* non-JSON body */ }
+
+      lastError = new Error(
+        res.status === 405
+          ? `Not allowed to create a new workspace on this platform (HTTP 405).${detail ? ` ${detail}` : ''}`
+          : RETRYABLE.has(res.status)
+            ? `Workspace service unavailable (HTTP ${res.status}), attempt ${attempt}/${MAX_ATTEMPTS}.`
+            : `Failed to create workspace: ${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`,
+      )
+
+      if (!RETRYABLE.has(res.status)) break
     }
-    const ws = (await res.json()) as { id: number }
-    return ws.id
+
+    throw lastError
   }
 }

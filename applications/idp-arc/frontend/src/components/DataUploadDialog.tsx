@@ -16,7 +16,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 
-import { createAndUpload, loadWorkspaces } from '../app/container'
+import { createAndUpload, getWorkspaceUrl, loadWorkspaces } from '../app/container'
 import { useAppContext } from '../AppContext'
 import type { Workspace } from '../core/types'
 import protocols from '../data/protocols.json'
@@ -26,9 +26,10 @@ type DialogStep = 'select' | 'upload' | 'uploading' | 'success'
 export interface DataUploadDialogProps {
   open: boolean
   onClose: () => void
+  onAuthRequired?: () => void
 }
 
-export default function DataUploadDialog({ open, onClose }: DataUploadDialogProps) {
+export default function DataUploadDialog({ open, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
 
   interface FormState {
@@ -39,6 +40,8 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
     file: File | null
     isDragging: boolean
     uploadMessage: string
+    /** ID of the workspace spawned in the current dialog session; drives retry behaviour. */
+    spawnedWorkspaceId: number | undefined
   }
 
   const INITIAL_FORM: FormState = {
@@ -49,10 +52,11 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
     file: null,
     isDragging: false,
     uploadMessage: '',
+    spawnedWorkspaceId: undefined,
   }
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const { step, behavioralTask, protocol, workspaceId, file, isDragging, uploadMessage } = form
+  const { step, behavioralTask, protocol, workspaceId, file, isDragging, uploadMessage, spawnedWorkspaceId } = form
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -65,7 +69,14 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
     setLoadingWorkspaces(true)
     loadWorkspaces()
       .then(setWorkspaces)
-      .catch(console.error)
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg.includes('sign in again')) {
+          onAuthRequired?.()
+        } else {
+          console.error(err)
+        }
+      })
       .finally(() => setLoadingWorkspaces(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -76,29 +87,64 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
     setForm((prev) => ({ ...prev, isDragging: false, file: dropped ?? prev.file }))
   }, [])
 
+  const openWorkspaceTab = (wsId: number) => {
+    window.open(getWorkspaceUrl(wsId), '_blank')
+    window.focus()
+  }
+
   const handleUpload = async () => {
     if (!file) return
-    setForm((prev) => ({ ...prev, step: 'uploading' }))
+    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '' }))
     abortRef.current = false
 
+    // `spawnedWorkspaceId` is set after the first upload attempt this session.
+    // On retry we reuse that workspace so the user can fix a stuck JupyterLab
+    // without causing a new workspace to be spawned on every attempt.
+    const isRetry = spawnedWorkspaceId !== undefined
     const selectedWorkspace = workspaces.find(w => String(w.id) === String(workspaceId))
     const newWorkspaceName = [behavioralTask, protocol].filter(Boolean).join(' — ') || 'New Workspace'
     const resolvedId = selectedWorkspace
       ? (typeof selectedWorkspace.id === 'string' ? parseInt(selectedWorkspace.id, 10) : selectedWorkspace.id)
       : undefined
 
+    // On retry reuse the previously spawned workspace; otherwise use the selected one.
+    const uploadWorkspaceId = isRetry ? spawnedWorkspaceId : resolvedId
+
+    // Open the workspace tab only on the first attempt — on retry it is already open.
+    if (!isRetry && uploadWorkspaceId !== undefined) {
+      openWorkspaceTab(uploadWorkspaceId)
+    }
+
     await createAndUpload(
       {
         workspaceName: selectedWorkspace?.name ?? newWorkspaceName,
-        workspaceId: resolvedId,
+        workspaceId: uploadWorkspaceId,
         file,
         userId: tokenParsed?.sub as string,
+        // For new workspaces: track the id and open the tab the moment it is created.
+        onWorkspaceCreated: uploadWorkspaceId === undefined
+          ? (wsId: number) => {
+              setForm(prev => ({ ...prev, spawnedWorkspaceId: wsId }))
+              openWorkspaceTab(wsId)
+            }
+          : undefined,
       },
       (state) => {
+        // Capture the workspace id as soon as it is known so subsequent retries
+        // within this dialog session reuse the same workspace.
+        if (state.workspaceId !== undefined) {
+          setForm(prev => ({ ...prev, spawnedWorkspaceId: state.workspaceId }))
+        }
+        if (state.phase === 'error' && state.error?.includes('sign in again')) {
+          setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))
+          onAuthRequired?.()
+          return
+        }
         setForm((prev) => ({
           ...prev,
-          uploadMessage: state.message,
+          uploadMessage: state.phase === 'error' ? (state.error ?? state.message) : state.message,
           ...(state.phase === 'done' ? { step: 'success' } : {}),
+          ...(state.phase === 'error' ? { step: 'upload' } : {}),
         }))
       },
       abortRef,
@@ -273,6 +319,12 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
 
         {/* Step 2 — file upload */}
         {step === 'upload' && (
+          <Stack sx={{ flex: 1, gap: 2 }}>
+          {uploadMessage && (
+            <Typography variant="body2" sx={{ color: 'error.main', px: 0.5 }}>
+              {uploadMessage}
+            </Typography>
+          )}
           <Stack direction="row" sx={{ flex: 1, gap: 6 }}>
             <Box sx={{ flex: 7 }}>
               <input
@@ -332,6 +384,7 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
               </Button>
             </Stack>
           </Stack>
+          </Stack>
         )}
 
         {/* Loading */}
@@ -378,7 +431,7 @@ export default function DataUploadDialog({ open, onClose }: DataUploadDialogProp
             disabled={!canUpload}
             onClick={handleUpload}
           >
-            Upload
+            {spawnedWorkspaceId !== undefined ? 'Retry' : 'Upload'}
           </Button>
         </Box>
       )}
