@@ -221,7 +221,7 @@ export class JupyterApiClient implements IJupyterApi {
         if (settled) return
         settled = true
         clearTimeout(timer)
-        try { frame.parentNode?.removeChild(frame) } catch {}
+        frame.remove()
         resolve()
       }
       const timer = setTimeout(finish, timeoutMs)

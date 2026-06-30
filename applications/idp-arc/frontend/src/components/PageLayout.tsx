@@ -95,7 +95,6 @@ export default function PageLayout({
     registerUploadOpener(() =>
       isAuthenticated ? setUploadDialogOpen(true) : void handleLogin()
     )
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated])
 
   const navItems = [
@@ -390,7 +389,8 @@ export default function PageLayout({
               endIcon={<ArrowIcon />}
               onClick={() => {
                 setDrawerOpen(false)
-                isAuthenticated ? setUploadDialogOpen(true) : void handleLogin()
+                if (isAuthenticated) setUploadDialogOpen(true)
+                else handleLogin()
               }}
             >
               {t('nav.dataUpload')}
