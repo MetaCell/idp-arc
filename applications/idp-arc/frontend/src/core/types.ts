@@ -23,10 +23,10 @@ export interface Workspace {
 
 export type UploadPhase =
   | 'idle'
-  | 'creating'
-  | 'spawning'
-  | 'waiting'
+  | 'hashing'
+  | 'initializing'
   | 'uploading'
+  | 'registering'
   | 'done'
   | 'error'
 
@@ -35,15 +35,18 @@ export interface UploadState {
   message: string
   error?: string
   workspaceId?: number
+  scriptOutput?: string
 }
 
-/** Human-readable labels for each phase, used both by use-cases and the UI. */
+/** Human-readable labels for each upload phase, used by both the use-case and the UI. */
 export const PHASE_LABELS: Record<UploadPhase, string> = {
   idle: '',
-  creating: '1 / 4 — Creating workspace…',
-  spawning: '2 / 4 — Starting JupyterLab server…',
-  waiting: '3 / 4 — Waiting for JupyterLab to be ready…',
-  uploading: '4 / 4 — Uploading file…',
+  hashing: '1 / 4 — Computing checksum…',
+  initializing: '2 / 4 — Preparing upload…',
+  uploading: '3 / 4 — Uploading file…',
+  // finalize also spawns the workspace and runs the protocol script synchronously — hence "can
+  // take a few minutes" (see jupyter_kernel_client.py in OSBv2's workspaces app).
+  registering: '4 / 4 — Registering asset, creating workspace & running script (can take a few minutes)…',
   done: 'Done!',
   error: 'Error',
 }

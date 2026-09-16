@@ -10,21 +10,21 @@
 
 import { MockAuthClient } from '../infra/mocks/mockAuthClient'
 import { MockWorkspaceApiClient } from '../infra/mocks/mockWorkspaceApiClient'
-import { MockJupyterApiClient } from '../infra/mocks/mockJupyterApiClient'
+import { MockDandiApiClient } from '../infra/mocks/mockDandiApiClient'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
-import { createCreateAndUploadUseCase } from '../core/use-cases/createAndUploadWorkspace'
+import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
 
 // ─── Mock infrastructure singletons ──────────────────────────────────────────
 
 export const authClient = new MockAuthClient()
 
 const workspaceApi = new MockWorkspaceApiClient()
-const jupyterApi   = new MockJupyterApiClient()
+const dandiApi     = new MockDandiApiClient()
 
 // ─── Use-cases (same factory functions, different adapters) ───────────────────
 
 export const loadWorkspaces = createLoadWorkspacesUseCase(authClient, workspaceApi)
-export const createAndUpload = createCreateAndUploadUseCase(authClient, workspaceApi, jupyterApi)
+export const createAndUploadToDandi = createCreateAndUploadToDandiUseCase(authClient, dandiApi)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

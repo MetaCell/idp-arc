@@ -16,7 +16,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 
-import { createAndUpload, getWorkspaceUrl, loadWorkspaces } from '../app/container'
+import { createAndUploadToDandi, getWorkspaceUrl, loadWorkspaces } from '../app/container'
 import { useAppContext } from '../AppContext'
 import type { Workspace } from '../core/types'
 import protocols from '../data/protocols.json'
@@ -42,6 +42,8 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
     uploadMessage: string
     /** ID of the workspace spawned in the current dialog session; drives retry behaviour. */
     spawnedWorkspaceId: number | undefined
+    /** Live stdout from the protocol script, streamed as the workspace kernel produces it. */
+    scriptOutput: string
   }
 
   const INITIAL_FORM: FormState = {
@@ -53,10 +55,11 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
     isDragging: false,
     uploadMessage: '',
     spawnedWorkspaceId: undefined,
+    scriptOutput: '',
   }
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const { step, behavioralTask, protocol, workspaceId, file, isDragging, uploadMessage, spawnedWorkspaceId } = form
+  const { step, behavioralTask, protocol, workspaceId, file, isDragging, uploadMessage, spawnedWorkspaceId, scriptOutput } = form
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -92,57 +95,60 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
     window.focus()
   }
 
+  /** Slug for the asset path prefix — protocols.json has no stable id field, so derive one. */
+  const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+
+  /** The analysis script that ships into the workspace, chosen by the selected protocol.
+   * Every protocol currently points at the same placeholder script; the per-protocol pipelines
+   * replace the URLs in protocols.json without touching this code. */
+  const selectedScript = protocols.find((p) => p.name === (protocol || behavioralTask))
+
   const handleUpload = async () => {
     if (!file) return
     setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '' }))
     abortRef.current = false
 
-    // `spawnedWorkspaceId` is set after the first upload attempt this session.
-    // On retry we reuse that workspace so the user can fix a stuck JupyterLab
-    // without causing a new workspace to be spawned on every attempt.
+    // `spawnedWorkspaceId` is set once finalize succeeds this session. Unlike the old
+    // JupyterLab flow, the workspace no longer exists until the DANDI upload has fully
+    // completed — it's the last thing `finalize` does, not the first step — so there is
+    // nothing to reuse on a retry before the first successful attempt.
     const isRetry = spawnedWorkspaceId !== undefined
     const selectedWorkspace = workspaces.find(w => String(w.id) === String(workspaceId))
     const newWorkspaceName = [behavioralTask, protocol].filter(Boolean).join(' — ') || 'New Workspace'
     const resolvedId = selectedWorkspace
       ? (typeof selectedWorkspace.id === 'string' ? parseInt(selectedWorkspace.id, 10) : selectedWorkspace.id)
       : undefined
-
-    // On retry reuse the previously spawned workspace; otherwise use the selected one.
     const uploadWorkspaceId = isRetry ? spawnedWorkspaceId : resolvedId
 
-    // Open the workspace tab only on the first attempt — on retry it is already open.
-    if (!isRetry && uploadWorkspaceId !== undefined) {
-      openWorkspaceTab(uploadWorkspaceId)
-    }
-
-    await createAndUpload(
+    // The backend now runs the protocol script itself, synchronously, as the last thing
+    // `finalize` does (see OSBv2 applications/workspaces/server/workspaces/service/jupyter_kernel_client.py) — no Argo yet, so this one
+    // call blocks through spawning the workspace's JupyterLab server and executing the script
+    // in it. There is no separate browser-driven run step any more; `scriptOutput` arrives with
+    // the same `done` state as the workspace id.
+    await createAndUploadToDandi(
       {
-        workspaceName: selectedWorkspace?.name ?? newWorkspaceName,
-        workspaceId: uploadWorkspaceId,
+        taskId: slugify(protocol || behavioralTask),
         file,
-        userId: tokenParsed?.sub as string,
-        // For new workspaces: track the id and open the tab the moment it is created.
-        onWorkspaceCreated: uploadWorkspaceId === undefined
-          ? (wsId: number) => {
-              setForm(prev => ({ ...prev, spawnedWorkspaceId: wsId }))
-              openWorkspaceTab(wsId)
-            }
-          : undefined,
+        workspaceId: uploadWorkspaceId,
+        workspaceName: selectedWorkspace?.name ?? newWorkspaceName,
+        scriptUrl: selectedScript?.scriptUrl,
+        scriptName: selectedScript?.scriptName,
       },
       (state) => {
-        // Capture the workspace id as soon as it is known so subsequent retries
-        // within this dialog session reuse the same workspace.
-        if (state.workspaceId !== undefined) {
-          setForm(prev => ({ ...prev, spawnedWorkspaceId: state.workspaceId }))
-        }
         if (state.phase === 'error' && state.error?.includes('sign in again')) {
           setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))
           onAuthRequired?.()
           return
         }
+        // The workspace only exists once `finalize` succeeds — open its tab then, not earlier.
+        if (state.phase === 'done' && state.workspaceId !== undefined) {
+          setForm(prev => ({ ...prev, spawnedWorkspaceId: state.workspaceId }))
+          openWorkspaceTab(state.workspaceId)
+        }
         setForm((prev) => ({
           ...prev,
           uploadMessage: state.phase === 'error' ? (state.error ?? state.message) : state.message,
+          ...(state.scriptOutput !== undefined ? { scriptOutput: state.scriptOutput } : {}),
           ...(state.phase === 'done' ? { step: 'success' } : {}),
           ...(state.phase === 'error' ? { step: 'upload' } : {}),
         }))
@@ -404,8 +410,33 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
               Your files has been successfully uploaded to Open Source Brain.
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.45 }}>
-              You can close this dialog.
+              {uploadMessage || 'You can close this dialog.'}
             </Typography>
+
+            {/* Live output from the protocol script running in the workspace kernel. */}
+            {scriptOutput && (
+              <Box
+                component="pre"
+                sx={{
+                  width: '100%',
+                  maxWidth: 720,
+                  maxHeight: 260,
+                  overflow: 'auto',
+                  m: 0,
+                  p: 2,
+                  bgcolor: '#141414',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 1,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  fontSize: 12,
+                  lineHeight: 1.6,
+                  whiteSpace: 'pre-wrap',
+                  textAlign: 'left',
+                }}
+              >
+                {scriptOutput}
+              </Box>
+            )}
           </Stack>
         )}
       </Box>
