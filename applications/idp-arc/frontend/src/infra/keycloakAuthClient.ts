@@ -17,6 +17,13 @@ export class KeycloakAuthClient implements IAuthClient {
   init(): Promise<boolean> {
     return this.kc.init({
       onLoad: 'check-sso',
+      // Without this, check-sso does its login-status check via a full top-window
+      // redirect to the Keycloak server and back — if that server is unreachable,
+      // the whole app is replaced by the dead auth server instead of just failing
+      // to log in. Routing the check through a hidden iframe (this static page,
+      // which was already shipped in public/ but never wired up) keeps the app
+      // on-screen even when Keycloak is down.
+      silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
       pkceMethod: 'S256',
       checkLoginIframe: false,
       scope: 'openid profile email administrator-scope',
