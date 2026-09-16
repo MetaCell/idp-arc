@@ -42,8 +42,6 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
     uploadMessage: string
     /** ID of the workspace spawned in the current dialog session; drives retry behaviour. */
     spawnedWorkspaceId: number | undefined
-    /** Live stdout from the protocol script, streamed as the workspace kernel produces it. */
-    scriptOutput: string
   }
 
   const INITIAL_FORM: FormState = {
@@ -55,11 +53,10 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
     isDragging: false,
     uploadMessage: '',
     spawnedWorkspaceId: undefined,
-    scriptOutput: '',
   }
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const { step, behavioralTask, protocol, workspaceId, file, isDragging, uploadMessage, spawnedWorkspaceId, scriptOutput } = form
+  const { step, behavioralTask, protocol, workspaceId, file, isDragging, uploadMessage, spawnedWorkspaceId } = form
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -120,11 +117,8 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
       : undefined
     const uploadWorkspaceId = isRetry ? spawnedWorkspaceId : resolvedId
 
-    // The backend now runs the protocol script itself, synchronously, as the last thing
-    // `finalize` does (see OSBv2 applications/workspaces/server/workspaces/service/jupyter_kernel_client.py) — no Argo yet, so this one
-    // call blocks through spawning the workspace's JupyterLab server and executing the script
-    // in it. There is no separate browser-driven run step any more; `scriptOutput` arrives with
-    // the same `done` state as the workspace id.
+    // finalize is synchronous: it also spawns the workspace and runs the script, so this
+    // one call can block for minutes.
     await createAndUploadToDandi(
       {
         taskId: slugify(protocol || behavioralTask),
@@ -148,7 +142,6 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
         setForm((prev) => ({
           ...prev,
           uploadMessage: state.phase === 'error' ? (state.error ?? state.message) : state.message,
-          ...(state.scriptOutput !== undefined ? { scriptOutput: state.scriptOutput } : {}),
           ...(state.phase === 'done' ? { step: 'success' } : {}),
           ...(state.phase === 'error' ? { step: 'upload' } : {}),
         }))
@@ -412,31 +405,6 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
             <Typography variant="body2" sx={{ opacity: 0.45 }}>
               {uploadMessage || 'You can close this dialog.'}
             </Typography>
-
-            {/* Live output from the protocol script running in the workspace kernel. */}
-            {scriptOutput && (
-              <Box
-                component="pre"
-                sx={{
-                  width: '100%',
-                  maxWidth: 720,
-                  maxHeight: 260,
-                  overflow: 'auto',
-                  m: 0,
-                  p: 2,
-                  bgcolor: '#141414',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 1,
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                  fontSize: 12,
-                  lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap',
-                  textAlign: 'left',
-                }}
-              >
-                {scriptOutput}
-              </Box>
-            )}
           </Stack>
         )}
       </Box>

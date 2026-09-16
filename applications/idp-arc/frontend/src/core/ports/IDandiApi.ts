@@ -1,7 +1,4 @@
-/**
- * IDandiApi — abstraction over idp-arc's own backend endpoints that broker the DANDI upload
- * (the admin key never reaches the browser — see IDP-43 architecture notes).
- */
+/** Abstraction over the OSB endpoints that broker the DANDI upload. */
 
 export interface UploadPart {
   partNumber: number
@@ -28,9 +25,7 @@ export interface UploadFinalizeResult {
   assetPath: string
   dandisetUrl: string
   workspaceId: number
-  /** Everything the protocol script printed, or an explanation of why it didn't run.
-   * The backend runs it synchronously as part of finalize now — see FinalizeUploadInput's
-   * scriptUrl — so by the time this promise resolves the script has already finished. */
+  /** Everything the protocol script printed, or why it didn't run. */
   scriptOutput?: string
 }
 
@@ -43,10 +38,8 @@ export interface FinalizeUploadInput {
   workspaceId?: number
   workspaceName?: string
   blobId?: string
-  /** Publicly-reachable URL of the selected protocol's analysis script, from protocols.json.
-   * The backend fetches and runs this itself as part of finalize (see jupyter_kernel_client.py)
-   * — no separate run step from the browser any more — so it must be reachable from OSB's
-   * cluster, not a idp-arc-local address. */
+  /** Analysis script to run. The backend fetches it, so it must be reachable from OSB's
+   * cluster — not a local address. */
   scriptUrl?: string
   /** Filename the script should land under in the workspace. */
   scriptName?: string
@@ -55,8 +48,8 @@ export interface FinalizeUploadInput {
 export interface IDandiApi {
   initUpload(token: string, taskId: string, filename: string, size: number, dandiEtag: string): Promise<UploadInitResult>
 
-  /** PUTs one part's bytes straight to S3 via its presigned URL. Returns the ETag S3 assigns
-   * this part (read from the response header — requires the bucket to expose it via CORS). */
+  /** PUTs one part straight to S3 via its presigned URL. Returns S3's ETag for the part,
+   * read from the response header — requires the bucket to expose it via CORS. */
   putPart(url: string, blob: Blob): Promise<string>
 
   finalizeUpload(token: string, input: FinalizeUploadInput): Promise<UploadFinalizeResult>

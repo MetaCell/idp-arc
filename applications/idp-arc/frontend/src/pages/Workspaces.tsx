@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { authClient, loadWorkspaces } from '../app/container'
+import { authClient, loadWorkspaces, createWorkspace } from '../app/container'
 import type { Workspace } from '../core/types'
 import { useAppContext } from '../AppContext'
 
@@ -10,6 +10,12 @@ export default function Workspaces() {
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null)
   const [workspacesError, setWorkspacesError] = useState<string | null>(null)
   const [workspacesLoading, setWorkspacesLoading] = useState(false)
+
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false)
+  const [workspaceName, setWorkspaceName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const loadWorkspaceList = useCallback(() => {
     setWorkspacesLoading(true)
@@ -30,6 +36,31 @@ export default function Workspaces() {
     if (authState !== 'authenticated') return
     void (async () => { loadWorkspaceList() })()
   }, [authState, loadWorkspaceList])
+
+  function openModal() {
+    setWorkspaceName('')
+    setCreateError(null)
+    setModalOpen(true)
+  }
+
+  function closeModal() {
+    setModalOpen(false)
+  }
+
+  async function handleCreate() {
+    if (!workspaceName.trim()) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      await createWorkspace(workspaceName.trim())
+      setModalOpen(false)
+      loadWorkspaceList()
+    } catch (err: unknown) {
+      setCreateError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCreating(false)
+    }
+  }
 
   if (authState === 'loading') {
     return <div className="card"><p>{t('auth.initialising')}</p></div>
@@ -60,6 +91,7 @@ export default function Workspaces() {
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h2 style={{ margin: 0 }}>{t('workspaces.title')}</h2>
+          <button onClick={openModal}>{t('workspaces.newButton')}</button>
         </div>
         {workspacesLoading && <p>{t('workspaces.loading')}</p>}
         {workspacesError && (
@@ -95,6 +127,49 @@ export default function Workspaces() {
           </table>
         )}
       </div>
+
+      {/* ── New workspace modal ───────────────────────────────────────────── */}
+      {modalOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'var(--mui-palette-black-200)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeModal() }}
+        >
+          <div className="card" style={{ width: '480px', maxWidth: '90vw', padding: '2rem', position: 'relative' }}>
+            <h2 style={{ marginTop: 0 }}>{t('modal.title')}</h2>
+
+            <label style={{ display: 'block', marginBottom: '1.5rem' }}>
+              <span style={{ fontWeight: 600 }}>{t('modal.workspaceNameLabel')}</span>
+              <input
+                type="text"
+                value={workspaceName}
+                onChange={(e) => setWorkspaceName(e.target.value)}
+                placeholder={t('modal.workspaceNamePlaceholder')}
+                disabled={creating}
+                style={{ display: 'block', width: '100%', marginTop: '0.25rem', padding: '0.4rem 0.6rem', boxSizing: 'border-box' }}
+              />
+            </label>
+
+            {createError && (
+              <p style={{ color: 'red', fontSize: '0.9rem' }}>
+                {t('modal.creationFailed', { message: createError })}
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button onClick={closeModal} disabled={creating}>{t('modal.cancel')}</button>
+              <button onClick={handleCreate} disabled={!workspaceName.trim() || creating}>
+                {t('modal.create')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

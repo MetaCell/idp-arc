@@ -1,16 +1,10 @@
 import SparkMD5 from 'spark-md5'
 
 /**
- * S3/DANDI multipart-style content digest, computed entirely client-side since bytes never
- * reach our backend (see IDP-43 architecture notes — Route A). AssetBlob.etag on the real
- * EMBER-DANDI API is validated against `^[0-9a-f]{32}-\d{1,5}$`, so this format is required
- * even for a single-part file — it is not an optimisation that can be skipped at small sizes.
+ * Part size DANDI splits uploads into. Must match theirs exactly or the ETag won't agree.
  *
- * Confirmed live against EMBER-DANDI on 2026-09-11: declaring a 150 MiB upload at
- * /uploads/initialize/ returned parts of exactly 64 MiB, 64 MiB, 22 MiB — this constant is
- * correct, not just recalled. The single-part algorithm itself is also confirmed: a real
- * 4-byte upload's S3 CompleteMultipartUpload ETag matched this exact computation independently
- * done in Python.
+ * DANDI validates AssetBlob.etag against `^[0-9a-f]{32}-\d{1,5}$`, so the multipart form is
+ * required even for a single small part — it can't be skipped below the part size.
  */
 export const DANDI_ETAG_PART_SIZE = 64 * 1024 * 1024 // 64 MiB
 

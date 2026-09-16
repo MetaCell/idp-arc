@@ -19,14 +19,17 @@ export interface CreateAndUploadToDandiInput {
 }
 
 /**
- * createAndUploadToDandi use-case (Route A — see IDP-43 architecture notes)
+ * Uploads a file to DANDI and attaches it to an OSB workspace.
  *
- * 1. Compute the dandi-etag client-side (bytes never reach idp-arc's backend)
- * 2. POST /dandi/upload/init — backend derives the path from the caller's token,
- *    brokers DANDI's `initialize` call with the admin key, returns presigned S3 part URLs
- * 3. PUT each part straight to S3 from the browser
- * 4. POST /dandi/upload/finalize — backend completes/validates/registers with DANDI,
- *    then creates/attaches the OSB workspace
+ * 1. Hash the file in the browser into a dandi-etag — the content digest DANDI identifies a
+ *    blob by. It has to be sent up front, before any bytes move, because DANDI answers with
+ *    "already have this" and skips the upload entirely when the digest matches an existing blob.
+ * 2. POST /dandi/upload/init — the backend calls DANDI with the admin key and passes back one
+ *    presigned S3 URL per part. Each URL carries its own signature and expiry, which is what
+ *    lets the browser write to a bucket it has no credentials for.
+ * 3. PUT each part's bytes to its presigned URL — a plain unauthenticated PUT, browser straight
+ *    to S3. The file never passes through OSB, so size costs the server nothing.
+ * 4. POST /dandi/upload/finalize — registers the asset, attaches the workspace, runs the script
  */
 export function createCreateAndUploadToDandiUseCase(
   auth: Pick<IAuthClient, 'getToken'>,
@@ -40,7 +43,7 @@ export function createCreateAndUploadToDandiUseCase(
     const { taskId, file, workspaceId, workspaceName, scriptUrl, scriptName } = input
 
     try {
-      // ── Step 1: compute the etag ──────────────────────────────────────────
+      // ── Step 1: hash the file into DANDI's content digest ─────────────────
       onProgress({ phase: 'hashing', message: PHASE_LABELS.hashing })
       const { etag, parts: partPlan } = await computeDandiEtag(file)
       if (abortRef.current) return null
@@ -51,9 +54,9 @@ export function createCreateAndUploadToDandiUseCase(
       const init = await dandiApi.initUpload(initToken, taskId, file.name, file.size, etag)
       if (abortRef.current) return null
 
-      // ── Step 3: PUT each part straight to S3 ──────────────────────────────
-      // Skipped entirely when DANDI already has this exact content (deduplicated): there are
-      // no parts and no upload_id, just a blob_id to attach a new asset to.
+      // ── Step 3: PUT each part to its presigned URL ────────────────────────
+      // init returns no parts when DANDI already has this exact content — just a blob_id to
+      // attach a new asset to, so there is nothing to upload.
       const uploadedParts = []
       if (init.parts.length > 0) {
         onProgress({ phase: 'uploading', message: PHASE_LABELS.uploading })
@@ -70,16 +73,9 @@ export function createCreateAndUploadToDandiUseCase(
       }
       if (abortRef.current) return null
 
-      // ── Step 4: finalize — DANDI completion/validation, OSB attach, AND run the script ──
-      // No Argo yet: the backend now blocks inside this one call through spawning the
-      // workspace's JupyterLab server and executing the script in it — several minutes in the
-      // worst case, not the few seconds finalize used to take. The token has to outlive the
-      // WHOLE call (the backend uses it at the very end too, for the JupyterHub/kernel calls),
-      // so a 30s validity floor is not enough. Asking for 600 forces the freshest possible
-      // token right before the call — the best the frontend can do — but if Keycloak's realm
-      // issues access tokens with a shorter total lifetime than the run takes, the token can
-      // still expire mid-request; that residual risk needs a realm setting or backend-side
-      // token refresh to close fully, not something fixable from here.
+      // finalize also spawns the workspace and runs the script, so it can block for minutes.
+      // The token is used at the very end of that too, so it must outlive the whole call —
+      // hence 600s rather than the usual short floor.
       onProgress({ phase: 'registering', message: PHASE_LABELS.registering })
       const finalizeToken = await auth.getToken(600)
       const result = await dandiApi.finalizeUpload(finalizeToken, {

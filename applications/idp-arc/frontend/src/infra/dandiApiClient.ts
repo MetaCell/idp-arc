@@ -38,9 +38,8 @@ export class DandiApiClient implements IDandiApi {
     const etag = res.headers.get('ETag')
     if (!etag) {
       throw new Error(
-        'S3 did not expose an ETag header on the part upload response — the bucket likely ' +
-        'needs Access-Control-Expose-Headers: ETag in its CORS config (confirmed present on ' +
-        'the public DANDI archive; not yet verified on EMBER-DANDI\'s own bucket).',
+        'S3 did not expose an ETag header on the part upload response — the bucket needs ' +
+        'Access-Control-Expose-Headers: ETag in its CORS config.',
       )
     }
     return etag.replaceAll('"', '')

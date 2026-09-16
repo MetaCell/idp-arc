@@ -17,6 +17,7 @@
     "title": "OSB Workspaces",
     "loading": "Loading workspaces…",
     "empty": "No workspaces found.",
+    "newButton": "+ New workspace",
     "table": {
       "id": "ID",
       "name": "Name",
@@ -25,6 +26,14 @@
       "noDescription": "—",
       "noDate": "—"
     }
+  },
+  "modal": {
+    "title": "New workspace",
+    "workspaceNameLabel": "Workspace name",
+    "workspaceNamePlaceholder": "My new workspace",
+    "cancel": "Cancel",
+    "create": "Create",
+    "creationFailed": "Failed to create workspace: {{message}}"
   },
     "collaborators": {
     "sectionTitle": "Collaborators",

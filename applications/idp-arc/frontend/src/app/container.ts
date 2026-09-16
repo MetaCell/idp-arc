@@ -21,16 +21,11 @@ import { WorkspaceApiClient } from '../infra/workspaceApiClient'
 import { DandiApiClient } from '../infra/dandiApiClient'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
 import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
+import { createCreateWorkspaceUseCase } from '../core/use-cases/createWorkspace'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 // All environment-specific URLs live here (or read from import.meta.env in Vite).
 
-// Target environment. Defaults to the shared dev deployment; override in .env.local to point
-// at a local minikube OSB (see .vscode/plans/osb-local-deployment.md):
-//   VITE_OSB_BASE_DOMAIN=osb.local
-//   VITE_OSB_PROTOCOL=http          # local is deployed with -dtls, so no TLS
-//   VITE_KEYCLOAK_URL=http://accounts.osb.local
-//   VITE_KEYCLOAK_REALM=ch          # local realm is `ch`, the dev one is `osb2dev`
 const BASE_DOMAIN    = import.meta.env.VITE_OSB_BASE_DOMAIN ?? 'v2dev.opensourcebrain.org'
 const PROTOCOL       = import.meta.env.VITE_OSB_PROTOCOL ?? 'https'
 const WWW_BASE       = import.meta.env.DEV ? '/api-proxy' : `${PROTOCOL}://www.${BASE_DOMAIN}`
@@ -56,6 +51,9 @@ const dandiApi     = new DandiApiClient(WORKSPACES_API)
 
 /** Refreshes the token then returns the workspace list. */
 export const loadWorkspaces = createLoadWorkspacesUseCase(authClient, workspaceApi)
+
+/** Creates a new, empty workspace with the given name. */
+export const createWorkspace = createCreateWorkspaceUseCase(authClient, workspaceApi)
 
 /** DANDI-backed upload (Route A, see IDP-43 notes); `finalize` also runs the selected
  * protocol's script server-side (jupyter_kernel_client.py in OSBv2's workspaces app). */
