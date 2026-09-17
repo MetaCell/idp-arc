@@ -9,3 +9,5 @@ skaffold.yaml
 .vscode
 .overrides
 .DS_Store
+CLAUDE.md
+CLAUDE.local.md

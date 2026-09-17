@@ -17,7 +17,7 @@
     "title": "OSB Workspaces",
     "loading": "Loading workspaces…",
     "empty": "No workspaces found.",
-    "newButton": "+ New workspace & upload file",
+    "newButton": "+ New workspace",
     "table": {
       "id": "ID",
       "name": "Name",
@@ -28,22 +28,12 @@
     }
   },
   "modal": {
-    "title": "New workspace & upload file",
+    "title": "New workspace",
     "workspaceNameLabel": "Workspace name",
     "workspaceNamePlaceholder": "My new workspace",
-    "fileLabel": "File to upload",
-    "fileInfo": "{{name}} ({{size}} KB)",
     "cancel": "Cancel",
-    "createAndUpload": "Create & upload",
-    "close": "Close",
-    "retry": "Retry upload",
-    "workspaceId": "Workspace ID: ",
-    "uploadSuccess": "✓ File uploaded successfully!",
-    "openWorkspace": "Open workspace in JupyterLab ↗",
-    "uploadFailed": "Upload failed",
-    "workspaceCreated": "The workspace was created.",
-    "uploadManually": "Open it in JupyterLab ↗",
-    "uploadManuallyTrailing": "to upload the file manually."
+    "create": "Create",
+    "creationFailed": "Failed to create workspace: {{message}}"
   },
     "collaborators": {
     "sectionTitle": "Collaborators",

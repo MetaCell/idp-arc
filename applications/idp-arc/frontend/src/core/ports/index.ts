@@ -1,3 +1,3 @@
 export type { IAuthClient } from './IAuthClient'
 export type { IWorkspaceApi } from './IWorkspaceApi'
-export type { IJupyterApi } from './IJupyterApi'
+export type { IDandiApi } from './IDandiApi'

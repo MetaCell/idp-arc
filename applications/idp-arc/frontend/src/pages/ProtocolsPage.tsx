@@ -152,7 +152,7 @@ export default function ProtocolsPage() {
             </Typography>
 
             <Box sx={{ ...protocolCardSx, aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Box component="img" src={`/protocol1.png`} alt={active.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <Box component="img" src={active.imageUrl} alt={active.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </Box>
 
             <Typography variant="body1" color='textPrimary'>
@@ -176,7 +176,7 @@ export default function ProtocolsPage() {
                 <Box
                   ref={videoRef}
                   component="video"
-                  src="https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4"
+                  src={active.videoUrl}
                   autoPlay
                   loop
                   muted

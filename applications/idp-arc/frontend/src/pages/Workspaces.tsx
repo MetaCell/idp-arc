@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { authClient, loadWorkspaces, createAndUpload, getWorkspaceUrl } from '../app/container'
-import type { Workspace, UploadState } from '../core/types'
+import { authClient, loadWorkspaces, createWorkspace } from '../app/container'
+import type { Workspace } from '../core/types'
 import { useAppContext } from '../AppContext'
 
 export default function Workspaces() {
   const { t } = useTranslation()
-  const { authState, tokenParsed, authError, username } = useAppContext()
+  const { authState, authError, username } = useAppContext()
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null)
   const [workspacesError, setWorkspacesError] = useState<string | null>(null)
   const [workspacesLoading, setWorkspacesLoading] = useState(false)
@@ -14,9 +14,8 @@ export default function Workspaces() {
   // Modal state
   const [modalOpen, setModalOpen] = useState(false)
   const [workspaceName, setWorkspaceName] = useState('')
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploadState, setUploadState] = useState<UploadState>({ phase: 'idle', message: '' })
-  const abortRef = useRef(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const loadWorkspaceList = useCallback(() => {
     setWorkspacesLoading(true)
@@ -40,35 +39,27 @@ export default function Workspaces() {
 
   function openModal() {
     setWorkspaceName('')
-    setSelectedFile(null)
-    setUploadState({ phase: 'idle', message: '' })
-    abortRef.current = false
+    setCreateError(null)
     setModalOpen(true)
   }
 
   function closeModal() {
-    abortRef.current = true
     setModalOpen(false)
   }
 
-  async function handleCreateAndUpload() {
-    if (!workspaceName.trim() || !selectedFile) return
-    abortRef.current = false
-
-    await createAndUpload(
-      {
-        workspaceName: workspaceName.trim(),
-        file: selectedFile,
-        userId: tokenParsed?.sub as string,
-        onWorkspaceCreated: (wsId) => {
-          window.open(getWorkspaceUrl(wsId), '_blank')
-        },
-      },
-      setUploadState,
-      abortRef,
-    )
-
-    loadWorkspaceList()
+  async function handleCreate() {
+    if (!workspaceName.trim()) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      await createWorkspace(workspaceName.trim())
+      setModalOpen(false)
+      loadWorkspaceList()
+    } catch (err: unknown) {
+      setCreateError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCreating(false)
+    }
   }
 
   if (authState === 'loading') {
@@ -88,8 +79,6 @@ export default function Workspaces() {
       </div>
     )
   }
-
-  const isRunning = ['creating', 'spawning', 'waiting', 'uploading'].includes(uploadState.phase)
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
@@ -139,7 +128,7 @@ export default function Workspaces() {
         )}
       </div>
 
-      {/* ── Upload modal ──────────────────────────────────────────────────── */}
+      {/* ── New workspace modal ───────────────────────────────────────────── */}
       {modalOpen && (
         <div
           style={{
@@ -151,109 +140,33 @@ export default function Workspaces() {
           }}
           onClick={(e) => { if (e.target === e.currentTarget) closeModal() }}
         >
-          <div
-            className="card"
-            style={{ width: '480px', maxWidth: '90vw', padding: '2rem', position: 'relative' }}
-          >
+          <div className="card" style={{ width: '480px', maxWidth: '90vw', padding: '2rem', position: 'relative' }}>
             <h2 style={{ marginTop: 0 }}>{t('modal.title')}</h2>
 
-            {uploadState.phase === 'idle' && (
-              <>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>
-                  <span style={{ fontWeight: 600 }}>{t('modal.workspaceNameLabel')}</span>
-                  <input
-                    type="text"
-                    value={workspaceName}
-                    onChange={(e) => setWorkspaceName(e.target.value)}
-                    placeholder={t('modal.workspaceNamePlaceholder')}
-                    style={{ display: 'block', width: '100%', marginTop: '0.25rem', padding: '0.4rem 0.6rem', boxSizing: 'border-box' }}
-                  />
-                </label>
+            <label style={{ display: 'block', marginBottom: '1.5rem' }}>
+              <span style={{ fontWeight: 600 }}>{t('modal.workspaceNameLabel')}</span>
+              <input
+                type="text"
+                value={workspaceName}
+                onChange={(e) => setWorkspaceName(e.target.value)}
+                placeholder={t('modal.workspaceNamePlaceholder')}
+                disabled={creating}
+                style={{ display: 'block', width: '100%', marginTop: '0.25rem', padding: '0.4rem 0.6rem', boxSizing: 'border-box' }}
+              />
+            </label>
 
-                <label style={{ display: 'block', marginBottom: '1.5rem' }}>
-                  <span style={{ fontWeight: 600 }}>{t('modal.fileLabel')}</span>
-                  <input
-                    type="file"
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-                    style={{ display: 'block', marginTop: '0.25rem' }}
-                  />
-                  {selectedFile && (
-                    <span style={{ fontSize: '0.85rem', color: '#555' }}>
-                      {t('modal.fileInfo', { name: selectedFile.name, size: (selectedFile.size / 1024).toFixed(1) })}
-                    </span>
-                  )}
-                </label>
-
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                  <button onClick={closeModal}>{t('modal.cancel')}</button>
-                  <button
-                    onClick={handleCreateAndUpload}
-                    disabled={!workspaceName.trim() || !selectedFile}
-                  >
-                    {t('modal.createAndUpload')}
-                  </button>
-                </div>
-              </>
+            {createError && (
+              <p style={{ color: 'red', fontSize: '0.9rem' }}>
+                {t('modal.creationFailed', { message: createError })}
+              </p>
             )}
 
-            {isRunning && (
-              <div>
-                <p style={{ fontStyle: 'italic' }}>{uploadState.message}</p>
-                <progress style={{ width: '100%' }} />
-                {uploadState.workspaceId && (
-                  <p style={{ fontSize: '0.85rem', color: '#555' }}>
-                    {t('modal.workspaceId')}<strong>{uploadState.workspaceId}</strong>
-                  </p>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                  <button onClick={closeModal}>{t('modal.cancel')}</button>
-                </div>
-              </div>
-            )}
-
-            {uploadState.phase === 'done' && (
-              <div>
-                <p style={{ color: 'green', fontWeight: 600 }}>{t('modal.uploadSuccess')}</p>
-                {uploadState.workspaceId && (
-                  <p>
-                    <a
-                      href={getWorkspaceUrl(uploadState.workspaceId!)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {t('modal.openWorkspace')}
-                    </a>
-                  </p>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                  <button onClick={closeModal}>{t('modal.close')}</button>
-                </div>
-              </div>
-            )}
-
-            {uploadState.phase === 'error' && (
-              <div>
-                <p style={{ color: 'red', fontWeight: 600 }}>{t('modal.uploadFailed')}</p>
-                <p style={{ fontSize: '0.9rem', color: '#555' }}>{uploadState.error}</p>
-                {uploadState.workspaceId && (
-                  <p style={{ fontSize: '0.9rem' }}>
-                    {t('modal.workspaceCreated')}{' '}
-                    <a
-                      href={getWorkspaceUrl(uploadState.workspaceId!)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {t('modal.uploadManually')}
-                    </a>{' '}
-                    {t('modal.uploadManuallyTrailing')}
-                  </p>
-                )}
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                  <button onClick={closeModal}>{t('modal.close')}</button>
-                  <button onClick={handleCreateAndUpload}>{t('modal.retry')}</button>
-                </div>
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button onClick={closeModal} disabled={creating}>{t('modal.cancel')}</button>
+              <button onClick={handleCreate} disabled={!workspaceName.trim() || creating}>
+                {t('modal.create')}
+              </button>
+            </div>
           </div>
         </div>
       )}

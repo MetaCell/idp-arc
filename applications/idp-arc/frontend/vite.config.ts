@@ -1,12 +1,22 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import type { IncomingMessage } from 'node:http'
 
+// Must use loadEnv(), not process.env — Vite doesn't load .env into process.env for this
+// file, so process.env here silently falls back to the production domain.
+const env = loadEnv(process.env.NODE_ENV ?? 'development', process.cwd(), '')
+const BASE_DOMAIN = env.VITE_OSB_BASE_DOMAIN || 'v2dev.opensourcebrain.org'
+const PROTOCOL    = env.VITE_OSB_PROTOCOL || 'https'
+
 // The real JupyterHub host — matches production nginx proxy_pass target.
-// www.v2dev.opensourcebrain.org blocks PUT on /jupyter-proxy/; lab. does not.
-const LAB_ORIGIN = 'https://lab.v2dev.opensourcebrain.org'
+// www.<domain> blocks PUT on /jupyter-proxy/; the lab subdomain does not.
+const LAB_ORIGIN = `${PROTOCOL}://lab.${BASE_DOMAIN}`
+const WWW_ORIGIN = `${PROTOCOL}://www.${BASE_DOMAIN}`
 const DEV_ORIGIN = 'http://localhost:5173'
+
+// eslint-disable-next-line no-console
+console.log(`[vite] proxying OSB -> ${WWW_ORIGIN} (jupyter: ${LAB_ORIGIN})`)
 
 // Mirrors the production nginx proxy_redirect rules (default.conf lines 71-72):
 //   proxy_redirect https://lab.v2dev.opensourcebrain.org/ https://$host/jupyter-proxy/;
@@ -81,7 +91,7 @@ export default defineConfig({
     },
     proxy: {
       '/api-proxy': {
-        target: 'https://www.v2dev.opensourcebrain.org',
+        target: WWW_ORIGIN,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-proxy/, ''),
       },
@@ -131,7 +141,7 @@ export default defineConfig({
       // and /oauth/callback — without proxying these the redirects hit Vite's SPA
       // fallback and the per-server cookie (needed for write access) is never set.
       '/oauth': {
-        target: 'https://www.v2dev.opensourcebrain.org',
+        target: WWW_ORIGIN,
         changeOrigin: true,
         cookieDomainRewrite: '',
         configure: (proxy) => {
