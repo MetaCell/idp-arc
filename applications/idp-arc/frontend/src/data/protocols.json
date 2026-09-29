@@ -1,12 +1,20 @@
 [
   {
-    "name": "Two arm bandit task",
-    "desc": "Test the flexibility using MED",
+    "name": "Four-choice reversal digging task",
+    "desc": "Reversal learning assessment",
     "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
-    "scriptName": "two-arm-bandit-analysis.py",
-    "description": "The two-armed bandit task is a classic paradigm in behavioral neuroscience used to study decision-making under uncertainty. In this task, participants are presented with two options, each associated with a different probability of reward. By repeatedly choosing between the two options, participants learn to exploit the option with the higher reward probability while also exploring the other option to ensure that they are not missing out on a potentially better source of reward. This task has been used to investigate the neural mechanisms underlying reinforcement learning, exploration-exploitation trade-offs, and the role of different brain regions in decision-making.",
-    "imageUrl": "/protocol1.png",
-    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4"
+    "scriptName": "four-choice-reversal-analysis.py",
+    "description": "In the four choice reversal digging task mice must identify the single rewarded option and update their choice when a previously unrewarded option becomes rewarded. The reversal phase in this task is sensitive to orbitofrontal and dorsomedial prefrontal cortex function and the 2-day version used here provides a metric of recall on the 2nd day of testing before reversal.",
+    "imageUrl": "assets/four_choice_graphic.jpeg",
+    "videoUrl": "https://storage.googleapis.com/maabcd/tutorial.mp4",
+    "references": [
+      "Johnson, C., & Wilbrecht, L. (2011). Juvenile mice show greater flexibility in multiple choice reversal learning than adults. Developmental cognitive neuroscience, 1(4), 540-551.",
+      "Thomas, A. W., Caporale, N., Wu, C., & Wilbrecht, L. (2016). Early maternal separation impacts cognitive flexibility at the age of first independence in mice. Developmental cognitive neuroscience, 18, 49-56.",
+      "Lu, J., Tjia, M., Mullen, B., Cao, B., Lukasiewicz, K., Shah-Morales, S., ... & Zuo, Y. (2021). An analog of psychedelics restores functional neural circuits disrupted by unpredictable stress. Molecular Psychiatry, 26(11), 6237-6252.",
+      "Delevich, K., Hoshal, B., Zhou, L.Z., Zhang, Y., Vedula, S., Lin, W.C., Chase, J., Collins, A.G. and Wilbrecht, L., 2022. Activation, but not inhibition, of the indirect pathway disrupts choice rejection in a freely moving, multiple-choice foraging task. Cell Reports, 40(4). DOI: 10.1016/j.celrep.2022.111129",
+      "Lin, W.C., Liu, C., Kosillo, P., Tai, L.H., Galarce, E., Bateup, H.S., Lammel, S. and Wilbrecht, L., 2022. Transient food insecurity during the juvenile-adolescent period affects adult weight, cognitive flexibility, and dopamine neurobiology. Current Biology, 32(17), pp.3690-3703. 10.1016/j.cub.2022.06.089",
+      "Cording, K.R., Tu, E.M., Wang, H., Agopyan-Miu, A.H. and Bateup, H.S., 2025. Cntnap2 loss drives striatal neuron hyperexcitability and behavioral inflexibility. elife, 13, p.RP100162. https://doi.org/10.7554/eLife.100162.3"
+    ]
   },
   {
     "name": "ASST digging task",
@@ -14,43 +22,20 @@
     "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
     "scriptName": "asst-digging-analysis.py",
     "description": "The attentional set-shifting task (ASST) is a rodent analogue of the Cambridge Neuropsychological Test Automated Battery (CANTAB) IED task. It assesses the ability to shift attention between perceptual dimensions of compound stimuli. The task requires animals to learn sequential discriminations, measuring the cost of shifting attention from one perceptual dimension to another.",
-    "imageUrl": "/protocol1.png",
-    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4"
+    "imageUrl": "assets/ASST_graphic.jpeg",
+    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4",
+    "references": [
+      "Ma, S., Wang, K. H., & Zuo, Y. (2026). Targeting insulo-frontal pathway to reduce stress-evoked cognitive rigidity. Nature Communications."
+    ]
   },
   {
-    "name": "Four-choice reversal digging task",
-    "desc": "Reversal learning assessment",
+    "name": "Two arm bandit task",
+    "desc": "Test the flexibility using MED",
     "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
-    "scriptName": "four-choice-reversal-analysis.py",
-    "description": "The four-choice reversal digging task expands on the two-armed paradigm by introducing four distinct odor-digging options. Animals must identify the rewarded option and adapt when contingencies reverse. This task is particularly sensitive to orbitofrontal cortex dysfunction and provides multiple reversal learning indices.",
+    "scriptName": "two-arm-bandit-analysis.py",
+    "description": "The two-armed bandit task is a classic paradigm in behavioral neuroscience used to study decision-making under uncertainty. In this task, participants are presented with two options, each associated with a different probability of reward. By repeatedly choosing between the two options, participants learn to exploit the option with the higher reward probability while also exploring the other option to ensure that they are not missing out on a potentially better source of reward. This task has been used to investigate the neural mechanisms underlying reinforcement learning, exploration-exploitation trade-offs, and the role of different brain regions in decision-making.",
     "imageUrl": "/protocol1.png",
-    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4"
-  },
-  {
-    "name": "Open field task",
-    "desc": "Locomotion and anxiety assessment",
-    "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
-    "scriptName": "open-field-analysis.py",
-    "description": "The open field task is a widely used behavioral assay for measuring locomotion, anxiety-like behavior, and exploratory activity in rodents. Animals are placed in a novel arena and their movement patterns, time spent in the center versus periphery, and rearing behavior are recorded and analyzed.",
-    "imageUrl": "/protocol1.png",
-    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4"
-  },
-  {
-    "name": "Elevated plus maze",
-    "desc": "Anxiety and risk-taking behavior",
-    "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
-    "scriptName": "elevated-plus-maze-analysis.py",
-    "description": "The elevated plus maze (EPM) is a standard test for anxiety-like behavior in rodents. The maze consists of two open and two enclosed arms elevated above the floor. Anxious animals spend more time in the enclosed arms, while exploratory animals venture into the open arms. This task is sensitive to anxiolytic and anxiogenic compounds.",
-    "imageUrl": "/protocol1.png",
-    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4"
-  },
-  {
-    "name": "Foraging task",
-    "desc": "Patch-leaving and optimal foraging",
-    "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
-    "scriptName": "foraging-analysis.py",
-    "description": "The foraging task models naturalistic patch-leaving decisions based on optimal foraging theory. Animals must decide when to leave a depleting food patch and travel to a new one, balancing exploitation of current resources against exploration of potentially richer alternatives. This task probes cost\u2013benefit decision-making circuits.",
-    "imageUrl": "/protocol1.png",
-    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4"
+    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4",
+    "references": []
   }
 ]
