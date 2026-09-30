@@ -12,13 +12,13 @@
       "ctaPath": "/protocols"
     },
     {
-      "title": "Upload data in Ember-Dandi",
+      "title": "Upload data in Ember Dandi",
       "desc": "Share your experimental results with the research community. Sign in to upload dandisets to the Ember-Dandi platform.",
       "cta": "Data upload",
       "ctaPath": "/workspaces"
     },
     {
-      "title": "Visualization and analysis tools",
+      "title": "Visualize and analyse your data in OpenSourceBrain",
       "desc": "Explore and analyze community data and your uploaded data with our integration with Open Source Brain (OSB). OSB lets you use interactive visualizations and powerful analysis tools with Jupyterlab, NetPyNE and NWB Explorer.",
       "cta": "Go to Open Source Brain",
       "ctaPath": "https://www.opensourcebrain.org/"
