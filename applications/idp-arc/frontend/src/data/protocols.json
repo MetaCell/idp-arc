@@ -33,9 +33,9 @@
     "desc": "Test the flexibility using MED",
     "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
     "scriptName": "two-arm-bandit-analysis.py",
-    "description": "The two-armed bandit task is a classic paradigm in behavioral neuroscience used to study decision-making under uncertainty. In this task, participants are presented with two options, each associated with a different probability of reward. By repeatedly choosing between the two options, participants learn to exploit the option with the higher reward probability while also exploring the other option to ensure that they are not missing out on a potentially better source of reward. This task has been used to investigate the neural mechanisms underlying reinforcement learning, exploration-exploitation trade-offs, and the role of different brain regions in decision-making.",
-    "imageUrl": "/protocol1.png",
-    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4",
+    "description": "",
+    "imageUrl": "",
+    "videoUrl": "",
     "references": []
   }
 ]
