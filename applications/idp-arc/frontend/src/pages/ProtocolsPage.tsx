@@ -13,7 +13,7 @@ import { useState } from 'react'
 import PageLayout from '../components/PageLayout'
 import protocols from '../data/protocols.json'
 
-// imageUrl values starting with "assets/" point into src/assets and must go through Vite
+// imageUrls entries starting with "assets/" point into src/assets and must go through Vite
 // to get a hashed build URL; anything else is served as-is from public/.
 const assetUrls = import.meta.glob('../assets/*.{png,jpg,jpeg,svg,webp}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 const resolveImageUrl = (url: string) => (url.startsWith('assets/') ? assetUrls[`../${url}`] ?? url : url)
@@ -133,31 +133,37 @@ export default function ProtocolsPage() {
               {active.name}
             </Typography>
 
-            <Box sx={{ ...protocolCardSx, aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Box component="img" src={resolveImageUrl(active.imageUrl)} alt={active.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </Box>
-
-            <Typography variant="body1" color='textPrimary'>
-              {active.description}
-            </Typography>
-
-            <Stack sx={{ gap: 2 }}>
-              <Typography variant="h3">Protocol video</Typography>
-              <Box sx={{ ...protocolCardSx, aspectRatio: '16/9', padding: 0, overflow: 'hidden', bgcolor: 'common.black' }}>
-                {/* Tutorials are long and narrated: native controls for sound, seeking and fullscreen;
-                    preload="metadata" avoids pulling the whole file on page load. key resets playback
-                    when switching protocol. */}
-                <Box
-                  key={active.videoUrl}
-                  component="video"
-                  src={active.videoUrl}
-                  controls
-                  preload="metadata"
-                  playsInline
-                  sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
-                />
+            {active.imageUrls.map((url) => (
+              <Box key={url} sx={{ ...protocolCardSx, aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box component="img" src={resolveImageUrl(url)} alt={active.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </Box>
-            </Stack>
+            ))}
+
+            {active.description && (
+              <Typography variant="body1" color='textPrimary'>
+                {active.description}
+              </Typography>
+            )}
+
+            {active.videoUrl && (
+              <Stack sx={{ gap: 2 }}>
+                <Typography variant="h3">Protocol video</Typography>
+                <Box sx={{ ...protocolCardSx, aspectRatio: '16/9', padding: 0, overflow: 'hidden', bgcolor: 'common.black' }}>
+                  {/* Tutorials are long and narrated: native controls for sound, seeking and fullscreen;
+                      preload="metadata" avoids pulling the whole file on page load. key resets playback
+                      when switching protocol. */}
+                  <Box
+                    key={active.videoUrl}
+                    component="video"
+                    src={active.videoUrl}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                  />
+                </Box>
+              </Stack>
+            )}
 
             {active.references.length > 0 && (
               <Stack sx={{ gap: 2, mb: 6 }}>

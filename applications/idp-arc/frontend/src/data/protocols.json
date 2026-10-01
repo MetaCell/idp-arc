@@ -1,11 +1,10 @@
 [
   {
     "name": "Four-choice reversal digging task",
-    "desc": "Reversal learning assessment",
     "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
     "scriptName": "four-choice-reversal-analysis.py",
     "description": "In the four choice reversal digging task mice must identify the single rewarded option and update their choice when a previously unrewarded option becomes rewarded. The reversal phase in this task is sensitive to orbitofrontal and dorsomedial prefrontal cortex function and the 2-day version used here provides a metric of recall on the 2nd day of testing before reversal.",
-    "imageUrl": "assets/four_choice_graphic.jpeg",
+    "imageUrls": ["assets/four_choice_graphic.jpeg"],
     "videoUrl": "https://storage.googleapis.com/maabcd/tutorial.mp4",
     "references": [
       "Johnson, C., & Wilbrecht, L. (2011). Juvenile mice show greater flexibility in multiple choice reversal learning than adults. Developmental cognitive neuroscience, 1(4), 540-551.",
@@ -18,23 +17,21 @@
   },
   {
     "name": "ASST digging task",
-    "desc": "Attentional set-shifting task",
     "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
     "scriptName": "asst-digging-analysis.py",
     "description": "The attentional set-shifting task (ASST) is a rodent analogue of the Cambridge Neuropsychological Test Automated Battery (CANTAB) IED task. It assesses the ability to shift attention between perceptual dimensions of compound stimuli. The task requires animals to learn sequential discriminations, measuring the cost of shifting attention from one perceptual dimension to another.",
-    "imageUrl": "assets/ASST_graphic.jpeg",
-    "videoUrl": "https://static.vecteezy.com/system/resources/previews/013/566/514/mp4/futuristic-3d-hologram-brain-made-of-glowing-connections-concept-of-artificial-intelligence-computer-intelligent-learning-links-circuits-and-network-data-unfocused-luminous-particles-spinning-video.mp4",
+    "imageUrls": ["assets/ASST_graphic.jpeg"],
+    "videoUrl": "",
     "references": [
       "Ma, S., Wang, K. H., & Zuo, Y. (2026). Targeting insulo-frontal pathway to reduce stress-evoked cognitive rigidity. Nature Communications."
     ]
   },
   {
     "name": "Two arm bandit task",
-    "desc": "Test the flexibility using MED",
     "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
     "scriptName": "two-arm-bandit-analysis.py",
-    "description": "",
-    "imageUrl": "",
+    "description": "The two-armed bandit task is a classic paradigm in behavioral neuroscience used to study decision-making under uncertainty. In this task, participants are presented with two options, each associated with a different probability of reward. By repeatedly choosing between the two options, participants learn to exploit the option with the higher reward probability while also exploring the other option to ensure that they are not missing out on a potentially better source of reward. This task has been used to investigate the neural mechanisms underlying reinforcement learning, exploration-exploitation trade-offs, and the role of different brain regions in decision-making.",
+    "imageUrls": ["assets/BanditFigure_UCLstyleBohan.png"],
     "videoUrl": "",
     "references": []
   }
