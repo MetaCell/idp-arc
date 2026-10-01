@@ -201,7 +201,7 @@ export default function PageLayout({
       pt: image ? '185px' : '193px',
       gap: 4,
     },
-    pageBannerTitle: { maxWidth: { xs: '100%', lg: '40%' } },
+    pageBannerTitle: { maxWidth: { xs: '100%', lg: '75%' } },
     content: { position: 'relative', zIndex: 1 },
     footer: {
       // marginTop: 58,
@@ -450,8 +450,6 @@ export default function PageLayout({
               {(
                 [
                   { key: 'legal', label: t('footer.links.legal') },
-                  { key: 'docs', label: t('footer.links.docs') },
-                  { key: 'about', label: t('footer.links.about') },
                   { key: 'contact', label: t('footer.links.contact') },
                 ] as const
               ).map(({ key, label }) => (

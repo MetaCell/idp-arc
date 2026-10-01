@@ -12,7 +12,7 @@
   ],
   "overview": {
     "title": "Overview",
-    "body1": "The Adversity & Resilience Consortium Platform (ARC) develops a statistical framework for analyzing how early-life adversity shapes behavioral phenotypes. Behavioral outcomes arise from the interaction of multiple cognitive and motivational processes and are therefore inherently multidimensional. However, behavioral data are often analyzed using methods that treat individual measures independently, which limits the ability to detect coordinated patterns of behavioral change.",
+    "body1": "The Modeling Adolescent Adversity Brain and Cognitive Development Platform (MAABCD) develops a statistical framework for analyzing how early-life adversity shapes behavioral phenotypes. Behavioral outcomes arise from the interaction of multiple cognitive and motivational processes and are therefore inherently multidimensional. However, behavioral data are often analyzed using methods that treat individual measures independently, which limits the ability to detect coordinated patterns of behavioral change.",
     "body2": "The project addresses this challenge by modeling behavior as a multivariate phenotype embedded within a latent behavioral space. By applying dimensionality-reduction methods to high-dimensional behavioral datasets, the framework allows structured patterns of behavioral variation to be identified and compared across experimental groups."
   },
   "objectives": {
