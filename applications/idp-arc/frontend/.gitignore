@@ -1,2 +1,5 @@
 .env.*
 
+# Local dev TLS certs (yarn dev over HTTPS); never committed.
+.certs/
+*.pem

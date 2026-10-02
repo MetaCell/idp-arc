@@ -19,6 +19,8 @@
 import { KeycloakAuthClient } from '../infra/keycloakAuthClient'
 import { WorkspaceApiClient } from '../infra/workspaceApiClient'
 import { DandiApiClient } from '../infra/dandiApiClient'
+import { PublicBucketObjectStore } from '../infra/publicBucketObjectStore'
+import type { IObjectStore } from '../core/ports/IObjectStore'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
 import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
 import { createCreateWorkspaceUseCase } from '../core/use-cases/createWorkspace'
@@ -46,6 +48,9 @@ const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
 // DANDI upload endpoints live in OSB's `workspaces` app (the admin key has to sit wherever
 // they run, per Dario) — same API base as every other workspace call.
 const dandiApi     = new DandiApiClient(WORKSPACES_API)
+
+/** Scenario 1: where uploads go before OSB imports them (`gs://maabcd`). Used by the upload flow. */
+export const objectStore: IObjectStore = new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────
 
