@@ -43,7 +43,7 @@ export default function LandingPage() {
   return (
     <PageLayout
       title={t('banner.title')}
-      image="/mainBG.png"
+      // image="/mainBG.png"
       height={700}
       cta={cta}
     >

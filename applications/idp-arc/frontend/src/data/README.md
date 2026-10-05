@@ -11,7 +11,7 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
 | `id` | run | **Stable id, never derived from the name** (`four-choice-reversal`). Tags the workspace (`maabcd:<id>`), prefixes the upload in the bucket and names the workspace folder its runs go in (`<id>/run-<id>-<UTC timestamp>/`). Don't change it once uploads exist. |
 | `name` | everywhere | Display name. Free to edit. |
 | `description`, `imageUrl`, `videoUrl` | Protocols page | Text and media shown for the protocol. |
-| `repoZipUrl` | run | GitHub archive of the analysis repository, `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>` (or `refs/tags/<tag>`, or `/zip/<commit>`). A **branch** follows the latest fixes; a **commit** freezes the code. No `repoZipUrl` = no analysis yet: the run stops with "has no analysis repository configured yet". |
+| `repoZipUrl` | run | GitHub archive of the analysis repository, `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>` (or `refs/tags/<tag>`, or `/zip/<commit>`). A **branch** follows the latest fixes; a **commit** freezes the code. An empty `repoZipUrl` = no analysis yet: the upload dialog doesn't offer the protocol. |
 | `notebooksDir` | run | Repository-relative folder of the notebooks (`notebooks`). |
 | `inputDir` | run | Repository folder the notebooks read their input from (four-choice: `example_data`). For a run with an upload it holds the upload instead, in the run's scratch copy of the repository, so the notebooks run unchanged. Required for a protocol that takes an upload. |
 | `outputs` | run | Repository folders the code writes its results to (four-choice: `["outputs/notebook_example"]`, where its notebooks write). Emptied in the run's scratch copy before the notebooks run (so example results committed there don't pass for the run's); their contents go to the run's `outputs/` afterwards, also when the run fails. Anything the notebooks write elsewhere is not kept. |
@@ -71,11 +71,12 @@ use; OSB uses the ones the repository has and assumes nothing else.
 - **Without an upload** the notebooks run on the repository's own 11 example workbooks.
 - Verified 2 Oct 2026 with the task image in Docker: all three notebooks in ~9 s on one workbook.
 
-### Two arm bandit, ASST digging, Open field, Elevated plus maze, Foraging
+### Two arm bandit, ASST digging
 
-No analysis repository yet: they can be selected and shown, but not run. When a repository exists,
-add `repoZipUrl`, `notebooksDir` and — after checking what its code reads — `inputFormats` (and
-`inputDir` if its notebooks read a fixed folder).
+No analysis repository yet (`repoZipUrl` is empty): they are shown on the site, but the upload
+dialog doesn't offer them. When a repository exists, fill in `repoZipUrl` and add `notebooksDir`
+and — after checking what its code reads — `inputFormats` (and `inputDir` if its notebooks read a
+fixed folder).
 
 ## Adding or changing a protocol
 

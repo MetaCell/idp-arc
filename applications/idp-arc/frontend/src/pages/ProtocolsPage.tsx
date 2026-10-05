@@ -1,29 +1,25 @@
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
-import PauseRoundedIcon from '@mui/icons-material/PauseRounded'
-import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
 import {
   Box,
   Button,
   Container,
-  IconButton,
   List,
   ListItem,
   ListItemText,
   Stack,
   Typography,
 } from '@mui/material'
-import { useCallback, useRef, useState } from 'react'
+import { useState } from 'react'
 import PageLayout from '../components/PageLayout'
 import protocols from '../data/protocols.json'
 
+// imageUrls entries starting with "assets/" point into src/assets and must go through Vite
+// to get a hashed build URL; anything else is served as-is from public/.
+const assetUrls = import.meta.glob('../assets/*.{png,jpg,jpeg,svg,webp}', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+const resolveImageUrl = (url: string) => (url.startsWith('assets/') ? assetUrls[`../${url}`] ?? url : url)
+
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
 
-
-const references = [
-  'Allen, M. et al. (2021). "Bandit task performance as a measure of reversal learning." Journal of Experimental Psychology, 150(2), 234–249.',
-  'Chen, L. & Bhatt, D. (2020). "Behavioral flexibility and working memory in rodents." Neuroscience & Biobehavioral Reviews, 112, 567–582.',
-  'Smith, J. et al. (2019). "Multi-arm bandit tasks for measuring cognitive flexibility." Nature Neuroscience, 22(8), 1234–1245.',
-]
 
 // Shared card styles consistent with the rest of the design system
 const protocolCardSx = {
@@ -39,20 +35,6 @@ const protocolCardSx = {
 export default function ProtocolsPage() {
   const [activeProtocol, setActiveProtocol] = useState(0)
   const active = protocols[activeProtocol]
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [isPlaying, setIsPlaying] = useState(true)
-
-  const togglePlay = useCallback(() => {
-    const video = videoRef.current
-    if (!video) return
-    if (video.paused) {
-      video.play()
-      setIsPlaying(true)
-    } else {
-      video.pause()
-      setIsPlaying(false)
-    }
-  }, [])
 
   return (
     <PageLayout title="Protocols" height={477}>
@@ -151,78 +133,50 @@ export default function ProtocolsPage() {
               {active.name}
             </Typography>
 
-            <Box sx={{ ...protocolCardSx, aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Box component="img" src={active.imageUrl} alt={active.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </Box>
-
-            <Typography variant="body1" color='textPrimary'>
-              {active.description}
-            </Typography>
-
-            <Stack sx={{ gap: 2 }}>
-              <Typography variant="h3">Protocol video</Typography>
-              <Box
-                onClick={togglePlay}
-                sx={{
-                  ...protocolCardSx,
-                  aspectRatio: '16/9',
-                  padding: 0,
-                  overflow: 'hidden',
-                  position: 'relative',
-                  cursor: 'pointer',
-                  '&:hover .video-overlay': { opacity: 1 },
-                }}
-              >
-                <Box
-                  ref={videoRef}
-                  component="video"
-                  src={active.videoUrl}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                />
-                <Box
-                  className="video-overlay"
-                  sx={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    opacity: isPlaying ? 0 : 1,
-                    transition: 'opacity 0.2s',
-                  }}
-                >
-                  <IconButton
-                    sx={{
-                      border: '1px solid',
-                      borderColor: 'var(--mui-palette-stroke-default)',
-                      bgcolor: 'var(--mui-palette-white-200)',
-                      width: 48,
-                      height: 48,
-                      '&:hover': { bgcolor: 'var(--mui-palette-white-300)' },
-                    }}
-                  >
-                    {isPlaying
-                      ? <PauseRoundedIcon sx={{ color: 'text.primary', fontSize: '1.5rem' }} />
-                      : <PlayArrowRoundedIcon sx={{ color: 'text.primary', fontSize: '1.5rem' }} />}
-                  </IconButton>
-                </Box>
+            {active.imageUrls.map((url) => (
+              <Box key={url} sx={{ ...protocolCardSx, aspectRatio: '16/9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box component="img" src={resolveImageUrl(url)} alt={active.name} sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </Box>
-            </Stack>
+            ))}
 
-            <Stack sx={{ gap: 2, mb: 6 }}>
-              <Typography variant="h3">References</Typography>
-              <Stack component="ul" sx={{ gap: 1, pl: 3, m: 0 }}>
-                {references.map((ref, i) => (
-                  <Typography key={i} component="li" variant="body2" sx={{ color: 'text.secondary', lineHeight: '1.6rem' }}>
-                    {ref}
-                  </Typography>
-                ))}
+            {active.description && (
+              <Typography variant="body1" color='textPrimary'>
+                {active.description}
+              </Typography>
+            )}
+
+            {active.videoUrl && (
+              <Stack sx={{ gap: 2 }}>
+                <Typography variant="h3">Protocol video</Typography>
+                <Box sx={{ ...protocolCardSx, aspectRatio: '16/9', padding: 0, overflow: 'hidden', bgcolor: 'common.black' }}>
+                  {/* Tutorials are long and narrated: native controls for sound, seeking and fullscreen;
+                      preload="metadata" avoids pulling the whole file on page load. key resets playback
+                      when switching protocol. */}
+                  <Box
+                    key={active.videoUrl}
+                    component="video"
+                    src={active.videoUrl}
+                    controls
+                    preload="metadata"
+                    playsInline
+                    sx={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+                  />
+                </Box>
               </Stack>
-            </Stack>
+            )}
+
+            {active.references.length > 0 && (
+              <Stack sx={{ gap: 2, mb: 6 }}>
+                <Typography variant="h3">References</Typography>
+                <Stack component="ul" sx={{ gap: 1, pl: 3, m: 0 }}>
+                  {active.references.map((ref, i) => (
+                    <Typography key={i} component="li" variant="body2" sx={{ color: 'text.secondary', lineHeight: '1.6rem' }}>
+                      {ref}
+                    </Typography>
+                  ))}
+                </Stack>
+              </Stack>
+            )}
 
           </Stack>
         </Stack>
