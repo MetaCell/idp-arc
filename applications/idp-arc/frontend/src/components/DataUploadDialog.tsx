@@ -17,6 +17,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
 import { getWorkspaceUrl, loadWorkspaces, runProtocol } from '../app/container'
 import { useAppContext } from '../AppContext'
@@ -24,12 +25,13 @@ import type { RunStep, Workspace } from '../core/types'
 import RunChecklist from './RunChecklist'
 import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
 import { formatBytes } from '../core/formatBytes'
+import { SIGN_IN_AGAIN } from '../core/userMessages'
 import protocols from '../data/protocols.json'
 
 /** Only protocols with an analysis repository can be run, so only those are offered. */
 const runnableProtocols = protocols.filter((p) => 'repoZipUrl' in p && p.repoZipUrl)
 
-type DialogStep = 'select' | 'upload' | 'uploading' | 'success' | 'failed'
+type DialogStep = 'select' | 'upload' | 'uploading' | 'success' | 'stillRunning' | 'failed'
 
 export interface DataUploadDialogProps {
   open: boolean
@@ -72,7 +74,8 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const abortRef = useRef(false)
+  // The run being watched; each run gets its own token, so stopping one never revives another.
+  const watchRef = useRef<{ current: boolean } | null>(null)
 
   // The dialog can't be closed from clicking Upload until the notebooks have started in OSB:
   // before that, closing would abandon the upload or the imports half way (and the user would
@@ -99,17 +102,16 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
   useEffect(() => {
     if (!open) {
       // Stops watching only: the run itself carries on in the workspace.
-      abortRef.current = true
+      if (watchRef.current) watchRef.current.current = true
       return
     }
     setForm(INITIAL_FORM)
-    abortRef.current = false
     setLoadingWorkspaces(true)
     loadWorkspaces()
       .then(setWorkspaces)
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
-        if (msg.includes('sign in again')) {
+        if (msg.includes(SIGN_IN_AGAIN)) {
           onAuthRequired?.()
         } else {
           console.error(err)
@@ -137,10 +139,12 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
   const fileProblem = file ? inputFileProblem(file, selectedProtocol?.name ?? 'This protocol', selectedProtocol?.inputFormats) : null
 
   const handleUpload = async () => {
-    if (!file || fileProblem) return
+    if (!file || fileProblem || !selectedProtocol) return
     setCloseLocked(true)
     setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [] }))
-    abortRef.current = false
+    if (watchRef.current) watchRef.current.current = true
+    const watch = { current: false }
+    watchRef.current = watch
 
     // `spawnedWorkspaceId` is set as soon as the run has a workspace, so a retry reuses it
     // instead of creating another one.
@@ -148,7 +152,6 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
     const resolvedId = selectedWorkspace
       ? (typeof selectedWorkspace.id === 'string' ? parseInt(selectedWorkspace.id, 10) : selectedWorkspace.id)
       : undefined
-    if (!selectedProtocol) return
 
     await runProtocol(
       {
@@ -158,9 +161,12 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
         workspaceName: selectedWorkspace?.name ?? selectedProtocol.name,
       },
       (state) => {
+        if (watch.current) return // the dialog was closed, or another run started: no longer this one's
         if (state.phase === 'running') setCloseLocked(false) // in OSB's task now: closing only stops watching
-        if (state.phase === 'failed' && state.error?.includes('sign in again')) {
-          setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))
+        if (state.phase === 'failed' && state.error?.toLowerCase().includes(SIGN_IN_AGAIN)) {
+          setForm((prev) => ({
+            ...prev, step: 'upload', uploadMessage: '', spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
+          }))
           onAuthRequired?.()
           return
         }
@@ -171,10 +177,11 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
           outputsDir: state.outputsDir ?? prev.outputsDir,
           runSteps: state.steps,
           ...(state.phase === 'succeeded' ? { step: 'success' } : {}),
+          ...(state.phase === 'stillRunning' ? { step: 'stillRunning' } : {}),
           ...(state.phase === 'failed' ? { step: 'failed' } : {}),
         }))
       },
-      abortRef,
+      watch,
     )
   }
 
@@ -411,11 +418,12 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
         )}
 
         {/* Running, finished or failed: the same checklist, with a different header */}
-        {(step === 'uploading' || step === 'success' || step === 'failed') && (
+        {(step === 'uploading' || step === 'success' || step === 'stillRunning' || step === 'failed') && (
           <Stack sx={{ flex: 1, gap: 3, minWidth: 0, overflowY: 'auto', py: 1 }}>
             <Stack sx={{ alignItems: 'center', gap: 1.5, textAlign: 'center' }}>
               {step === 'uploading' && <CircularProgress size={28} />}
               {step === 'success' && <CheckCircleOutlineIcon sx={{ fontSize: 40, color: 'success.main' }} />}
+              {step === 'stillRunning' && <HourglassEmptyIcon sx={{ fontSize: 40, opacity: 0.7 }} />}
               {step === 'failed' && <ErrorOutlineIcon sx={{ fontSize: 40, color: 'error.main' }} />}
               <Typography
                 variant="body1"
@@ -423,9 +431,9 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
               >
                 {uploadMessage || (step === 'success' ? 'The analysis finished.' : 'Starting..')}
               </Typography>
-              {step === 'success' && outputsDir && (
+              {(step === 'success' || step === 'stillRunning') && outputsDir && (
                 <Typography variant="body2" sx={{ opacity: 0.6 }}>
-                  Results are in <code>{outputsDir}/</code> in your workspace.
+                  {step === 'stillRunning' ? 'Results will be in' : 'Results are in'} <code>{outputsDir}/</code> in your workspace.
                 </Typography>
               )}
               {step !== 'uploading' && spawnedWorkspaceId !== undefined && (

@@ -15,7 +15,7 @@ export class StepError extends Error {
 }
 
 /**
- * The run's checklist: one row per step, reported in full after every change.
+ * The run's  checklist: one row per step, reported in full after every change.
  * Each method updates a row and reports, so the run itself reads as a list of steps.
  */
 export class RunProgress {
@@ -58,11 +58,20 @@ export class RunProgress {
     this.set(id, 'skipped', detail)
   }
 
-  /** The run ends well, or (still running past the watch limit) stops being watched. */
-  finish(message: string, succeeded = true) {
+  /** The run ends well. */
+  finish(message: string) {
     if (this.ended) return
-    if (succeeded) this.phase = 'succeeded'
-    this.ended = succeeded
+    this.ended = true
+    this.phase = 'succeeded'
+    this.emit(message)
+  }
+
+  /** Still running past the watch limit: stops following it; the run carries on in the workspace. */
+  stopWatching(id: string, message: string) {
+    if (this.ended) return
+    this.ended = true
+    this.phase = 'stillRunning'
+    this.steps = this.steps.map((s) => (s.id === id ? { ...s, state: 'pending', detail: 'Still running in the workspace' } : s))
     this.emit(message)
   }
 

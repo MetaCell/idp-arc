@@ -21,8 +21,16 @@ const STEP_FAILED: Record<string, string> = {
   run: 'The analysis did not finish. Open the workspace to see what happened.',
 }
 
+/** Says the session has ended; the dialog sends the user to sign in when the text contains it. */
+export const SIGN_IN_AGAIN = 'sign in again'
+
 /** The user's text for an error thrown during `step`. */
 export function userMessage(err: unknown, step?: string): string {
   if (err instanceof UserFacingError) return err.message
+  // The auth client's "Please sign in again." can come from any step that asks for a token: kept,
+  // so the dialog can send the user to sign in instead of suggesting a retry that fails the same way.
+  if (err instanceof Error && err.message.toLowerCase().includes(SIGN_IN_AGAIN)) {
+    return `Your session has expired. Please ${SIGN_IN_AGAIN}.`
+  }
   return (step && STEP_FAILED[step]) || 'Something went wrong. Please try again.'
 }

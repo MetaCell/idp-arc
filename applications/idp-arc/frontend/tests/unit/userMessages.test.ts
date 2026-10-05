@@ -13,3 +13,8 @@ test('any other error shows only its step\'s plain sentence', () => {
     'The analysis did not finish. Open the workspace to see what happened.')
   assert.equal(userMessage(new Error('boom')), 'Something went wrong. Please try again.')
 })
+
+test('an ended session says to sign in again, whichever step asked for the token', () => {
+  assert.equal(userMessage(new Error('No access token available. Please sign in again.'), 'imports'),
+    'Your session has expired. Please sign in again.')
+})

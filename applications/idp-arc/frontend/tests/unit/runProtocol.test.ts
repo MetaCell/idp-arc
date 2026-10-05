@@ -13,6 +13,7 @@ beforeEach(() => {
   RUN_SETTINGS.importPollMs = 1
   RUN_SETTINGS.runPollMs = 1
   RUN_SETTINGS.runStartTimeoutMs = 20
+  RUN_SETTINGS.runTimeoutMs = 70 * 60_000
 })
 
 const FOUR_CHOICE = {
@@ -188,11 +189,26 @@ test('a run that ends between two polls is still judged by its executed notebook
 })
 
 test('an import OSB marks as failed stops the run', async () => {
-  const f = fakes({ resources: [[{ id: 3, name: 'animal_01.xlsx', status: 'e' }]] })
+  const f = fakes()
+  f.api.getWorkspaceResources = async () => {
+    const data = f.imports.find((i) => i.resourceType === 'e')!
+    return [{ id: 3, name: 'animal_01.xlsx', status: 'e', path: `${data.folder}/animal_01.xlsx` }]
+  }
   const last = (await run(f)).pop()!
   assert.equal(last.phase, 'failed')
   assert.equal(last.error, 'The files could not be copied into the workspace. Please try again.')
   assert.ok(!f.calls.some((c) => c.startsWith('run')))
+})
+
+test('a reused workspace\'s older failed or stuck resources don\'t affect this run', async () => {
+  const f = fakes()
+  const list = f.api.getWorkspaceResources.bind(f.api)
+  f.api.getWorkspaceResources = async (t, ws) => [
+    { id: 1, name: 'old.xlsx', status: 'e', path: 'four-choice-reversal/run-old/inputs/old.xlsx' },
+    { id: 2, name: 'stuck.nwb', status: 'p', path: 'stuck.nwb' },
+    ...await list(t, ws),
+  ]
+  assert.equal((await run(f, { workspaceId: 7 })).pop()!.phase, 'succeeded')
 })
 
 test('imports that leave no notebooks in the notebooks folder stop the run', async () => {
@@ -257,4 +273,27 @@ test('a failed repository import marks the repository step', async () => {
   assert.equal(last.phase, 'failed')
   assert.deepEqual(last.steps.filter((s) => s.state === 'failed').map((s) => s.id), ['repo'])
   assert.equal(last.steps.find((s) => s.id === 'upload')?.state, 'succeeded')
+})
+
+test('a run still going past the watch limit stops being followed, and says so', async () => {
+  RUN_SETTINGS.runTimeoutMs = 5
+  const last = (await run(fakes({ runPolls: 1_000 }))).pop()!
+  assert.equal(last.phase, 'stillRunning')
+  assert.match(last.message, /Still running in the workspace/)
+  assert.equal(last.steps.find((s) => s.id === 'run')?.detail, 'Still running in the workspace')
+  assert.ok(!last.steps.some((s) => s.state === 'running'))
+})
+
+test('an ended session mid-run asks to sign in again', async () => {
+  let calls = 0
+  const expiring = { ...auth, getToken: async () => {
+    if (++calls > 2) throw new Error('No access token available. Please sign in again.')
+    return 'token'
+  } }
+  const states: RunState[] = []
+  await createRunProtocolUseCase(expiring, fakes().api, fakes().store)(
+    { protocol: FOUR_CHOICE, file: file(), workspaceName: 'Four-choice' }, (s) => states.push(s))
+  const last = states.pop()!
+  assert.equal(last.phase, 'failed')
+  assert.match(last.error ?? '', /sign in again/)
 })

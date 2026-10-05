@@ -71,8 +71,8 @@ const STEPS = [
  *   4. import the data, both through OSB (`POST /workspaceresource`) into this run's own folder
  *      (workspaceLayout): the code fresh for every run, the upload in its data/ (a zip is unpacked
  *      there).
- *   5. Wait for the imports: done when `GET /workspace/{id}` lists no pending resource and no
- *      "Importing resources" placeholder. (Not "every resource is `a`": OSB's scan only indexes
+ *   5. Wait for the imports: done when `GET /workspace/{id}` lists no pending resource in this
+ *      run's folder and no "Importing resources" placeholder. (Not "every resource is `a`": OSB's scan only indexes
  *      .nwb/.npjson/.ipynb, and drops other resources once copied.) They worked if the scan then
  *      lists notebooks in this run's notebooks folder; the data file isn't listed, so it can't be
  *      checked this way. Those notebooks, in byte order of their names, are what step 6 runs.
@@ -127,7 +127,7 @@ export function createRunProtocolUseCase(
 
       // 5. Wait for the imports, and find the notebooks to run.
       if (stopped()) return
-      const notebooks = await inStep('imports', () => waitForImports(workspaceId, repoDir))
+      const notebooks = await inStep('imports', () => waitForImports(workspaceId, layout.run, repoDir))
       if (!notebooks) return
 
       // 6. Run the notebooks.
@@ -202,14 +202,17 @@ export function createRunProtocolUseCase(
      * Step 5. Returns the notebooks to run, relative to the repository, in byte order of their
      * names (as the contract says: zero-padded prefixes); null if the dialog was closed meanwhile.
      */
-    async function waitForImports(workspaceId: number, repoDir: string): Promise<string[] | null> {
+    async function waitForImports(workspaceId: number, runDir: string, repoDir: string): Promise<string[] | null> {
       progress.start('imports', 'importing', 'Waiting for the imports to finish…')
       let resources: WorkspaceResourceState[] = []
+      // Only this run's imports count: a reused workspace can hold older resources that failed or
+      // never finished, and those must not fail or stall every later run.
+      const ours = (r: WorkspaceResourceState) => !!r.path?.startsWith(`${runDir}/`)
       const ended = await pollUntil(async () => {
         resources = await workspaceApi.getWorkspaceResources(await token(), workspaceId)
-        const failed = resources.find((r) => r.status === 'e')
+        const failed = resources.find((r) => ours(r) && r.status === 'e')
         if (failed) throw new Error(`OSB could not import ${failed.name}`)
-        return !resources.some((r) => r.id === -1 || r.status === 'p')
+        return !resources.some((r) => r.id === -1 || (ours(r) && r.status === 'p'))
       }, { everyMs: RUN_SETTINGS.importPollMs, timeoutMs: RUN_SETTINGS.importTimeoutMs, stopped })
       if (ended === 'timeout') throw new UserFacingError('Copying the files into the workspace is taking too long. Please try again later.',
           `The imports did not finish within ${RUN_SETTINGS.importTimeoutMs / 60_000} minutes`)
@@ -260,7 +263,7 @@ export function createRunProtocolUseCase(
         // Never seen: a run that ends within seconds can finish between two polls.
         return seen ? !running : Date.now() - submitted > RUN_SETTINGS.runStartTimeoutMs
       }, { everyMs: RUN_SETTINGS.runPollMs, timeoutMs: RUN_SETTINGS.runTimeoutMs, stopped })
-      if (ended === 'timeout') progress.finish('Still running in the workspace; open it to follow the results', false)
+      if (ended === 'timeout') progress.stopWatching('run', 'Still running in the workspace; open it to follow the results')
       if (ended !== 'done') return
 
       // Whether it succeeded. The run task leaves the executed notebooks in notebooks/ if every one

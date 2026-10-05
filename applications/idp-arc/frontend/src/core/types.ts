@@ -58,6 +58,8 @@ export type RunPhase =
   | 'workspace'
   | 'importing'
   | 'running'
+  /** Still running in the workspace past the watch limit: no longer followed here. */
+  | 'stillRunning'
   | 'succeeded'
   | 'failed'
 
