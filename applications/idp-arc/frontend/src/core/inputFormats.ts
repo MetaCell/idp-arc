@@ -18,10 +18,11 @@ export function inputFormatsFor(protocolFormats?: string[]): string[] | null {
 
 /** Why the protocol can't take this file, or null if it can. */
 export function inputFileProblem(
-  file: { name: string },
+  file: { name: string; size: number },
   protocolName: string,
   protocolFormats?: string[],
 ): string | null {
+  if (file.size === 0) return `${file.name} is empty.`
   const formats = inputFormatsFor(protocolFormats)
   const ext = extensionOf(file.name)
   if (formats && !formats.includes(ext)) {

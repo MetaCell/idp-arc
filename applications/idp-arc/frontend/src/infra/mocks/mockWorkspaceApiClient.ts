@@ -77,6 +77,7 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
     }
     if (this.runPolls > 0) {
       this.runPolls -= 1
+      if (this.runPolls === 0) this.notebooks = this.executed
       return [{ id: -1, name: 'Refreshing resources' }, ...this.notebooks]
     }
     return this.notebooks
@@ -93,10 +94,17 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
     }
   }
 
+  /** A run's executed notebooks: listed once its workflow (and scan) is over; every run succeeds here. */
+  private executed: WorkspaceResourceState[] = []
+
   async startRun(_token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }> {
     await delay(300)
     const workflow = `osb-run-notebooks-job-mock${++this.runCount}`
     this.runPolls = 3
+    this.executed = input.notebooks.map((nb, n) => {
+      const name = nb.split('/').pop()!
+      return { id: 300 + n, name, status: 'a' as const, path: `${input.results.notebooks}/${name}` }
+    })
     console.info(`[MockWorkspaceApiClient] startRun(#${workspaceId}, ${input.repo.dir}: ${input.notebooks.join(', ')}) → ${workflow}`)
     return { workflow }
   }

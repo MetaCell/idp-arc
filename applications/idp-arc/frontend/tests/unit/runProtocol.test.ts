@@ -8,6 +8,8 @@ import type { IObjectStore } from '../../src/core/ports/IObjectStore'
 import type { RunState } from '../../src/core/types'
 
 beforeEach(() => {
+  RUN_SETTINGS.runResultTimeoutMs = 20
+  RUN_SETTINGS.runStartTimeoutMs = 2 * 60_000
   RUN_SETTINGS.importPollMs = 1
   RUN_SETTINGS.runPollMs = 1
   RUN_SETTINGS.runStartTimeoutMs = 20
@@ -18,15 +20,17 @@ const FOUR_CHOICE = {
   name: 'Four-choice reversal digging task',
   repoZipUrl: 'https://codeload.github.com/maracbaylis/four-choice-example/zip/refs/heads/main',
   notebooksDir: 'notebooks',
-  inputDir: 'example_data',
-  outputs: ['outputs'],
   inputFormats: ['.xlsx', '.zip'],
 }
 const auth = { getToken: async () => 'token', tokenParsed: { sub: 'user-1' } }
 const file = () => new File(['x'], 'animal_01.xlsx')
 
-/** `runPolls`: how many polls after the run is submitted show OSB's placeholder (its workflow running). */
-function fakes(opts: { runPolls?: number; importPolls?: number; failUpload?: boolean; resources?: WorkspaceResourceState[][] } = {}) {
+/**
+ * `runPolls`: how many polls after the run is submitted show OSB's placeholder (its workflow running).
+ * `runFails`: `notebook`, a notebook fails (its executed notebooks listed in notebooks.failed/);
+ * `setup`, the run stops before any notebook (nothing listed).
+ */
+function fakes(opts: { runPolls?: number; importPolls?: number; failUpload?: boolean; resources?: WorkspaceResourceState[][]; runFails?: 'notebook' | 'setup' } = {}) {
   const calls: string[] = []
   const imports: ImportResourceInput[] = []
   let runInput: StartRunInput | undefined
@@ -40,9 +44,17 @@ function fakes(opts: { runPolls?: number; importPolls?: number; failUpload?: boo
       polls += 1
       if (opts.resources) return opts.resources[Math.min(polls - 1, opts.resources.length - 1)]
       if (polls <= (opts.importPolls ?? 2)) return [{ id: -1, name: 'Importing resources into workspace' }]
-      // What OSB's scan lists once the repository is in: its notebooks.
+      // What OSB's scan lists once the repository is in: its notebooks; after a successful run, the
+      // executed ones too; after a failed one, in notebooks.failed/ (its workflow scans either way).
       const repo = imports.find((i) => i.resourceType === 'g')
-      return repo ? [{ id: 7, name: '01_load.ipynb', status: 'a', path: `${repo.folder}/${repo.name}/notebooks/01_load.ipynb` }] : []
+      const listed: WorkspaceResourceState[] = repo ? [{ id: 7, name: '01_load.ipynb', status: 'a', path: `${repo.folder}/${repo.name}/notebooks/01_load.ipynb` }] : []
+      if (runInput && !opts.runFails) {
+        for (const nb of runInput.notebooks) listed.push({ id: 8, name: nb, status: 'a', path: `${runInput.results.notebooks}/${nb.split('/').pop()}` })
+      }
+      if (runInput && opts.runFails === 'notebook') {
+        for (const nb of runInput.notebooks) listed.push({ id: 9, name: nb, status: 'a', path: `${runInput.results.notebooks}.failed/${nb.split('/').pop()}` })
+      }
+      return listed
     },
     async importResource(_t, input) { calls.push(`import:${input.resourceType}`); imports.push(input) },
     async startRun(_t, ws, input) {
@@ -83,7 +95,7 @@ test('uploads, imports both into the run folder, waits, runs, and reports the ru
   assert.match(folder, /^four-choice-reversal\/run-four-choice-reversal-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ$/)
   assert.equal(last.outputsDir, folder)
   assert.deepEqual(repo, { workspaceId: 42, name: 'four-choice-example-main', url: FOUR_CHOICE.repoZipUrl, folder, resourceType: 'g' })
-  assert.equal(data.folder, `${folder}/data`)
+  assert.equal(data.folder, `${folder}/inputs`)
   assert.equal(data.resourceType, 'e')
   assert.match(data.url, /^https:\/\/storage\.googleapis\.com\/maabcd\/uploads\/four-choice-reversal\/user-1\//)
 
@@ -91,8 +103,8 @@ test('uploads, imports both into the run folder, waits, runs, and reports the ru
     repo: { dir: `${folder}/four-choice-example-main`, discard: true },
     setup: { requirements: 'requirements.txt', pythonPath: ['scripts'], install: ['scripts/install.py', 'scripts/setup.py', 'scripts/pyproject.toml'] },
     notebooks: ['notebooks/01_load.ipynb'],
-    inputs: [{ fromVolume: `${folder}/data`, toRepo: 'example_data' }],
-    outputs: [{ fromRepo: 'outputs', toVolume: `${folder}/outputs` }],
+    inputDir: `${folder}/inputs`,
+    outputDir: `${folder}/outputs`,
     results: { notebooks: `${folder}/notebooks`, log: `${folder}/run.log` },
   })
 })
@@ -147,7 +159,7 @@ test('without a file: no upload, no data import, the notebooks run on the exampl
   const last = states[states.length - 1]
   assert.equal(last.phase, 'succeeded')
   assert.deepEqual(f.imports.map((i) => i.resourceType), ['g'])
-  assert.deepEqual(f.runInput()?.inputs, [])
+  assert.equal(f.runInput()?.inputDir, undefined)
   assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'data'])
 })
 
@@ -166,14 +178,13 @@ test('the run is followed through the workspace\'s placeholder: running while li
   const last = states[states.length - 1]
   assert.equal(last.phase, 'succeeded')
   assert.equal(last.message, 'The analysis has finished')
-  assert.match(last.steps.find((s) => s.id === 'run')?.detail ?? '', /run\.log if anything is missing/)
+  assert.match(last.steps.find((s) => s.id === 'run')?.detail ?? '', /^Results in four-choice-reversal\/run-/)
 })
 
-test('a run never shown as running stops being watched and points to the workspace', async () => {
-  const last = (await run(fakes({ runPolls: 0 }))).pop()!
-  assert.notEqual(last.phase, 'succeeded')
-  assert.notEqual(last.phase, 'failed')
-  assert.match(last.message, /open the workspace/)
+test('a run that ends between two polls is still judged by its executed notebooks', async () => {
+  RUN_SETTINGS.runStartTimeoutMs = 10
+  assert.equal((await run(fakes({ runPolls: 0 }))).pop()!.phase, 'succeeded')
+  assert.equal((await run(fakes({ runPolls: 0, runFails: 'notebook' }))).pop()!.phase, 'failed')
 })
 
 test('an import OSB marks as failed stops the run', async () => {
@@ -200,12 +211,36 @@ test('a file the protocol cannot read fails before anything is uploaded or creat
   assert.deepEqual(f.calls, [])
 })
 
-test('an upload for a protocol without an input folder fails before anything moves', async () => {
+test('an empty file fails before anything is uploaded or created', async () => {
   const f = fakes()
-  const last = (await run(f, { protocol: { ...FOUR_CHOICE, inputDir: undefined } })).pop()!
+  const last = (await run(f, { file: new File([], 'animal_01.xlsx') })).pop()!
   assert.equal(last.phase, 'failed')
-  assert.match(last.error ?? '', /can't take uploaded files yet/)
+  assert.equal(last.error, 'animal_01.xlsx is empty.')
   assert.deepEqual(f.calls, [])
+})
+
+test('a repository zip that is not GitHub codeload is not offered', async () => {
+  const f = fakes()
+  const last = (await run(f, { protocol: { ...FOUR_CHOICE, repoZipUrl: 'http://example.org/x.zip' } })).pop()!
+  assert.equal(last.phase, 'failed')
+  assert.match(last.error ?? '', /isn't available yet/)
+})
+
+test('a run whose notebook failed is seen in notebooks.failed/, and says so in plain words', async () => {
+  RUN_SETTINGS.runResultTimeoutMs = 60_000 // decided by the listing, not by waiting
+  const f = fakes({ runFails: 'notebook' })
+  const last = (await run(f)).pop()!
+  assert.equal(last.phase, 'failed')
+  assert.equal(last.steps.find((s) => s.id === 'run')?.state, 'failed')
+  assert.equal(last.error, 'The analysis did not finish. Open the workspace to see what happened.')
+})
+
+test('a run that stops before any notebook (nothing listed) failed, and says so in plain words', async () => {
+  const f = fakes({ runFails: 'setup' })
+  const last = (await run(f)).pop()!
+  assert.equal(last.phase, 'failed')
+  assert.equal(last.steps.find((s) => s.id === 'run')?.state, 'failed')
+  assert.equal(last.error, 'The analysis did not finish. Open the workspace to see what happened.')
 })
 
 test('a protocol without a repository fails clearly', async () => {

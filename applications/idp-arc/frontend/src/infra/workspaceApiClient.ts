@@ -114,7 +114,7 @@ export class WorkspaceApiClient implements IWorkspaceApi {
   }
 
   async startRun(token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }> {
-    const { repo, setup, notebooks, inputs, outputs, results } = input
+    const { repo, setup, notebooks, inputDir, outputDir, results } = input
     const res = await fetch(`${this.baseApiUrl}/workspace/${workspaceId}/run`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -122,8 +122,8 @@ export class WorkspaceApiClient implements IWorkspaceApi {
         repo,
         ...(setup ? { setup: { requirements: setup.requirements, python_path: setup.pythonPath, install: setup.install } } : {}),
         notebooks,
-        ...(inputs?.length ? { inputs: inputs.map((i) => ({ from_volume: i.fromVolume, to_repo: i.toRepo })) } : {}),
-        ...(outputs?.length ? { outputs: outputs.map((o) => ({ from_repo: o.fromRepo, to_volume: o.toVolume })) } : {}),
+        ...(inputDir ? { input_dir: inputDir } : {}),
+        output_dir: outputDir,
         results,
       }),
     })

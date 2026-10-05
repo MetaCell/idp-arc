@@ -7,9 +7,10 @@ test('one folder per protocol, one per run inside it, named by the UTC time with
   const layout = workspaceLayout('four-choice-reversal', new Date('2026-10-05T10:54:43.123Z'))
   assert.deepEqual(layout, {
     run: 'four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z',
-    data: 'four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/data',
-    notebooks: 'four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/notebooks',
+    inputs: 'four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/inputs',
     outputs: 'four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/outputs',
+    notebooks: 'four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/notebooks',
+    failedNotebooks: 'four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/notebooks.failed',
     log: 'four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/run.log',
   })
 })

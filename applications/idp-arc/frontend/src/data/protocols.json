@@ -4,8 +4,6 @@
     "name": "Four-choice reversal digging task",
     "repoZipUrl": "https://codeload.github.com/maracbaylis/four-choice-example/zip/refs/heads/main",
     "notebooksDir": "notebooks",
-    "inputDir": "example_data",
-    "outputs": ["outputs/notebook_example"],
     "inputFormats": [".xlsx", ".zip"],
     "description": "In the four choice reversal digging task mice must identify the single rewarded option and update their choice when a previously unrewarded option becomes rewarded. The reversal phase in this task is sensitive to orbitofrontal and dorsomedial prefrontal cortex function and the 2-day version used here provides a metric of recall on the 2nd day of testing before reversal.",
     "imageUrls": ["assets/four_choice_graphic.jpeg"],

@@ -137,7 +137,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
   const fileProblem = file ? inputFileProblem(file, selectedProtocol?.name ?? 'This protocol', selectedProtocol?.inputFormats) : null
 
   const handleUpload = async () => {
-    if (fileProblem) return
+    if (!file || fileProblem) return
     setCloseLocked(true)
     setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [] }))
     abortRef.current = false
@@ -180,8 +180,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
 
   const stepIndex = step === 'select' ? 0 : 1
   const canGoNext = !!protocol
-  // No file is allowed for now: the notebooks then run on the repository's example data.
-  const canUpload = !fileProblem
+  const canUpload = !!file && !fileProblem
 
   return (
     <Dialog
@@ -388,9 +387,6 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
                     <Typography variant="body2" sx={{ opacity: 0.4 }}>
                       Click here or drag file to upload{inputFormats ? ` (${inputFormats.join(', ')})` : ''}
                     </Typography>
-                    <Typography variant="caption" sx={{ opacity: 0.35 }}>
-                      Or continue without a file to run the analysis on the protocol&apos;s example data
-                    </Typography>
                   </>
                 )}
               </Box>
@@ -464,7 +460,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
             disabled={!canUpload}
             onClick={handleUpload}
           >
-            {spawnedWorkspaceId !== undefined ? 'Retry' : file ? 'Upload and run' : 'Run on example data'}
+            {spawnedWorkspaceId !== undefined ? 'Retry' : 'Upload and run'}
           </Button>
         </Box>
       )}

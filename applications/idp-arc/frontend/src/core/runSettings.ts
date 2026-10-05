@@ -10,19 +10,26 @@ export const RUN_SETTINGS = {
   uploadProgressMs: 250,
 
   /** How often `GET /workspace/{id}` is polled while OSB's imports run. */
-  importPollMs: 3_000,
+  importPollMs: 5_000,
 
   /** How long the imports may take (copy + scan for each resource). */
   importTimeoutMs: 10 * 60_000,
 
   // ─── The run ─────────────────────────────────────────────────────────────────
 
-  /** How often `GET /workspace/{id}` is polled while the run runs. Short, so a short run is seen. */
-  runPollMs: 3_000,
+  /** How often `GET /workspace/{id}` is polled while the run runs, and while its results are checked. */
+  runPollMs: 5_000,
 
   /** Stop watching if OSB hasn't shown the run as running by then (it may already be over). */
   runStartTimeoutMs: 2 * 60_000,
 
   /** Give up watching after this long. Above the run task's own 1 h deadline (OSB workflow.py). */
   runTimeoutMs: 70 * 60_000,
+
+  /**
+   * How long after the run's workflow has ended its scan may take to show in the listing (it
+   * reports through an event queue). Neither notebooks/ nor notebooks.failed/ listed by then, the
+   * run stopped before any notebook ran.
+   */
+  runResultTimeoutMs: 15_000,
 }

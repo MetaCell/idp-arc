@@ -31,10 +31,10 @@ export interface StartRunInput {
   setup?: { requirements?: string; pythonPath?: string[]; install?: string[] }
   /** The notebooks to run, relative to repo.dir, in this order. */
   notebooks: string[]
-  /** Copied into the repository before the run: a file or folder on the volume → a repository folder. */
-  inputs?: { fromVolume: string; toRepo: string }[]
-  /** Copied out after the run, also when it fails: a repository folder → a folder on the volume. */
-  outputs?: { fromRepo: string; toVolume: string }[]
+  /** The notebooks' INPUT_DIR parameter: the run's input on the volume. */
+  inputDir?: string
+  /** The notebooks' OUTPUT_DIR parameter: where they write their results on the volume. */
+  outputDir: string
   /** Where the executed notebooks and the log go on the volume. */
   results: { notebooks: string; log: string }
 }
