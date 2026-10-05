@@ -63,6 +63,8 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
 
   // Imports: pending for a few polls, then gone (as OSB's scan drops non-indexed files).
   private imports: { name: string; pendingPolls: number }[] = []
+  /** What OSB's scan would list once the imports are done: the repository's notebooks. */
+  private notebooks: WorkspaceResourceState[] = []
   private runs = new Map<string, number>()
 
   async getWorkspaceResources(_token: string, _workspaceId: number): Promise<WorkspaceResourceState[]> {
@@ -71,13 +73,18 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
     this.imports = this.imports.filter((i) => i.pendingPolls > 0)
     return this.imports.length
       ? [{ id: -1, name: 'Importing resources into workspace' }, ...this.imports.map((i, n) => ({ id: 100 + n, name: i.name, status: 'p' as const }))]
-      : []
+      : this.notebooks
   }
 
   async importResource(_token: string, input: ImportResourceInput): Promise<void> {
     await delay(300)
     console.info(`[MockWorkspaceApiClient] importResource(${input.name} → ${input.folder}/)`)
     this.imports.push({ name: input.name, pendingPolls: 2 })
+    if (input.resourceType === 'g') {
+      this.notebooks = ['01_load.ipynb', '02_analysis.ipynb'].map((nb, n) => ({
+        id: 200 + n, name: nb, status: 'a' as const, path: `${input.folder}/${input.name}/notebooks/${nb}`,
+      }))
+    }
   }
 
   async startRun(_token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string; outputDir: string }> {

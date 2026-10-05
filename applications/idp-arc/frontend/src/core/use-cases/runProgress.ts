@@ -51,7 +51,7 @@ export class RunProgress {
     if (message) this.emit(message)
   }
 
-  skip(id: string, detail: string) {
+  skip(id: string, detail?: string) {
     this.set(id, 'skipped', detail)
   }
 

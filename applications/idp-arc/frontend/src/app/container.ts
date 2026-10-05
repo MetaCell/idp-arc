@@ -47,7 +47,7 @@ export const authClient = new KeycloakAuthClient({
 
 const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
 // DANDI upload endpoints live in OSB's `workspaces` app (the admin key has to sit wherever
-// they run, per Dario) — same API base as every other workspace call.
+// they run) — same API base as every other workspace call.
 const dandiApi     = new DandiApiClient(WORKSPACES_API)
 
 /** Scenario 1: where uploads go before OSB imports them (`gs://maabcd`). Used by the upload flow. */

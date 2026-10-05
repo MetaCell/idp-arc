@@ -7,6 +7,8 @@ export interface WorkspaceResourceState {
   name: string
   /** `p` pending (being imported), `a` available, `e` error. */
   status?: 'p' | 'a' | 'e'
+  /** Where it is on the volume, e.g. `idp/<upload id>/repo/<repo>/notebooks/01_load.ipynb`. */
+  path?: string
 }
 
 export interface ImportResourceInput {

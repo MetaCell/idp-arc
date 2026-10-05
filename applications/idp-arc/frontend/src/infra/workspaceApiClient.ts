@@ -87,8 +87,8 @@ export class WorkspaceApiClient implements IWorkspaceApi {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) throw new Error(`Reading workspace ${workspaceId} failed: ${res.status} ${res.statusText}`)
-    const ws = (await res.json()) as { resources?: { id: number; name: string; status?: 'p' | 'a' | 'e' }[] }
-    return (ws.resources ?? []).map(({ id, name, status }) => ({ id, name, status }))
+    const ws = (await res.json()) as { resources?: { id: number; name: string; status?: 'p' | 'a' | 'e'; path?: string }[] }
+    return (ws.resources ?? []).map(({ id, name, status, path }) => ({ id, name, status, path }))
   }
 
   async importResource(token: string, input: ImportResourceInput): Promise<void> {

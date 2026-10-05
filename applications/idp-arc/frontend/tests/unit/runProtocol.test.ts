@@ -35,7 +35,10 @@ function fakes(opts: { runPhases?: string[]; importPolls?: number; failUpload?: 
     async getWorkspaceResources() {
       polls += 1
       if (opts.resources) return opts.resources[Math.min(polls - 1, opts.resources.length - 1)]
-      return polls <= (opts.importPolls ?? 2) ? [{ id: -1, name: 'Importing resources into workspace' }] : []
+      if (polls <= (opts.importPolls ?? 2)) return [{ id: -1, name: 'Importing resources into workspace' }]
+      // What OSB's scan lists once the repository is in: its notebooks.
+      const repo = imports.find((i) => i.resourceType === 'g')
+      return repo ? [{ id: 7, name: '01_load.ipynb', status: 'a', path: `${repo.folder}/${repo.name}/notebooks/01_load.ipynb` }] : []
     },
     async importResource(_t, input) { calls.push(`import:${input.resourceType}`); imports.push(input) },
     async startRun(_t, ws, input) { calls.push(`run:${ws}`); runInput = input; return { workflow: 'osb-run-notebooks-job-1', outputDir: `${input.outputDir}/run-${input.name}-2026-10-05T04-01-12Z` } },
@@ -139,6 +142,15 @@ test('an import OSB marks as failed stops the run', async () => {
   const last = (await run(f)).pop()!
   assert.equal(last.phase, 'failed')
   assert.match(last.error ?? '', /could not import animal_01\.xlsx/)
+  assert.ok(!f.calls.some((c) => c.startsWith('run')))
+})
+
+test('imports that leave no notebooks in the notebooks folder stop the run', async () => {
+  const f = fakes({ resources: [[{ id: 7, name: '01_load.ipynb', status: 'a', path: 'elsewhere/notebooks/01_load.ipynb' }]] })
+  const last = (await run(f)).pop()!
+  assert.equal(last.phase, 'failed')
+  assert.match(last.error ?? '', /No notebooks in idp\/.+\/notebooks\/ after the import/)
+  assert.equal(last.steps.find((s) => s.id === 'imports')?.state, 'failed')
   assert.ok(!f.calls.some((c) => c.startsWith('run')))
 })
 

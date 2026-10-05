@@ -32,7 +32,7 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
 
 ## What a protocol repository must look like
 
-Agreed with Dario and the protocol authors on 30 Sep 2026; OSB's run task follows it in this order:
+Agreed with the protocol authors on 30 Sep 2026; OSB's run task follows it in this order:
 
 1. `requirements.txt` at the root — **optional**, installed first. Pin versions: the task image
    pre-installs pandas, numpy, openpyxl and matplotlib, and an unpinned requirement is satisfied by

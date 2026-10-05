@@ -1,6 +1,6 @@
 import type { IAuthClient } from '../ports/IAuthClient'
 import type { IObjectStore, StoredObject } from '../ports/IObjectStore'
-import type { IWorkspaceApi } from '../ports/IWorkspaceApi'
+import type { IWorkspaceApi, WorkspaceResourceState } from '../ports/IWorkspaceApi'
 import { formatBytes } from '../formatBytes'
 import { inputFileProblem } from '../inputFormats'
 import { parseRepoZipUrl, type ProtocolRepo } from '../protocolRepo'
@@ -43,26 +43,27 @@ const STEPS = [
 ]
 
 /**
- * Runs a protocol on the researcher's data, per the MAABCD–OSB design (Scenario 1):
+ * Runs a protocol on the researcher's data, per the MAABCD–OSB design (Scenario 1). Before anything
+ * moves, the protocol and the file are checked; then, one step per entry in STEPS:
  *
- *   upload → workspace → repo import → data import → imports done → run → results
+ *   1. Upload: browser → public bucket (IObjectStore); its URL is what OSB imports. It goes first
+ *      (the design runs it in parallel with the workspace side): nothing is created in OSB until
+ *      the file is safely in the bucket, so a failed upload leaves no empty workspace.
+ *   2. Workspace: the selected one, or a new one tagged `maabcd:<protocol id>`.
+ *   3. Import the repository and
+ *   4. import the data, both through OSB (`POST /workspaceresource`) into this run's own folder,
+ *      `idp/<run id>/{repo,data}/`, so files of the same name never collide and a zip is unpacked
+ *      in place.
+ *   5. Wait for the imports: done when `GET /workspace/{id}` lists no pending resource and no
+ *      "Importing resources" placeholder. (Not "every resource is `a`": OSB's scan only indexes
+ *      .nwb/.npjson/.ipynb, and drops other resources once copied.) They worked if the scan then
+ *      lists notebooks in this run's notebooks folder; the data file isn't listed, so it can't be
+ *      checked this way.
+ *   6. Run the notebooks in OSB's Argo task (`POST /workspace/{id}/run`); results go to
+ *      `results/run-<protocol id>-<UTC timestamp>/` in the workspace (OSB names the folder).
  *
- * The upload goes first (Gopal, 2 Oct; the design runs it in parallel with the workspace side):
- * nothing is created in OSB until the file is safely in the bucket, so a failed upload leaves no
- * empty workspace behind.
- *
- * - The upload goes browser → public bucket (IObjectStore); its URL is what OSB imports.
- * - The workspace is the selected one, or a new one tagged `maabcd:<protocol id>`.
- * - Both imports go through OSB (`POST /workspaceresource`) into this run's own folder,
- *   `idp/<upload id>/{repo,data}/`, so files of the same name never collide and a zip is
- *   unpacked in place. The repository goes in as soon as the workspace exists.
- * - No lab server is started: the imports and the run are OSB's own Argo workflows, and their
- *   affinity to the workspace is met by their own pods (verified 5 Oct on a never-opened workspace).
- * - Imports are done when `GET /workspace/{id}` lists no pending resource and no "Importing
- *   resources" placeholder. (Not "every resource is `a`": OSB's scan only indexes .nwb/.npjson/
- *   .ipynb, and drops other resources once copied.)
- * - The notebooks run in OSB's Argo task (`POST /workspace/{id}/run`); results go to
- *   `results/run-<protocol id>-<UTC timestamp>/` in the workspace (OSB names the folder).
+ * No lab server is started: the imports and the run are OSB's own Argo workflows, and their
+ * affinity to the workspace is met by their own pods (verified 5 Oct on a never-opened workspace).
  */
 export function createRunProtocolUseCase(
   auth: Pick<IAuthClient, 'getToken' | 'tokenParsed'>,
@@ -77,33 +78,44 @@ export function createRunProtocolUseCase(
     const stopped = () => !!abortRef?.current
 
     try {
+      // Before anything moves: the protocol and the file.
       const { repo, userId } = checkBeforeStarting(input)
+      // This run's folder in the workspace, and where the repository's notebooks land in it
+      // (the zip unpacks to <repo>-<ref>/).
       const folder = `idp/${crypto.randomUUID()}`
+      const notebooksDir = `${folder}/repo/${repo.folder}/${protocol.notebooksDir}`
       if (!file) {
-        progress.skip('upload', 'No file selected; the notebooks use the repository\'s example data')
-        progress.skip('data', 'No file to import')
+        progress.skip('upload')
+        progress.skip('data')
       }
       progress.emit('Starting…')
 
-      // 1. The upload, straight to the bucket. Nothing else starts until it has landed.
+      // 1. Upload the file straight to the bucket. Nothing else starts until it has landed.
       const stored = file ? await inStep('upload', () => uploadFile(file, userId)) : null
       if (stopped()) return
 
-      // 2. Workspace → repository import → data import.
+      // 2. Get the workspace: the selected one, or a new one.
       const workspaceId = await inStep('workspace', prepareWorkspace)
       if (stopped()) return
-      await inStep('repo', () => importRepo(workspaceId, repo, folder))
-      if (stored && file) await inStep('data', () => importData(workspaceId, file, stored, folder))
-      if (stopped() || !(await inStep('imports', () => waitForImports(workspaceId)))) return
 
-      await inStep('run', () => runNotebooks(workspaceId, repo, folder, !!stored))
+      // 3. Import the analysis code (the protocol's repository).
+      await inStep('repo', () => importRepo(workspaceId, repo, folder))
+
+      // 4. Import the uploaded data.
+      if (stored && file) await inStep('data', () => importData(workspaceId, file, stored, folder))
+
+      // 5. Wait for the imports, and check the notebooks arrived.
+      if (stopped() || !(await inStep('imports', () => waitForImports(workspaceId, notebooksDir)))) return
+
+      // 6. Run the notebooks.
+      await inStep('run', () => runNotebooks(workspaceId, notebooksDir, folder, !!stored))
     } catch (err) {
       progress.fail(err)
     }
 
     // ── The steps ────────────────────────────────────────────────────────────────────────
 
-    /** Fails before anything moves: a file the protocol can't read would only fail minutes later. */
+    /** Before anything moves: a file the protocol can't read would only fail minutes later. */
     function checkBeforeStarting({ protocol, file }: RunProtocolInput): { repo: ProtocolRepo; userId: string } {
       const repo = parseRepoZipUrl(protocol.repoZipUrl)
       if (!repo || !protocol.notebooksDir) throw new Error(`"${protocol.name}" has no analysis repository configured yet`)
@@ -116,6 +128,7 @@ export function createRunProtocolUseCase(
       return { repo, userId }
     }
 
+    /** Step 1. */
     async function uploadFile(file: File, userId: string): Promise<StoredObject> {
       const message = `Uploading ${file.name}…`
       progress.start('upload', 'uploading', message, `0 B of ${formatBytes(file.size)}`)
@@ -126,56 +139,66 @@ export function createRunProtocolUseCase(
         const pct = total ? Math.round((sent / total) * 100) : 100
         progress.update('upload', `${formatBytes(sent)} of ${formatBytes(total)} (${pct}%)`, message)
       })
-      progress.done('upload', stored.key, 'Upload finished')
+      progress.done('upload', undefined, 'Upload finished')
       return stored
     }
 
+    /** Step 2. */
     async function prepareWorkspace(): Promise<number> {
       progress.start('workspace', 'workspace', 'Getting the workspace ready…')
       if (input.workspaceId !== undefined) {
-        progress.done('workspace', `Using workspace #${input.workspaceId}`, 'Workspace ready')
+        progress.done('workspace', undefined, 'Workspace ready')
         return input.workspaceId
       }
       const id = await workspaceApi.createWorkspace(await token(), input.workspaceName, [`maabcd:${protocol.id}`])
       progress.workspaceId = id
-      progress.done('workspace', `Created ${input.workspaceName} (#${id})`, 'Workspace ready')
+      progress.done('workspace', undefined, 'Workspace ready')
       return id
     }
 
+    /** Step 3. */
     async function importRepo(workspaceId: number, repo: ProtocolRepo, folder: string) {
       progress.start('repo', 'importing', 'Importing the analysis code…')
       await workspaceApi.importResource(await token(), {
         workspaceId, name: repo.folder, url: protocol.repoZipUrl!, folder: `${folder}/repo`, resourceType: 'g',
       })
-      progress.done('repo', `${repo.owner}/${repo.repo}@${repo.ref} → ${folder}/repo/`)
+      progress.done('repo')
     }
 
+    /** Step 4. */
     async function importData(workspaceId: number, file: File, stored: StoredObject, folder: string) {
       progress.start('data', 'importing', 'Importing your data…')
       await workspaceApi.importResource(await token(), {
         workspaceId, name: file.name, url: stored.url, folder: `${folder}/data`, resourceType: 'e',
       })
-      progress.done('data', `→ ${folder}/data/`)
+      progress.done('data')
     }
 
-    /** Returns false if the dialog was closed meanwhile. */
-    async function waitForImports(workspaceId: number): Promise<boolean> {
-      progress.start('imports', 'importing', 'Waiting for the imports to finish…', 'OSB is copying the files into the workspace')
+    /** Step 5. Returns false if the dialog was closed meanwhile. */
+    async function waitForImports(workspaceId: number, notebooksDir: string): Promise<boolean> {
+      progress.start('imports', 'importing', 'Waiting for the imports to finish…')
+      let resources: WorkspaceResourceState[] = []
       const ended = await pollUntil(async () => {
-        const resources = await workspaceApi.getWorkspaceResources(await token(), workspaceId)
+        resources = await workspaceApi.getWorkspaceResources(await token(), workspaceId)
         const failed = resources.find((r) => r.status === 'e')
         if (failed) throw new Error(`OSB could not import ${failed.name}`)
         return !resources.some((r) => r.id === -1 || r.status === 'p')
       }, { everyMs: RUN_SETTINGS.importPollMs, timeoutMs: RUN_SETTINGS.importTimeoutMs, stopped })
       if (ended === 'timeout') throw new Error(`The imports did not finish within ${RUN_SETTINGS.importTimeoutMs / 60_000} minutes`)
-      if (ended === 'done') progress.done('imports')
-      return ended === 'done'
+      if (ended !== 'done') return false
+      // Directly in the folder, as the run task picks them.
+      const notebooks = resources.filter((r) => r.path?.startsWith(`${notebooksDir}/`) && r.path.endsWith('.ipynb')
+        && !r.path.slice(notebooksDir.length + 1).includes('/'))
+      if (!notebooks.length) throw new Error(`No notebooks in ${notebooksDir}/ after the import`)
+      progress.done('imports')
+      return true
     }
 
-    async function runNotebooks(workspaceId: number, repo: ProtocolRepo, folder: string, hasData: boolean) {
+    /** Step 6. */
+    async function runNotebooks(workspaceId: number, notebooksDir: string, folder: string, hasData: boolean) {
       progress.start('run', 'running', 'Starting the notebooks…', 'Submitting')
       const run = await workspaceApi.startRun(await token(), workspaceId, {
-        notebooksDir: `${folder}/repo/${repo.folder}/${protocol.notebooksDir}`,
+        notebooksDir,
         inputPath: hasData ? `${folder}/data` : undefined,
         inputDir: hasData ? protocol.inputDir : undefined,
         outputDir: 'results',
