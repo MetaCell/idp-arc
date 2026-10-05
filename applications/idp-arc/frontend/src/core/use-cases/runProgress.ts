@@ -1,13 +1,16 @@
 import type { RunPhase, RunState, RunStep, StepState } from '../types'
+import { UserFacingError, userMessage } from '../userMessages'
 
 export type OnRunState = (state: RunState) => void
 
 /** A failure that belongs to one step, so only that row is marked failed. */
 export class StepError extends Error {
   readonly step: string
+  readonly original: unknown
   constructor(step: string, cause: unknown) {
     super(cause instanceof Error ? cause.message : String(cause))
     this.step = step
+    this.original = cause
   }
 }
 
@@ -63,15 +66,20 @@ export class RunProgress {
     this.emit(message)
   }
 
-  /** Marks the step that failed (a StepError's, else the one running) and reports the error. */
+  /**
+   * Marks the step that failed (a StepError's, else the one running) and reports the error in
+   * words for the user; the technical error goes to the console.
+   */
   fail(err: unknown) {
     if (this.ended) return
     this.ended = true
     const failed = err instanceof StepError ? err.step : this.steps.find((s) => s.state === 'running')?.id
+    const cause = err instanceof StepError ? err.original : err
+    console.error(cause instanceof UserFacingError && cause.details ? cause.details : cause)
     this.steps = this.steps.map((s) =>
       s.id === failed ? { ...s, state: 'failed' } : s.state === 'running' ? { ...s, state: 'pending', detail: undefined } : s)
     this.phase = 'failed'
-    this.emit('The analysis did not complete', err instanceof Error ? err.message : String(err))
+    this.emit('The analysis did not complete', userMessage(cause, failed))
   }
 
   emit(message: string, error?: string) {

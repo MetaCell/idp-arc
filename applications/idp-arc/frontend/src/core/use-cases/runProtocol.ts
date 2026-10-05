@@ -5,6 +5,7 @@ import { formatBytes } from '../formatBytes'
 import { inputFileProblem } from '../inputFormats'
 import { parseRepoZipUrl, type ProtocolRepo } from '../protocolRepo'
 import { RUN_SETTINGS } from '../runSettings'
+import { UserFacingError } from '../userMessages'
 import { inStep, pollUntil, RunProgress, type OnRunState } from './runProgress'
 
 export type { OnRunState } from './runProgress'
@@ -20,6 +21,12 @@ export interface RunProtocolDefinition {
   notebooksDir?: string
   /** Repository-relative folder the notebooks read their input from (four-choice: example_data). */
   inputDir?: string
+  /** Repository-relative folders whose contents are the run's results (four-choice: outputs). */
+  outputs?: string[]
+  /** Overrides REPOSITORY_SETUP's requirements file, PYTHONPATH folders and install candidates. */
+  requirements?: string
+  pythonPath?: string[]
+  install?: string[]
   inputFormats?: string[]
 }
 
@@ -31,6 +38,19 @@ export interface RunProtocolInput {
   workspaceId?: number
   /** Name for the workspace created when `workspaceId` is undefined. */
   workspaceName: string
+}
+
+/**
+ * How a protocol repository sets up its environment, as agreed with the protocol authors (30 Sep):
+ * a requirements file at the root, `scripts/` on PYTHONPATH, and `scripts/` installed by its
+ * install.py, else as a package. OSB applies whichever of these the repository has; a protocol can
+ * override each in protocols.json.
+ */
+const REPOSITORY_SETUP = {
+  requirements: 'requirements.txt',
+  pythonPath: ['scripts'],
+  /** Candidates; OSB uses the first the repository has. */
+  install: ['scripts/install.py', 'scripts/setup.py', 'scripts/pyproject.toml'],
 }
 
 const STEPS = [
@@ -58,9 +78,11 @@ const STEPS = [
  *      "Importing resources" placeholder. (Not "every resource is `a`": OSB's scan only indexes
  *      .nwb/.npjson/.ipynb, and drops other resources once copied.) They worked if the scan then
  *      lists notebooks in this run's notebooks folder; the data file isn't listed, so it can't be
- *      checked this way.
- *   6. Run the notebooks in OSB's Argo task (`POST /workspace/{id}/run`); results go to
- *      `results/run-<protocol id>-<UTC timestamp>/` in the workspace (OSB names the folder).
+ *      checked this way. Those notebooks, in byte order of their names, are what step 6 runs.
+ *   6. Run the notebooks in OSB's Argo task (`POST /workspace/{id}/run`): IDP says which, in what
+ *      order, where the input goes, how to set up the environment (REPOSITORY_SETUP) and which
+ *      folders are the results; OSB only carries it out.
+ *      Results go to `results/run-<protocol id>-<UTC timestamp>/` (OSB names the folder).
  *
  * No lab server is started: the imports and the run are OSB's own Argo workflows, and their
  * affinity to the workspace is met by their own pods (verified 5 Oct on a never-opened workspace).
@@ -80,10 +102,10 @@ export function createRunProtocolUseCase(
     try {
       // Before anything moves: the protocol and the file.
       const { repo, userId } = checkBeforeStarting(input)
-      // This run's folder in the workspace, and where the repository's notebooks land in it
-      // (the zip unpacks to <repo>-<ref>/).
+      // This run's folder in the workspace, and where the repository lands in it (the zip
+      // unpacks to <repo>-<ref>/).
       const folder = `idp/${crypto.randomUUID()}`
-      const notebooksDir = `${folder}/repo/${repo.folder}/${protocol.notebooksDir}`
+      const repoDir = `${folder}/repo/${repo.folder}`
       if (!file) {
         progress.skip('upload')
         progress.skip('data')
@@ -104,11 +126,13 @@ export function createRunProtocolUseCase(
       // 4. Import the uploaded data.
       if (stored && file) await inStep('data', () => importData(workspaceId, file, stored, folder))
 
-      // 5. Wait for the imports, and check the notebooks arrived.
-      if (stopped() || !(await inStep('imports', () => waitForImports(workspaceId, notebooksDir)))) return
+      // 5. Wait for the imports, and find the notebooks to run.
+      if (stopped()) return
+      const notebooks = await inStep('imports', () => waitForImports(workspaceId, repoDir))
+      if (!notebooks) return
 
       // 6. Run the notebooks.
-      await inStep('run', () => runNotebooks(workspaceId, notebooksDir, folder, !!stored))
+      await inStep('run', () => runNotebooks(workspaceId, repoDir, notebooks, folder, !!stored))
     } catch (err) {
       progress.fail(err)
     }
@@ -118,13 +142,13 @@ export function createRunProtocolUseCase(
     /** Before anything moves: a file the protocol can't read would only fail minutes later. */
     function checkBeforeStarting({ protocol, file }: RunProtocolInput): { repo: ProtocolRepo; userId: string } {
       const repo = parseRepoZipUrl(protocol.repoZipUrl)
-      if (!repo || !protocol.notebooksDir) throw new Error(`"${protocol.name}" has no analysis repository configured yet`)
+      if (!repo || !protocol.notebooksDir) throw new UserFacingError(`The analysis for "${protocol.name}" isn't available yet.`)
       const fileProblem = file && inputFileProblem(file, protocol.name, protocol.inputFormats)
-      if (fileProblem) throw new Error(fileProblem)
+      if (fileProblem) throw new UserFacingError(fileProblem)
       // The upload reaches the notebooks only through this folder (OSB's run requires it).
-      if (file && !protocol.inputDir) throw new Error(`"${protocol.name}" has no input folder configured yet`)
+      if (file && !protocol.inputDir) throw new UserFacingError(`"${protocol.name}" can't take uploaded files yet.`)
       const userId = auth.tokenParsed?.sub
-      if (typeof userId !== 'string') throw new Error('Not signed in; please sign in again')
+      if (typeof userId !== 'string') throw new UserFacingError('Not signed in; please sign in again')
       return { repo, userId }
     }
 
@@ -174,8 +198,11 @@ export function createRunProtocolUseCase(
       progress.done('data')
     }
 
-    /** Step 5. Returns false if the dialog was closed meanwhile. */
-    async function waitForImports(workspaceId: number, notebooksDir: string): Promise<boolean> {
+    /**
+     * Step 5. Returns the notebooks to run, relative to the repository, in byte order of their
+     * names (as the contract says: zero-padded prefixes); null if the dialog was closed meanwhile.
+     */
+    async function waitForImports(workspaceId: number, repoDir: string): Promise<string[] | null> {
       progress.start('imports', 'importing', 'Waiting for the imports to finish…')
       let resources: WorkspaceResourceState[] = []
       const ended = await pollUntil(async () => {
@@ -184,23 +211,36 @@ export function createRunProtocolUseCase(
         if (failed) throw new Error(`OSB could not import ${failed.name}`)
         return !resources.some((r) => r.id === -1 || r.status === 'p')
       }, { everyMs: RUN_SETTINGS.importPollMs, timeoutMs: RUN_SETTINGS.importTimeoutMs, stopped })
-      if (ended === 'timeout') throw new Error(`The imports did not finish within ${RUN_SETTINGS.importTimeoutMs / 60_000} minutes`)
-      if (ended !== 'done') return false
-      // Directly in the folder, as the run task picks them.
-      const notebooks = resources.filter((r) => r.path?.startsWith(`${notebooksDir}/`) && r.path.endsWith('.ipynb')
-        && !r.path.slice(notebooksDir.length + 1).includes('/'))
-      if (!notebooks.length) throw new Error(`No notebooks in ${notebooksDir}/ after the import`)
+      if (ended === 'timeout') throw new UserFacingError('Copying the files into the workspace is taking too long. Please try again later.',
+          `The imports did not finish within ${RUN_SETTINGS.importTimeoutMs / 60_000} minutes`)
+      if (ended !== 'done') return null
+      // The visible notebooks directly in the notebooks folder, relative to the repository.
+      const folderInRepo = `${protocol.notebooksDir}/`
+      const notebooks = resources
+        .map((r) => (r.path?.startsWith(`${repoDir}/`) ? r.path.slice(repoDir.length + 1) : ''))
+        .filter((path) => {
+          const name = path.slice(folderInRepo.length)
+          return path.startsWith(folderInRepo) && name.endsWith('.ipynb') && !name.includes('/') && !name.startsWith('.')
+        })
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      if (!notebooks.length) throw new UserFacingError('The analysis code has no notebooks to run. Please let the protocol\'s maintainers know.',
+        `No notebooks in ${repoDir}/${folderInRepo} after the import`)
       progress.done('imports')
-      return true
+      return notebooks
     }
 
     /** Step 6. */
-    async function runNotebooks(workspaceId: number, notebooksDir: string, folder: string, hasData: boolean) {
+    async function runNotebooks(workspaceId: number, repoDir: string, notebooks: string[], folder: string, hasData: boolean) {
       progress.start('run', 'running', 'Starting the notebooks…', 'Submitting')
       const run = await workspaceApi.startRun(await token(), workspaceId, {
-        notebooksDir,
+        repoDir,
+        notebooks,
         inputPath: hasData ? `${folder}/data` : undefined,
         inputDir: hasData ? protocol.inputDir : undefined,
+        outputs: protocol.outputs,
+        requirements: protocol.requirements ?? REPOSITORY_SETUP.requirements,
+        pythonPath: protocol.pythonPath ?? REPOSITORY_SETUP.pythonPath,
+        install: protocol.install ?? REPOSITORY_SETUP.install,
         outputDir: 'results',
         name: protocol.id,
       })

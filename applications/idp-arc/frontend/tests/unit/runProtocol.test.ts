@@ -18,6 +18,7 @@ const FOUR_CHOICE = {
   repoZipUrl: 'https://codeload.github.com/maracbaylis/four-choice-example/zip/refs/heads/main',
   notebooksDir: 'notebooks',
   inputDir: 'example_data',
+  outputs: ['outputs'],
   inputFormats: ['.xlsx', '.zip'],
 }
 const auth = { getToken: async () => 'token', tokenParsed: { sub: 'user-1' } }
@@ -81,9 +82,32 @@ test('uploads, imports both into the run folder, waits, runs, and reports the re
   assert.match(data.url, /^https:\/\/storage\.googleapis\.com\/maabcd\/uploads\/four-choice-reversal\/user-1\//)
 
   assert.deepEqual(f.runInput(), {
-    notebooksDir: `${folder}/repo/four-choice-example-main/notebooks`,
-    inputPath: `${folder}/data`, inputDir: 'example_data', outputDir: 'results', name: 'four-choice-reversal',
+    repoDir: `${folder}/repo/four-choice-example-main`, notebooks: ['notebooks/01_load.ipynb'],
+    inputPath: `${folder}/data`, inputDir: 'example_data', outputs: ['outputs'],
+    requirements: 'requirements.txt', pythonPath: ['scripts'],
+    install: ['scripts/install.py', 'scripts/setup.py', 'scripts/pyproject.toml'],
+    outputDir: 'results', name: 'four-choice-reversal',
   })
+})
+
+test('a protocol can override how its repository is set up', async () => {
+  const f = fakes()
+  await run(f, { protocol: { ...FOUR_CHOICE, requirements: 'env/requirements.txt', pythonPath: [], install: ['setup/pyproject.toml'] } })
+  const { requirements, pythonPath, install } = f.runInput()!
+  assert.deepEqual({ requirements, pythonPath, install }, { requirements: 'env/requirements.txt', pythonPath: [], install: ['setup/pyproject.toml'] })
+})
+
+test('runs the notebooks directly in the notebooks folder, in byte order of their names', async () => {
+  const f = fakes()
+  const listed = (path: string) => ({ id: 7, name: path, status: 'a' as const, path })
+  f.api.getWorkspaceResources = async () => {
+    const repo = f.imports.find((i) => i.resourceType === 'g')!
+    const nb = `${repo.folder}/${repo.name}/notebooks`
+    return [`${nb}/10_c.ipynb`, `${nb}/02_b.ipynb`, `${nb}/01_a.ipynb`, `${nb}/old/00_x.ipynb`, `${nb}/.hidden.ipynb`,
+      `${nb}/notes.md`, `${repo.folder}/${repo.name}/other/01.ipynb`].map(listed)
+  }
+  await run(f)
+  assert.deepEqual(f.runInput()?.notebooks, ['notebooks/01_a.ipynb', 'notebooks/02_b.ipynb', 'notebooks/10_c.ipynb'])
 })
 
 test('the upload lands before anything is created in OSB; then repo import, data import, run', async () => {
@@ -124,16 +148,17 @@ test('a failed upload marks only the upload step failed', async () => {
   const states = await run(fakes({ failUpload: true }))
   const last = states[states.length - 1]
   assert.equal(last.phase, 'failed')
-  assert.match(last.error ?? '', /403/)
+  // The user reads plain words; the 403 goes to the console.
+  assert.equal(last.error, 'Your file could not be uploaded. Check your connection and try again.')
   assert.deepEqual(last.steps.filter((s) => s.state === 'failed').map((s) => s.id), ['upload'])
 })
 
-test('a failed run reports the failed notebook', async () => {
+test('a failed run tells the user to look in the workspace, without OSB\'s message', async () => {
   const f = fakes({ runPhases: ['Running', 'Failed'] })
   f.api.getRun = async () => ({ phase: 'Failed', message: '02_qc.ipynb failed; see results/x/notebooks/02_qc.ipynb' })
   const last = (await run(f)).pop()!
   assert.equal(last.phase, 'failed')
-  assert.match(last.error ?? '', /02_qc\.ipynb failed/)
+  assert.equal(last.error, 'The analysis did not finish. Open the workspace to see what happened.')
   assert.equal(last.steps.find((s) => s.id === 'run')?.state, 'failed')
 })
 
@@ -141,7 +166,7 @@ test('an import OSB marks as failed stops the run', async () => {
   const f = fakes({ resources: [[{ id: 3, name: 'animal_01.xlsx', status: 'e' }]] })
   const last = (await run(f)).pop()!
   assert.equal(last.phase, 'failed')
-  assert.match(last.error ?? '', /could not import animal_01\.xlsx/)
+  assert.equal(last.error, 'The files could not be copied into the workspace. Please try again.')
   assert.ok(!f.calls.some((c) => c.startsWith('run')))
 })
 
@@ -149,7 +174,7 @@ test('imports that leave no notebooks in the notebooks folder stop the run', asy
   const f = fakes({ resources: [[{ id: 7, name: '01_load.ipynb', status: 'a', path: 'elsewhere/notebooks/01_load.ipynb' }]] })
   const last = (await run(f)).pop()!
   assert.equal(last.phase, 'failed')
-  assert.match(last.error ?? '', /No notebooks in idp\/.+\/notebooks\/ after the import/)
+  assert.match(last.error ?? '', /no notebooks to run/)
   assert.equal(last.steps.find((s) => s.id === 'imports')?.state, 'failed')
   assert.ok(!f.calls.some((c) => c.startsWith('run')))
 })
@@ -165,7 +190,7 @@ test('an upload for a protocol without an input folder fails before anything mov
   const f = fakes()
   const last = (await run(f, { protocol: { ...FOUR_CHOICE, inputDir: undefined } })).pop()!
   assert.equal(last.phase, 'failed')
-  assert.match(last.error ?? '', /no input folder configured yet/)
+  assert.match(last.error ?? '', /can't take uploaded files yet/)
   assert.deepEqual(f.calls, [])
 })
 
@@ -173,7 +198,7 @@ test('a protocol without a repository fails clearly', async () => {
   const f = fakes()
   const last = (await run(f, { protocol: { id: 'open-field', name: 'Open field task' } })).pop()!
   assert.equal(last.phase, 'failed')
-  assert.match(last.error ?? '', /no analysis repository configured yet/)
+  assert.match(last.error ?? '', /isn't available yet/)
 })
 
 test('a failed repository import marks the repository step', async () => {

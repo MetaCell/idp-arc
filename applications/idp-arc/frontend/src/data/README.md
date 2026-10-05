@@ -14,6 +14,8 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
 | `repoZipUrl` | run | GitHub archive of the analysis repository, `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>` (or `refs/tags/<tag>`, or `/zip/<commit>`). A **branch** follows the latest fixes; a **commit** freezes the code. No `repoZipUrl` = no analysis yet: the run stops with "has no analysis repository configured yet". |
 | `notebooksDir` | run | Repository-relative folder of the notebooks (`notebooks`). |
 | `inputDir` | run | Repository folder the notebooks read their input from (four-choice: `example_data`). For a run with an upload it holds the upload instead, in the run's scratch copy of the repository, so the notebooks run unchanged. Required for a protocol that takes an upload. |
+| `outputs` | run | Repository folders whose contents are the run's results (four-choice: `["outputs"]`). Emptied in the run's scratch copy before the notebooks run (so example results committed there don't pass for the run's) and copied into the results folder afterwards, also when the run fails. Anything the notebooks write elsewhere is not kept. |
+| `requirements`, `pythonPath`, `install` | run | Override the repository setup below (defaults in `REPOSITORY_SETUP`, runProtocol.ts: `requirements.txt`; `["scripts"]`; `["scripts/install.py", "scripts/setup.py", "scripts/pyproject.toml"]`). OSB applies only the ones the repository has. Leave them out for a repository that follows the contract. |
 | `inputFormats` | dialog, run | Extensions the analysis code can actually read. The dialog refuses other files before anything starts. **Without it, any file is accepted.** |
 
 ## What happens on "Upload and run" (core/use-cases/runProtocol.ts)
@@ -24,15 +26,19 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
    import and run tasks don't need one.
 2. OSB imports both into the workspace (`POST /workspaceresource`), each in this run's folder:
    `idp/<upload id>/repo/<repo>-<ref>/` and `idp/<upload id>/data/` (a `.zip` is unpacked there).
-3. When the imports are done, OSB runs the notebooks in an Argo task (`POST /workspace/{id}/run`,
-   papermill): `requirements.txt`, then `scripts/`, then `notebooks/*.ipynb` in name order.
+3. When the imports are done, IDP lists the notebooks OSB found in `notebooksDir` and sorts them.
+   It then asks OSB to run exactly those, in that order (`POST /workspace/{id}/run`, papermill in
+   an Argo task), with the input in `inputDir` and `outputs` as the results. OSB sets up
+   `requirements.txt` and `scripts/` first; which notebooks run and which folders are the outputs is IDP's decision.
 4. Results: `results/run-<id>-<UTC timestamp>/` in the workspace (e.g.
-   `results/run-four-choice-reversal-2026-10-05T04-01-12Z/`) — the executed notebooks, whatever the
-   notebooks wrote under `outputs/` (which starts empty in every run), and `run.log`.
+   `results/run-four-choice-reversal-2026-10-05T04-01-12Z/`) — the executed notebooks, the `outputs`
+   folders, and `run.log`.
 
 ## What a protocol repository must look like
 
-Agreed with the protocol authors on 30 Sep 2026; OSB's run task follows it in this order:
+Agreed with the protocol authors on 30 Sep 2026. These conventions live in IDP (`REPOSITORY_SETUP`
+and `notebooksDir`): IDP tells OSB which notebooks to run, in what order, and which setup files to
+use; OSB uses the ones the repository has and assumes nothing else.
 
 1. `requirements.txt` at the root — **optional**, installed first. Pin versions: the task image
    pre-installs pandas, numpy, openpyxl and matplotlib, and an unpinned requirement is satisfied by
@@ -43,8 +49,8 @@ Agreed with the protocol authors on 30 Sep 2026; OSB's run task follows it in th
 3. `notebooks/` — **required**. Every visible `*.ipynb` directly in it runs, one after another, in
    byte order of the file name (**zero-pad the numbers**: `01_…`, `02_…`; `10_x` sorts before
    `2_x`), each with its own folder as working directory. The first failing notebook stops the run.
-4. Outputs: the notebooks write under the repository's **`outputs/`** folder; each run's copy is
-   saved to its results folder.
+4. Outputs: the notebooks write under the repository's **`outputs/`** folder (the `outputs` field); each run's
+   copy is saved to its results folder.
 
 ## Per protocol
 

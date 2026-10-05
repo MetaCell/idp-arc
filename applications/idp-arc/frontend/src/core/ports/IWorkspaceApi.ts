@@ -24,12 +24,22 @@ export interface ImportResourceInput {
 }
 
 export interface StartRunInput {
-  /** The repository's notebooks folder on the volume. */
-  notebooksDir: string
+  /** The repository on the volume. */
+  repoDir: string
+  /** The notebooks to run, relative to repoDir, in the order to run them. */
+  notebooks: string[]
   /** The imported data on the volume, if any. */
   inputPath?: string
   /** Repository-relative folder the notebooks read their input from; required with inputPath. */
   inputDir?: string
+  /** Repository-relative folders whose contents are the run's results; emptied before the run. */
+  outputs?: string[]
+  /** Requirements file to pip-install first, if the repository has it. */
+  requirements?: string
+  /** Folders to put on PYTHONPATH, the ones the repository has. */
+  pythonPath?: string[]
+  /** Install candidates (a .py to run, or a setup.py / pyproject.toml); OSB uses the first it finds. */
+  install?: string[]
   /** Results folder on the volume; the run adds its own folder, `run-[<name>-]<UTC timestamp>`. */
   outputDir?: string
   /** Short name for the run's folder (the protocol id): lowercase letters, digits and `-`. */

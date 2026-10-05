@@ -91,7 +91,7 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
     await delay(300)
     const workflow = `osb-run-notebooks-job-mock${this.runs.size + 1}`
     this.runs.set(workflow, 0)
-    console.info(`[MockWorkspaceApiClient] startRun(#${workspaceId}, ${input.notebooksDir}) → ${workflow}`)
+    console.info(`[MockWorkspaceApiClient] startRun(#${workspaceId}, ${input.repoDir}: ${input.notebooks.join(', ')}) → ${workflow}`)
     const stamp = new Date().toISOString().replace(/\.\d+Z$/, 'Z').replace(/:/g, '-')
     return { workflow, outputDir: `${input.outputDir ?? 'results'}/run-${input.name ? `${input.name}-` : ''}${stamp}` }
   }
