@@ -17,8 +17,11 @@ export const RUN_SETTINGS = {
 
   // ─── The run ─────────────────────────────────────────────────────────────────
 
-  /** How often the run's state is polled. */
-  runPollMs: 5_000,
+  /** How often `GET /workspace/{id}` is polled while the run runs. Short, so a short run is seen. */
+  runPollMs: 3_000,
+
+  /** Stop watching if OSB hasn't shown the run as running by then (it may already be over). */
+  runStartTimeoutMs: 2 * 60_000,
 
   /** Give up watching after this long. Above the run task's own 1 h deadline (OSB workflow.py). */
   runTimeoutMs: 70 * 60_000,

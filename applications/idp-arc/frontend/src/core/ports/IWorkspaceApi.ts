@@ -39,11 +39,6 @@ export interface StartRunInput {
   results: { notebooks: string; log: string }
 }
 
-export interface RunStatusResult {
-  phase: 'Pending' | 'Running' | 'Succeeded' | 'Failed'
-  message?: string
-}
-
 /**
  * IWorkspaceApi — abstraction over the OSB workspace REST API.
  *
@@ -71,7 +66,4 @@ export interface IWorkspaceApi {
 
   /** Runs notebooks in the workspace (`POST /workspace/{id}/run`); returns at once. */
   startRun(token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }>
-
-  /** A run's state (`GET /workspace/{id}/run/{workflow}`). */
-  getRun(token: string, workspaceId: number, workflow: string): Promise<RunStatusResult>
 }

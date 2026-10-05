@@ -1,7 +1,6 @@
 import type {
   ImportResourceInput,
   IWorkspaceApi,
-  RunStatusResult,
   StartRunInput,
   WorkspaceResourceState,
 } from '../core/ports/IWorkspaceApi'
@@ -133,20 +132,5 @@ export class WorkspaceApiClient implements IWorkspaceApi {
     }
     const body = (await res.json()) as { workflow: string }
     return { workflow: body.workflow }
-  }
-
-  async getRun(token: string, workspaceId: number, workflow: string): Promise<RunStatusResult> {
-    const res = await fetch(`${this.baseApiUrl}/workspace/${workspaceId}/run/${encodeURIComponent(workflow)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) throw new Error(`Reading the run's state failed: ${res.status} ${res.statusText}`)
-    // `status` is Argo's phase as is (as CloudHarness's workflows API reports it); none yet means
-    // the workflow was only just submitted.
-    const body = (await res.json()) as { status?: string; message?: string }
-    const phase: RunStatusResult['phase'] = body.status === 'Succeeded' ? 'Succeeded'
-      : body.status === 'Running' ? 'Running'
-        : body.status === 'Failed' || body.status === 'Error' || body.status === 'Skipped' ? 'Failed'
-          : 'Pending'
-    return { phase, message: body.message ?? undefined }
   }
 }

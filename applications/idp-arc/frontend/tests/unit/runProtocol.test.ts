@@ -10,6 +10,7 @@ import type { RunState } from '../../src/core/types'
 beforeEach(() => {
   RUN_SETTINGS.importPollMs = 1
   RUN_SETTINGS.runPollMs = 1
+  RUN_SETTINGS.runStartTimeoutMs = 20
 })
 
 const FOUR_CHOICE = {
@@ -24,16 +25,18 @@ const FOUR_CHOICE = {
 const auth = { getToken: async () => 'token', tokenParsed: { sub: 'user-1' } }
 const file = () => new File(['x'], 'animal_01.xlsx')
 
-function fakes(opts: { runPhases?: string[]; importPolls?: number; failUpload?: boolean; resources?: WorkspaceResourceState[][] } = {}) {
+/** `runPolls`: how many polls after the run is submitted show OSB's placeholder (its workflow running). */
+function fakes(opts: { runPolls?: number; importPolls?: number; failUpload?: boolean; resources?: WorkspaceResourceState[][] } = {}) {
   const calls: string[] = []
   const imports: ImportResourceInput[] = []
   let runInput: StartRunInput | undefined
   let polls = 0
-  const phases = [...(opts.runPhases ?? ['Pending', 'Running', 'Succeeded'])]
+  let runPollsLeft = 0
   const api: IWorkspaceApi = {
     async listWorkspaces() { return [] },
     async createWorkspace(_t, name, tags) { calls.push(`create:${name}:${tags?.join(',')}`); return 42 },
     async getWorkspaceResources() {
+      if (runPollsLeft > 0) { runPollsLeft -= 1; return [{ id: -1, name: 'Refreshing resources' }] }
       polls += 1
       if (opts.resources) return opts.resources[Math.min(polls - 1, opts.resources.length - 1)]
       if (polls <= (opts.importPolls ?? 2)) return [{ id: -1, name: 'Importing resources into workspace' }]
@@ -42,8 +45,10 @@ function fakes(opts: { runPhases?: string[]; importPolls?: number; failUpload?: 
       return repo ? [{ id: 7, name: '01_load.ipynb', status: 'a', path: `${repo.folder}/${repo.name}/notebooks/01_load.ipynb` }] : []
     },
     async importResource(_t, input) { calls.push(`import:${input.resourceType}`); imports.push(input) },
-    async startRun(_t, ws, input) { calls.push(`run:${ws}`); runInput = input; return { workflow: 'osb-run-notebooks-job-1' } },
-    async getRun() { return { phase: (phases.length > 1 ? phases.shift() : phases[0]) as 'Pending' } },
+    async startRun(_t, ws, input) {
+      calls.push(`run:${ws}`); runInput = input; runPollsLeft = opts.runPolls ?? 2
+      return { workflow: 'osb-run-notebooks-job-1' }
+    },
   }
   const store: IObjectStore = {
     async put(input) {
@@ -155,13 +160,20 @@ test('a failed upload marks only the upload step failed', async () => {
   assert.deepEqual(last.steps.filter((s) => s.state === 'failed').map((s) => s.id), ['upload'])
 })
 
-test('a failed run tells the user to look in the workspace, without OSB\'s message', async () => {
-  const f = fakes({ runPhases: ['Running', 'Failed'] })
-  f.api.getRun = async () => ({ phase: 'Failed', message: '02_qc.ipynb failed; see results/x/notebooks/02_qc.ipynb' })
-  const last = (await run(f)).pop()!
-  assert.equal(last.phase, 'failed')
-  assert.equal(last.error, 'The analysis did not finish. Open the workspace to see what happened.')
-  assert.equal(last.steps.find((s) => s.id === 'run')?.state, 'failed')
+test('the run is followed through the workspace\'s placeholder: running while listed, finished once gone', async () => {
+  const states = await run(fakes({ runPolls: 3 }))
+  assert.ok(states.some((s) => s.steps.find((x) => x.id === 'run')?.detail === 'Running the notebooks'))
+  const last = states[states.length - 1]
+  assert.equal(last.phase, 'succeeded')
+  assert.equal(last.message, 'The analysis has finished')
+  assert.match(last.steps.find((s) => s.id === 'run')?.detail ?? '', /run\.log if anything is missing/)
+})
+
+test('a run never shown as running stops being watched and points to the workspace', async () => {
+  const last = (await run(fakes({ runPolls: 0 }))).pop()!
+  assert.notEqual(last.phase, 'succeeded')
+  assert.notEqual(last.phase, 'failed')
+  assert.match(last.message, /open the workspace/)
 })
 
 test('an import OSB marks as failed stops the run', async () => {

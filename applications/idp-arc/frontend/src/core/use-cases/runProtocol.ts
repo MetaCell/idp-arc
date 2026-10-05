@@ -83,7 +83,9 @@ const STEPS = [
  *   6. Run the notebooks in OSB's Argo task (`POST /workspace/{id}/run`): IDP says which, in what
  *      order, where the input goes, how to set up the environment (REPOSITORY_SETUP) and which
  *      folders are the results; OSB only carries it out. The results go to the run's folder, and
- *      the run task removes the code once it has copied it (discard_repo).
+ *      the run task removes the code once it has copied it (discard_repo). It is followed, like the
+ *      imports, through `GET /workspace/{id}`'s placeholder: that shows when it ends, not whether
+ *      it succeeded.
  *
  * No lab server is started: the imports and the run are OSB's own Argo workflows, and their
  * affinity to the workspace is met by their own pods (verified 5 Oct on a never-opened workspace).
@@ -234,7 +236,7 @@ export function createRunProtocolUseCase(
     async function runNotebooks(workspaceId: number, repoDir: string, notebooks: string[],
       layout: ReturnType<typeof workspaceLayout>, hasData: boolean) {
       progress.start('run', 'running', 'Starting the notebooks…', 'Submitting')
-      const run = await workspaceApi.startRun(await token(), workspaceId, {
+      await workspaceApi.startRun(await token(), workspaceId, {
         // Removed once copied: every run gets the repository as it is now.
         repo: { dir: repoDir, discard: true },
         setup: {
@@ -249,17 +251,23 @@ export function createRunProtocolUseCase(
         results: { notebooks: layout.notebooks, log: layout.log },
       })
       progress.outputsDir = layout.run
+      // Followed through `GET /workspace/{id}`, as the imports are: while a workflow for the
+      // workspace runs, OSB lists a placeholder resource (id -1). Seen, then gone: the run is over.
+      // It doesn't say whether the notebooks succeeded; that's in the run's log.
+      let seen = false
+      const submitted = Date.now()
       const ended = await pollUntil(async () => {
-        const status = await workspaceApi.getRun(await token(), workspaceId, run.workflow)
-        if (status.phase === 'Failed') throw new Error(status.message || 'The notebooks failed')
-        if (status.phase === 'Pending') progress.update('run', 'Waiting for the run to be scheduled', 'Waiting to start the notebooks…')
-        if (status.phase === 'Running') progress.update('run', 'Running the notebooks', 'Running the notebooks…')
-        return status.phase === 'Succeeded'
+        const running = (await workspaceApi.getWorkspaceResources(await token(), workspaceId)).some((r) => r.id === -1)
+        if (running && !seen) progress.update('run', 'Running the notebooks', 'Running the notebooks…')
+        seen ||= running
+        // Never seen: a run that ends within seconds can finish between two polls.
+        return seen ? !running : Date.now() - submitted > RUN_SETTINGS.runStartTimeoutMs
       }, { everyMs: RUN_SETTINGS.runPollMs, timeoutMs: RUN_SETTINGS.runTimeoutMs, stopped })
       if (ended === 'timeout') progress.finish('Still running in the workspace; open it to follow the results', false)
       if (ended !== 'done') return
-      progress.done('run', `Results in ${layout.run}/`)
-      progress.finish('Analysis finished')
+      if (!seen) return progress.finish('The run could not be followed; open the workspace to see its results', false)
+      progress.done('run', `Results in ${layout.run}/; see ${layout.log} if anything is missing`)
+      progress.finish('The analysis has finished')
     }
   }
 }

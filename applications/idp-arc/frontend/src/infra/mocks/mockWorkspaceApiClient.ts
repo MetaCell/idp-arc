@@ -1,7 +1,6 @@
 import type {
   ImportResourceInput,
   IWorkspaceApi,
-  RunStatusResult,
   StartRunInput,
   WorkspaceResourceState,
 } from '../../core/ports/IWorkspaceApi'
@@ -65,15 +64,22 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
   private imports: { name: string; pendingPolls: number }[] = []
   /** What OSB's scan would list once the imports are done: the repository's notebooks. */
   private notebooks: WorkspaceResourceState[] = []
-  private runs = new Map<string, number>()
+  /** Polls left showing a run as running (OSB's placeholder while its workflow runs). */
+  private runPolls = 0
+  private runCount = 0
 
   async getWorkspaceResources(_token: string, _workspaceId: number): Promise<WorkspaceResourceState[]> {
     await delay(200)
     this.imports.forEach((i) => { i.pendingPolls -= 1 })
     this.imports = this.imports.filter((i) => i.pendingPolls > 0)
-    return this.imports.length
-      ? [{ id: -1, name: 'Importing resources into workspace' }, ...this.imports.map((i, n) => ({ id: 100 + n, name: i.name, status: 'p' as const }))]
-      : this.notebooks
+    if (this.imports.length) {
+      return [{ id: -1, name: 'Importing resources into workspace' }, ...this.imports.map((i, n) => ({ id: 100 + n, name: i.name, status: 'p' as const }))]
+    }
+    if (this.runPolls > 0) {
+      this.runPolls -= 1
+      return [{ id: -1, name: 'Refreshing resources' }, ...this.notebooks]
+    }
+    return this.notebooks
   }
 
   async importResource(_token: string, input: ImportResourceInput): Promise<void> {
@@ -89,16 +95,10 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
 
   async startRun(_token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }> {
     await delay(300)
-    const workflow = `osb-run-notebooks-job-mock${this.runs.size + 1}`
-    this.runs.set(workflow, 0)
+    const workflow = `osb-run-notebooks-job-mock${++this.runCount}`
+    this.runPolls = 3
     console.info(`[MockWorkspaceApiClient] startRun(#${workspaceId}, ${input.repo.dir}: ${input.notebooks.join(', ')}) → ${workflow}`)
     return { workflow }
-  }
-
-  async getRun(_token: string, _workspaceId: number, workflow: string): Promise<RunStatusResult> {
-    const polls = (this.runs.get(workflow) ?? 0) + 1
-    this.runs.set(workflow, polls)
-    return { phase: polls < 2 ? 'Pending' : polls < 4 ? 'Running' : 'Succeeded' }
   }
 }
 
