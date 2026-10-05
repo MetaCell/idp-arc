@@ -23,27 +23,20 @@ export interface ImportResourceInput {
   resourceType: 'e' | 'g'
 }
 
+/** POST /workspace/{id}/run: what to run, how to set it up, and where its files go (all paths relative). */
 export interface StartRunInput {
-  /** The repository on the volume. */
-  repoDir: string
-  /** The notebooks to run, relative to repoDir, in the order to run them. */
+  /** The repository on the volume; `discard` removes it once the run has copied it. */
+  repo: { dir: string; discard?: boolean }
+  /** Set-up paths in the repository; OSB skips the ones it doesn't have. */
+  setup?: { requirements?: string; pythonPath?: string[]; install?: string[] }
+  /** The notebooks to run, relative to repo.dir, in this order. */
   notebooks: string[]
-  /** The imported data on the volume, if any. */
-  inputPath?: string
-  /** Repository-relative folder the notebooks read their input from; required with inputPath. */
-  inputDir?: string
-  /** Repository-relative folders whose contents are the run's results; emptied before the run. */
-  outputs?: string[]
-  /** Requirements file to pip-install first, if the repository has it. */
-  requirements?: string
-  /** Folders to put on PYTHONPATH, the ones the repository has. */
-  pythonPath?: string[]
-  /** Install candidates (a .py to run, or a setup.py / pyproject.toml); OSB uses the first it finds. */
-  install?: string[]
-  /** Results folder on the volume; the run adds its own folder, `run-[<name>-]<UTC timestamp>`. */
-  outputDir?: string
-  /** Short name for the run's folder (the protocol id): lowercase letters, digits and `-`. */
-  name?: string
+  /** Copied into the repository before the run: a file or folder on the volume → a repository folder. */
+  inputs?: { fromVolume: string; toRepo: string }[]
+  /** Copied out after the run, also when it fails: a repository folder → a folder on the volume. */
+  outputs?: { fromRepo: string; toVolume: string }[]
+  /** Where the executed notebooks and the log go on the volume. */
+  results: { notebooks: string; log: string }
 }
 
 export interface RunStatusResult {
@@ -77,7 +70,7 @@ export interface IWorkspaceApi {
   importResource(token: string, input: ImportResourceInput): Promise<void>
 
   /** Runs notebooks in the workspace (`POST /workspace/{id}/run`); returns at once. */
-  startRun(token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string; outputDir: string }>
+  startRun(token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }>
 
   /** A run's state (`GET /workspace/{id}/run/{workflow}`). */
   getRun(token: string, workspaceId: number, workflow: string): Promise<RunStatusResult>

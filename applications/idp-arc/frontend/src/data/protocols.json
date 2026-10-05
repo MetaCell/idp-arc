@@ -19,7 +19,7 @@
     "repoZipUrl": "https://codeload.github.com/maracbaylis/four-choice-example/zip/refs/heads/main",
     "notebooksDir": "notebooks",
     "inputDir": "example_data",
-    "outputs": ["outputs"],
+    "outputs": ["outputs/notebook_example"],
     "inputFormats": [
       ".xlsx",
       ".zip"

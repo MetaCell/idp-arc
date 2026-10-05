@@ -26,6 +26,9 @@ import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
 import { formatBytes } from '../core/formatBytes'
 import protocols from '../data/protocols.json'
 
+/** Only protocols with an analysis repository can be run, so only those are offered. */
+const runnableProtocols = protocols.filter((p) => 'repoZipUrl' in p && p.repoZipUrl)
+
 type DialogStep = 'select' | 'upload' | 'uploading' | 'success' | 'failed'
 
 export interface DataUploadDialogProps {
@@ -129,7 +132,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
 
 
   /** The selected protocol; its `repoZipUrl` in protocols.json is the analysis that runs. */
-  const selectedProtocol = protocols.find((p) => p.name === protocol)
+  const selectedProtocol = runnableProtocols.find((p) => p.name === protocol)
   const inputFormats = inputFormatsFor(selectedProtocol?.inputFormats)
   const fileProblem = file ? inputFileProblem(file, selectedProtocol?.name ?? 'This protocol', selectedProtocol?.inputFormats) : null
 
@@ -284,7 +287,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
                   sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px' }}
                   renderValue={(v) => v || <span style={{ color: '#FFFFFF99' }}>Select behavioral task / protocol..</span>}
                 >
-                  {protocols.map((p) => (
+                  {runnableProtocols.map((p) => (
                     <MenuItem key={p.name} value={p.name} sx={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>{p.name}</MenuItem>
                   ))}
                 </Select>

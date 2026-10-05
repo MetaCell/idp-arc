@@ -6,6 +6,7 @@ import { inputFileProblem } from '../inputFormats'
 import { parseRepoZipUrl, type ProtocolRepo } from '../protocolRepo'
 import { RUN_SETTINGS } from '../runSettings'
 import { UserFacingError } from '../userMessages'
+import { workspaceLayout } from '../workspaceLayout'
 import { inStep, pollUntil, RunProgress, type OnRunState } from './runProgress'
 
 export type { OnRunState } from './runProgress'
@@ -71,9 +72,9 @@ const STEPS = [
  *      the file is safely in the bucket, so a failed upload leaves no empty workspace.
  *   2. Workspace: the selected one, or a new one tagged `maabcd:<protocol id>`.
  *   3. Import the repository and
- *   4. import the data, both through OSB (`POST /workspaceresource`) into this run's own folder,
- *      `idp/<run id>/{repo,data}/`, so files of the same name never collide and a zip is unpacked
- *      in place.
+ *   4. import the data, both through OSB (`POST /workspaceresource`) into this run's own folder
+ *      (workspaceLayout): the code fresh for every run, the upload in its data/ (a zip is unpacked
+ *      there).
  *   5. Wait for the imports: done when `GET /workspace/{id}` lists no pending resource and no
  *      "Importing resources" placeholder. (Not "every resource is `a`": OSB's scan only indexes
  *      .nwb/.npjson/.ipynb, and drops other resources once copied.) They worked if the scan then
@@ -81,8 +82,8 @@ const STEPS = [
  *      checked this way. Those notebooks, in byte order of their names, are what step 6 runs.
  *   6. Run the notebooks in OSB's Argo task (`POST /workspace/{id}/run`): IDP says which, in what
  *      order, where the input goes, how to set up the environment (REPOSITORY_SETUP) and which
- *      folders are the results; OSB only carries it out.
- *      Results go to `results/run-<protocol id>-<UTC timestamp>/` (OSB names the folder).
+ *      folders are the results; OSB only carries it out. The results go to the run's folder, and
+ *      the run task removes the code once it has copied it (discard_repo).
  *
  * No lab server is started: the imports and the run are OSB's own Argo workflows, and their
  * affinity to the workspace is met by their own pods (verified 5 Oct on a never-opened workspace).
@@ -104,8 +105,8 @@ export function createRunProtocolUseCase(
       const { repo, userId } = checkBeforeStarting(input)
       // This run's folder in the workspace, and where the repository lands in it (the zip
       // unpacks to <repo>-<ref>/).
-      const folder = `idp/${crypto.randomUUID()}`
-      const repoDir = `${folder}/repo/${repo.folder}`
+      const layout = workspaceLayout(protocol.id, new Date())
+      const repoDir = `${layout.run}/${repo.folder}`
       if (!file) {
         progress.skip('upload')
         progress.skip('data')
@@ -121,10 +122,10 @@ export function createRunProtocolUseCase(
       if (stopped()) return
 
       // 3. Import the analysis code (the protocol's repository).
-      await inStep('repo', () => importRepo(workspaceId, repo, folder))
+      await inStep('repo', () => importRepo(workspaceId, repo, layout.run))
 
       // 4. Import the uploaded data.
-      if (stored && file) await inStep('data', () => importData(workspaceId, file, stored, folder))
+      if (stored && file) await inStep('data', () => importData(workspaceId, file, stored, layout.data))
 
       // 5. Wait for the imports, and find the notebooks to run.
       if (stopped()) return
@@ -132,7 +133,7 @@ export function createRunProtocolUseCase(
       if (!notebooks) return
 
       // 6. Run the notebooks.
-      await inStep('run', () => runNotebooks(workspaceId, repoDir, notebooks, folder, !!stored))
+      await inStep('run', () => runNotebooks(workspaceId, repoDir, notebooks, layout, !!stored))
     } catch (err) {
       progress.fail(err)
     }
@@ -184,7 +185,7 @@ export function createRunProtocolUseCase(
     async function importRepo(workspaceId: number, repo: ProtocolRepo, folder: string) {
       progress.start('repo', 'importing', 'Importing the analysis code…')
       await workspaceApi.importResource(await token(), {
-        workspaceId, name: repo.folder, url: protocol.repoZipUrl!, folder: `${folder}/repo`, resourceType: 'g',
+        workspaceId, name: repo.folder, url: protocol.repoZipUrl!, folder, resourceType: 'g',
       })
       progress.done('repo')
     }
@@ -193,7 +194,7 @@ export function createRunProtocolUseCase(
     async function importData(workspaceId: number, file: File, stored: StoredObject, folder: string) {
       progress.start('data', 'importing', 'Importing your data…')
       await workspaceApi.importResource(await token(), {
-        workspaceId, name: file.name, url: stored.url, folder: `${folder}/data`, resourceType: 'e',
+        workspaceId, name: file.name, url: stored.url, folder, resourceType: 'e',
       })
       progress.done('data')
     }
@@ -230,21 +231,24 @@ export function createRunProtocolUseCase(
     }
 
     /** Step 6. */
-    async function runNotebooks(workspaceId: number, repoDir: string, notebooks: string[], folder: string, hasData: boolean) {
+    async function runNotebooks(workspaceId: number, repoDir: string, notebooks: string[],
+      layout: ReturnType<typeof workspaceLayout>, hasData: boolean) {
       progress.start('run', 'running', 'Starting the notebooks…', 'Submitting')
       const run = await workspaceApi.startRun(await token(), workspaceId, {
-        repoDir,
+        // Removed once copied: every run gets the repository as it is now.
+        repo: { dir: repoDir, discard: true },
+        setup: {
+          requirements: protocol.requirements ?? REPOSITORY_SETUP.requirements,
+          pythonPath: protocol.pythonPath ?? REPOSITORY_SETUP.pythonPath,
+          install: protocol.install ?? REPOSITORY_SETUP.install,
+        },
         notebooks,
-        inputPath: hasData ? `${folder}/data` : undefined,
-        inputDir: hasData ? protocol.inputDir : undefined,
-        outputs: protocol.outputs,
-        requirements: protocol.requirements ?? REPOSITORY_SETUP.requirements,
-        pythonPath: protocol.pythonPath ?? REPOSITORY_SETUP.pythonPath,
-        install: protocol.install ?? REPOSITORY_SETUP.install,
-        outputDir: 'results',
-        name: protocol.id,
+        // The upload goes where the notebooks read; what they write is collected into the run's outputs/.
+        inputs: hasData && protocol.inputDir ? [{ fromVolume: layout.data, toRepo: protocol.inputDir }] : [],
+        outputs: (protocol.outputs ?? []).map((folder) => ({ fromRepo: folder, toVolume: layout.outputs })),
+        results: { notebooks: layout.notebooks, log: layout.log },
       })
-      progress.outputsDir = run.outputDir
+      progress.outputsDir = layout.run
       const ended = await pollUntil(async () => {
         const status = await workspaceApi.getRun(await token(), workspaceId, run.workflow)
         if (status.phase === 'Failed') throw new Error(status.message || 'The notebooks failed')
@@ -254,7 +258,7 @@ export function createRunProtocolUseCase(
       }, { everyMs: RUN_SETTINGS.runPollMs, timeoutMs: RUN_SETTINGS.runTimeoutMs, stopped })
       if (ended === 'timeout') progress.finish('Still running in the workspace; open it to follow the results', false)
       if (ended !== 'done') return
-      progress.done('run', `Results in ${run.outputDir}/`)
+      progress.done('run', `Results in ${layout.run}/`)
       progress.finish('Analysis finished')
     }
   }

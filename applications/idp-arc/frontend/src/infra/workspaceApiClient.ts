@@ -114,28 +114,25 @@ export class WorkspaceApiClient implements IWorkspaceApi {
     }
   }
 
-  async startRun(token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string; outputDir: string }> {
+  async startRun(token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }> {
+    const { repo, setup, notebooks, inputs, outputs, results } = input
     const res = await fetch(`${this.baseApiUrl}/workspace/${workspaceId}/run`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        repo_dir: input.repoDir,
-        notebooks: input.notebooks,
-        ...(input.inputPath ? { input_path: input.inputPath } : {}),
-        ...(input.inputDir ? { input_dir: input.inputDir } : {}),
-        ...(input.outputs?.length ? { outputs: input.outputs } : {}),
-        ...(input.requirements ? { requirements: input.requirements } : {}),
-        ...(input.pythonPath?.length ? { python_path: input.pythonPath } : {}),
-        ...(input.install?.length ? { install: input.install } : {}),
-        ...(input.outputDir ? { output_dir: input.outputDir } : {}),
-        ...(input.name ? { name: input.name } : {}),
+        repo,
+        ...(setup ? { setup: { requirements: setup.requirements, python_path: setup.pythonPath, install: setup.install } } : {}),
+        notebooks,
+        ...(inputs?.length ? { inputs: inputs.map((i) => ({ from_volume: i.fromVolume, to_repo: i.toRepo })) } : {}),
+        ...(outputs?.length ? { outputs: outputs.map((o) => ({ from_repo: o.fromRepo, to_volume: o.toVolume })) } : {}),
+        results,
       }),
     })
     if (!res.ok) {
       throw new Error(`Starting the notebooks failed: ${res.status} ${res.statusText} ${await res.text().catch(() => '')}`.trim())
     }
-    const body = (await res.json()) as { workflow: string; output_dir: string }
-    return { workflow: body.workflow, outputDir: body.output_dir }
+    const body = (await res.json()) as { workflow: string }
+    return { workflow: body.workflow }
   }
 
   async getRun(token: string, workspaceId: number, workflow: string): Promise<RunStatusResult> {
@@ -143,7 +140,13 @@ export class WorkspaceApiClient implements IWorkspaceApi {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) throw new Error(`Reading the run's state failed: ${res.status} ${res.statusText}`)
-    const body = (await res.json()) as { phase: RunStatusResult['phase']; message?: string }
-    return { phase: body.phase, message: body.message ?? undefined }
+    // `status` is Argo's phase as is (as CloudHarness's workflows API reports it); none yet means
+    // the workflow was only just submitted.
+    const body = (await res.json()) as { status?: string; message?: string }
+    const phase: RunStatusResult['phase'] = body.status === 'Succeeded' ? 'Succeeded'
+      : body.status === 'Running' ? 'Running'
+        : body.status === 'Failed' || body.status === 'Error' || body.status === 'Skipped' ? 'Failed'
+          : 'Pending'
+    return { phase, message: body.message ?? undefined }
   }
 }

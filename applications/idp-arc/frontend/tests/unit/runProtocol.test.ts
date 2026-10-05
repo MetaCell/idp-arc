@@ -42,7 +42,7 @@ function fakes(opts: { runPhases?: string[]; importPolls?: number; failUpload?: 
       return repo ? [{ id: 7, name: '01_load.ipynb', status: 'a', path: `${repo.folder}/${repo.name}/notebooks/01_load.ipynb` }] : []
     },
     async importResource(_t, input) { calls.push(`import:${input.resourceType}`); imports.push(input) },
-    async startRun(_t, ws, input) { calls.push(`run:${ws}`); runInput = input; return { workflow: 'osb-run-notebooks-job-1', outputDir: `${input.outputDir}/run-${input.name}-2026-10-05T04-01-12Z` } },
+    async startRun(_t, ws, input) { calls.push(`run:${ws}`); runInput = input; return { workflow: 'osb-run-notebooks-job-1' } },
     async getRun() { return { phase: (phases.length > 1 ? phases.shift() : phases[0]) as 'Pending' } },
   }
   const store: IObjectStore = {
@@ -62,38 +62,40 @@ async function run(f: ReturnType<typeof fakes>, input: Partial<Parameters<Return
   return states
 }
 
-test('uploads, imports both into the run folder, waits, runs, and reports the results folder', async () => {
+test('uploads, imports both into the run folder, waits, runs, and reports the run folder', async () => {
   const f = fakes()
   const states = await run(f)
   const last = states[states.length - 1]
 
   assert.equal(last.phase, 'succeeded', last.error)
   assert.equal(last.workspaceId, 42)
-  assert.equal(last.outputsDir, 'results/run-four-choice-reversal-2026-10-05T04-01-12Z')
   assert.deepEqual(last.steps.map((s) => s.state), Array(6).fill('succeeded'))
   assert.ok(f.calls.includes('create:Four-choice:maabcd:four-choice-reversal'))
 
+  // <protocol>/run-<protocol>-<UTC time>/: the code and the upload, imported into the run's folder.
   const [repo, data] = f.imports
-  const folder = repo.folder.replace(/\/repo$/, '')
-  assert.match(folder, /^idp\/[0-9a-f-]{36}$/)
-  assert.deepEqual(repo, { workspaceId: 42, name: 'four-choice-example-main', url: FOUR_CHOICE.repoZipUrl, folder: `${folder}/repo`, resourceType: 'g' })
+  const folder = repo.folder
+  assert.match(folder, /^four-choice-reversal\/run-four-choice-reversal-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\dZ$/)
+  assert.equal(last.outputsDir, folder)
+  assert.deepEqual(repo, { workspaceId: 42, name: 'four-choice-example-main', url: FOUR_CHOICE.repoZipUrl, folder, resourceType: 'g' })
   assert.equal(data.folder, `${folder}/data`)
   assert.equal(data.resourceType, 'e')
   assert.match(data.url, /^https:\/\/storage\.googleapis\.com\/maabcd\/uploads\/four-choice-reversal\/user-1\//)
 
   assert.deepEqual(f.runInput(), {
-    repoDir: `${folder}/repo/four-choice-example-main`, notebooks: ['notebooks/01_load.ipynb'],
-    inputPath: `${folder}/data`, inputDir: 'example_data', outputs: ['outputs'],
-    requirements: 'requirements.txt', pythonPath: ['scripts'],
-    install: ['scripts/install.py', 'scripts/setup.py', 'scripts/pyproject.toml'],
-    outputDir: 'results', name: 'four-choice-reversal',
+    repo: { dir: `${folder}/four-choice-example-main`, discard: true },
+    setup: { requirements: 'requirements.txt', pythonPath: ['scripts'], install: ['scripts/install.py', 'scripts/setup.py', 'scripts/pyproject.toml'] },
+    notebooks: ['notebooks/01_load.ipynb'],
+    inputs: [{ fromVolume: `${folder}/data`, toRepo: 'example_data' }],
+    outputs: [{ fromRepo: 'outputs', toVolume: `${folder}/outputs` }],
+    results: { notebooks: `${folder}/notebooks`, log: `${folder}/run.log` },
   })
 })
 
 test('a protocol can override how its repository is set up', async () => {
   const f = fakes()
   await run(f, { protocol: { ...FOUR_CHOICE, requirements: 'env/requirements.txt', pythonPath: [], install: ['setup/pyproject.toml'] } })
-  const { requirements, pythonPath, install } = f.runInput()!
+  const { requirements, pythonPath, install } = f.runInput()!.setup!
   assert.deepEqual({ requirements, pythonPath, install }, { requirements: 'env/requirements.txt', pythonPath: [], install: ['setup/pyproject.toml'] })
 })
 
@@ -140,7 +142,7 @@ test('without a file: no upload, no data import, the notebooks run on the exampl
   const last = states[states.length - 1]
   assert.equal(last.phase, 'succeeded')
   assert.deepEqual(f.imports.map((i) => i.resourceType), ['g'])
-  assert.equal(f.runInput()?.inputPath, undefined)
+  assert.deepEqual(f.runInput()?.inputs, [])
   assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'data'])
 })
 
