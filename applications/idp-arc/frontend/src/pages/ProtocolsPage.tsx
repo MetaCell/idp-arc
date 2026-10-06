@@ -12,6 +12,7 @@ import {
 import { useState } from 'react'
 import PageLayout from '../components/PageLayout'
 import protocols from '../data/protocols.json'
+import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 
 // imageUrls entries starting with "assets/" point into src/assets and must go through Vite
 // to get a hashed build URL; anything else is served as-is from public/.
@@ -35,6 +36,7 @@ const protocolCardSx = {
 export default function ProtocolsPage() {
   const [activeProtocol, setActiveProtocol] = useState(0)
   const active = protocols[activeProtocol]
+  const templatesHref = templatesZipHref(active)
 
   return (
     <PageLayout title="Protocols" height={477}>
@@ -114,6 +116,10 @@ export default function ProtocolsPage() {
               <Stack direction="row" sx={{ gap: 1 }}>
                 <Button
                   variant="outlined"
+                  component="a"
+                  href={templatesHref ?? undefined}
+                  download={templatesZipFileName(active)}
+                  disabled={!templatesHref}
                 >
                   Download
                 </Button>

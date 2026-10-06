@@ -41,8 +41,8 @@
     "items": [
       { "alt": "UC Berkeley", "src": "/UCBerkeley.png" },
       { "alt": "Emory University", "src": "/Emory.png" },
-      { "alt": "UCL", "src": "/UCL.png" },
-      { "alt": "UC Santa Cruz", "src": "/UCSantaCruz.png" }
+      { "alt": "UC Santa Cruz", "src": "/UCSantaCruz.png" },
+      { "alt": "UCL", "src": "/UCL.png" }
     ]
   }
 }

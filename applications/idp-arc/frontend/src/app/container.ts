@@ -42,7 +42,7 @@ const FRONTEND_BASE  = `${PROTOCOL}://www.${BASE_DOMAIN}`
 export const authClient = new KeycloakAuthClient({
   url: import.meta.env.VITE_KEYCLOAK_URL ?? 'https://accounts.v2dev.opensourcebrain.org',
   realm: import.meta.env.VITE_KEYCLOAK_REALM ?? 'osb2dev',
-  clientId: 'idp-arc',
+  clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? 'maabcd',
 })
 
 const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)

@@ -14,6 +14,7 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
 | `repoZipUrl` | run | GitHub archive of the analysis repository, `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>` (or `refs/tags/<tag>`, or `/zip/<commit>`). A **branch** follows the latest fixes; a **commit** freezes the code. An empty `repoZipUrl` = no analysis yet: the upload dialog doesn't offer the protocol. |
 | `notebooksDir` | run | Repository-relative folder of the notebooks (`notebooks`). |
 | `requirements`, `pythonPath`, `install` | run | Override the repository setup below (defaults in `REPOSITORY_SETUP`, runProtocol.ts: `requirements.txt`; `["scripts"]`; `["scripts/install.py", "scripts/setup.py", "scripts/pyproject.toml"]`). OSB applies only the ones the repository has. Leave them out for a repository that follows the contract. |
+| `templatesZipUrl` | Protocols page, dialog | Archive of the protocol's templates (data sheets, instructions), downloaded by the **Download** buttons on the Protocols page and in the dialog's upload step. A path relative to `public/` (`protocols_archives/4c.zip`) or an absolute URL. Missing or empty = both buttons disabled. |
 | `inputFormats` | dialog, run | Extensions the analysis code can actually read. The dialog refuses other files before anything starts. **Without it, any file is accepted** (except an empty one, always refused). |
 
 ## What happens on "Upload and run" (core/use-cases/runProtocol.ts)
