@@ -1,8 +1,10 @@
 [
   {
+    "id": "four-choice-reversal",
     "name": "Four-choice reversal digging task",
-    "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
-    "scriptName": "four-choice-reversal-analysis.py",
+    "repoZipUrl": "https://codeload.github.com/maracbaylis/four-choice-example/zip/refs/heads/main",
+    "notebooksDir": "notebooks",
+    "inputFormats": [".xlsx", ".zip"],
     "description": "In the four choice reversal digging task mice must identify the single rewarded option and update their choice when a previously unrewarded option becomes rewarded. The reversal phase in this task is sensitive to orbitofrontal and dorsomedial prefrontal cortex function and the 2-day version used here provides a metric of recall on the 2nd day of testing before reversal.",
     "imageUrls": ["assets/four_choice_graphic.jpeg"],
     "videoUrl": "https://storage.googleapis.com/maabcd/tutorial.mp4",
@@ -16,9 +18,9 @@
     ]
   },
   {
+    "id": "asst-digging",
     "name": "ASST digging task",
-    "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
-    "scriptName": "asst-digging-analysis.py",
+    "repoZipUrl": "",
     "description": "The attentional set-shifting task (ASST) is a rodent analogue of the Cambridge Neuropsychological Test Automated Battery (CANTAB) IED task. It assesses the ability to shift attention between perceptual dimensions of compound stimuli. The task requires animals to learn sequential discriminations, measuring the cost of shifting attention from one perceptual dimension to another.",
     "imageUrls": ["assets/ASST_graphic.jpeg"],
     "videoUrl": "",
@@ -27,9 +29,9 @@
     ]
   },
   {
+    "id": "two-arm-bandit",
     "name": "Two arm bandit task",
-    "scriptUrl": "https://gist.githubusercontent.com/D-GopalKrishna/fa759c74fce007dc3cc0808382e8aa79/raw/gistfile1.txt",
-    "scriptName": "two-arm-bandit-analysis.py",
+    "repoZipUrl": "",
     "description": "The two-armed bandit task is a classic paradigm in behavioral neuroscience used to study decision-making under uncertainty. In this task, participants are presented with two options, each associated with a different probability of reward. By repeatedly choosing between the two options, participants learn to exploit the option with the higher reward probability while also exploring the other option to ensure that they are not missing out on a potentially better source of reward. This task has been used to investigate the neural mechanisms underlying reinforcement learning, exploration-exploitation trade-offs, and the role of different brain regions in decision-making.",
     "imageUrls": ["assets/BanditFigure_UCLstyleBohan.png"],
     "videoUrl": "",

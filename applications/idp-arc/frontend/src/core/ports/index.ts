@@ -1,3 +1,5 @@
 export type { IAuthClient } from './IAuthClient'
 export type { IWorkspaceApi } from './IWorkspaceApi'
 export type { IDandiApi } from './IDandiApi'
+export type { IObjectStore, ObjectUploadInput, StoredObject } from './IObjectStore'
+export type { ImportResourceInput, StartRunInput, WorkspaceResourceState } from './IWorkspaceApi'

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test('page has correct title', async ({ page }) => {
   await page.goto('/')
-  await expect(page).toHaveTitle('idp-arc')
+  await expect(page).toHaveTitle('MAABCD')
 })
 
 test('root element is rendered', async ({ page }) => {

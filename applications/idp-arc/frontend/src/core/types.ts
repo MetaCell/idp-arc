@@ -50,3 +50,36 @@ export const PHASE_LABELS: Record<UploadPhase, string> = {
   done: 'Done!',
   error: 'Error',
 }
+
+// ─── Protocol run (upload, OSB imports, notebooks in an Argo task) ───────────
+
+export type RunPhase =
+  | 'uploading'
+  | 'workspace'
+  | 'importing'
+  | 'running'
+  /** Still running in the workspace past the watch limit: no longer followed here. */
+  | 'stillRunning'
+  | 'succeeded'
+  | 'failed'
+
+export type StepState = 'pending' | 'running' | 'succeeded' | 'skipped' | 'failed'
+
+/** One line of the run's checklist in the UI. */
+export interface RunStep {
+  id: string
+  label: string
+  state: StepState
+  detail?: string
+}
+
+export interface RunState {
+  phase: RunPhase
+  message: string
+  /** Every step of the run, in order, for the checklist. */
+  steps: RunStep[]
+  workspaceId?: number
+  /** This run's results folder, relative to the workspace root. */
+  outputsDir?: string
+  error?: string
+}

@@ -1,4 +1,9 @@
-import type { IWorkspaceApi } from '../core/ports/IWorkspaceApi'
+import type {
+  ImportResourceInput,
+  IWorkspaceApi,
+  StartRunInput,
+  WorkspaceResourceState,
+} from '../core/ports/IWorkspaceApi'
 import type { Workspace } from '../core/types'
 
 function sleep(ms: number): Promise<void> {
@@ -30,7 +35,7 @@ export class WorkspaceApiClient implements IWorkspaceApi {
     return (obj.results ?? obj.items ?? obj.workspaces ?? []) as Workspace[]
   }
 
-  async createWorkspace(token: string, name: string): Promise<number> {
+  async createWorkspace(token: string, name: string, tags: string[] = []): Promise<number> {
     const RETRYABLE = new Set([502, 503, 504])
     const MAX_ATTEMPTS = 3
     let lastError: Error = new Error('Workspace creation failed')
@@ -44,7 +49,11 @@ export class WorkspaceApiClient implements IWorkspaceApi {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: name.trim(), description: name.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: name.trim(),
+          ...(tags.length ? { tags: tags.map((tag) => ({ tag })) } : {}),
+        }),
       })
 
       if (res.ok) {
@@ -70,5 +79,58 @@ export class WorkspaceApiClient implements IWorkspaceApi {
     }
 
     throw lastError
+  }
+
+  async getWorkspaceResources(token: string, workspaceId: number): Promise<WorkspaceResourceState[]> {
+    const res = await fetch(`${this.baseApiUrl}/workspace/${workspaceId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) throw new Error(`Reading workspace ${workspaceId} failed: ${res.status} ${res.statusText}`)
+    const ws = (await res.json()) as { resources?: { id: number; name: string; status?: 'p' | 'a' | 'e'; path?: string }[] }
+    return (ws.resources ?? []).map(({ id, name, status, path }) => ({ id, name, status, path }))
+  }
+
+  async importResource(token: string, input: ImportResourceInput): Promise<void> {
+    const folder = `${input.folder.replace(/\/+$/, '')}/`
+    const res = await fetch(`${this.baseApiUrl}/workspaceresource`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workspace_id: input.workspaceId,
+        name: input.name,
+        resource_type: input.resourceType,
+        origin: { path: input.url },
+        // A folder path (trailing slash): OSB copies the download into it (a zip is unpacked there).
+        path: folder,
+        // Sent as well because OSB's WorkspaceresourceService.to_dao only renames `path` to the
+        // database's `folder` when a `folder` key is present (`if 'folder' in ws_dict`); with
+        // `path` alone the create fails with MalformedModelDictionaryError.
+        folder,
+      }),
+    })
+    if (!res.ok) {
+      throw new Error(`Importing ${input.name} into the workspace failed: ${res.status} ${res.statusText} ${await res.text().catch(() => '')}`.trim())
+    }
+  }
+
+  async startRun(token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }> {
+    const { repo, setup, notebooks, inputDir, outputDir, results } = input
+    const res = await fetch(`${this.baseApiUrl}/workspace/${workspaceId}/run`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo,
+        ...(setup ? { setup: { requirements: setup.requirements, python_path: setup.pythonPath, install: setup.install } } : {}),
+        notebooks,
+        ...(inputDir ? { input_dir: inputDir } : {}),
+        output_dir: outputDir,
+        results,
+      }),
+    })
+    if (!res.ok) {
+      throw new Error(`Starting the notebooks failed: ${res.status} ${res.statusText} ${await res.text().catch(() => '')}`.trim())
+    }
+    const body = (await res.json()) as { workflow: string }
+    return { workflow: body.workflow }
   }
 }

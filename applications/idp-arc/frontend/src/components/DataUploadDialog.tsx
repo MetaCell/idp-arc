@@ -15,13 +15,23 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlin
 import CloseIcon from '@mui/icons-material/Close'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
+import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
-import { createAndUploadToDandi, getWorkspaceUrl, loadWorkspaces } from '../app/container'
+import { getWorkspaceUrl, loadWorkspaces, runProtocol } from '../app/container'
 import { useAppContext } from '../AppContext'
-import type { Workspace } from '../core/types'
+import type { RunStep, Workspace } from '../core/types'
+import RunChecklist from './RunChecklist'
+import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
+import { formatBytes } from '../core/formatBytes'
+import { SIGN_IN_AGAIN } from '../core/userMessages'
 import protocols from '../data/protocols.json'
 
-type DialogStep = 'select' | 'upload' | 'uploading' | 'success'
+/** Only protocols with an analysis repository can be run, so only those are offered. */
+const runnableProtocols = protocols.filter((p) => 'repoZipUrl' in p && p.repoZipUrl)
+
+type DialogStep = 'select' | 'upload' | 'uploading' | 'success' | 'stillRunning' | 'failed'
 
 export interface DataUploadDialogProps {
   open: boolean
@@ -34,7 +44,6 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
 
   interface FormState {
     step: DialogStep
-    behavioralTask: string
     protocol: string
     workspaceId: string | number
     file: File | null
@@ -42,36 +51,67 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
     uploadMessage: string
     /** ID of the workspace spawned in the current dialog session; drives retry behaviour. */
     spawnedWorkspaceId: number | undefined
+    /** Where the last run's results are, relative to the workspace root. */
+    outputsDir: string
+    /** The run's checklist (upload, imports, run), as last reported by the use-case. */
+    runSteps: RunStep[]
   }
 
   const INITIAL_FORM: FormState = {
     step: 'select',
-    behavioralTask: '',
     protocol: '',
     workspaceId: '',
     file: null,
     isDragging: false,
     uploadMessage: '',
     spawnedWorkspaceId: undefined,
+    outputsDir: '',
+    runSteps: [],
   }
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const { step, behavioralTask, protocol, workspaceId, file, isDragging, uploadMessage, spawnedWorkspaceId } = form
+  const { step, protocol, workspaceId, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps } = form
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const abortRef = useRef(false)
+  // The run being watched; each run gets its own token, so stopping one never revives another.
+  const watchRef = useRef<{ current: boolean } | null>(null)
+
+  // The dialog can't be closed from clicking Upload until the notebooks have started in OSB:
+  // before that, closing would abandon the upload or the imports half way (and the user would
+  // have to start over). Once they run in OSB's task, closing only stops watching.
+  const [closeLocked, setCloseLocked] = useState(false)
+  useEffect(() => {
+    if (step !== 'uploading') setCloseLocked(false) // finished, failed, or sent back to the form
+  }, [step])
+
+  // While a run is being set up, uploaded or watched, ask before the page is reloaded or closed:
+  // the upload is driven by this tab and would be lost, and the progress view would lose track
+  // of the run (which itself carries on in the workspace). Browsers show their own generic
+  // "Leave site?" text. This can't stop sleep, a crash, or the browser discarding the tab.
+  useEffect(() => {
+    if (!open || step !== 'uploading') return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = '' // still needed by some browsers to show the prompt
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [open, step])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      // Stops watching only: the run itself carries on in the workspace.
+      if (watchRef.current) watchRef.current.current = true
+      return
+    }
     setForm(INITIAL_FORM)
-    abortRef.current = false
     setLoadingWorkspaces(true)
     loadWorkspaces()
       .then(setWorkspaces)
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
-        if (msg.includes('sign in again')) {
+        if (msg.includes(SIGN_IN_AGAIN)) {
           onAuthRequired?.()
         } else {
           console.error(err)
@@ -92,72 +132,67 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
     window.focus()
   }
 
-  /** Slug for the asset path prefix — protocols.json has no stable id field, so derive one. */
-  const slugify = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 
-  /** The analysis script that ships into the workspace, chosen by the selected protocol.
-   * Every protocol currently points at the same placeholder script; the per-protocol pipelines
-   * replace the URLs in protocols.json without touching this code. */
-  const selectedScript = protocols.find((p) => p.name === (protocol || behavioralTask))
+  /** The selected protocol; its `repoZipUrl` in protocols.json is the analysis that runs. */
+  const selectedProtocol = runnableProtocols.find((p) => p.name === protocol)
+  const inputFormats = inputFormatsFor(selectedProtocol?.inputFormats)
+  const fileProblem = file ? inputFileProblem(file, selectedProtocol?.name ?? 'This protocol', selectedProtocol?.inputFormats) : null
 
   const handleUpload = async () => {
-    if (!file) return
-    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '' }))
-    abortRef.current = false
+    if (!file || fileProblem || !selectedProtocol) return
+    setCloseLocked(true)
+    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [] }))
+    if (watchRef.current) watchRef.current.current = true
+    const watch = { current: false }
+    watchRef.current = watch
 
-    // `spawnedWorkspaceId` is set once finalize succeeds this session. Unlike the old
-    // JupyterLab flow, the workspace no longer exists until the DANDI upload has fully
-    // completed — it's the last thing `finalize` does, not the first step — so there is
-    // nothing to reuse on a retry before the first successful attempt.
-    const isRetry = spawnedWorkspaceId !== undefined
+    // `spawnedWorkspaceId` is set as soon as the run has a workspace, so a retry reuses it
+    // instead of creating another one.
     const selectedWorkspace = workspaces.find(w => String(w.id) === String(workspaceId))
-    const newWorkspaceName = [behavioralTask, protocol].filter(Boolean).join(' — ') || 'New Workspace'
     const resolvedId = selectedWorkspace
       ? (typeof selectedWorkspace.id === 'string' ? parseInt(selectedWorkspace.id, 10) : selectedWorkspace.id)
       : undefined
-    const uploadWorkspaceId = isRetry ? spawnedWorkspaceId : resolvedId
 
-    // finalize is synchronous: it also spawns the workspace and runs the script, so this
-    // one call can block for minutes.
-    await createAndUploadToDandi(
+    await runProtocol(
       {
-        taskId: slugify(protocol || behavioralTask),
+        protocol: selectedProtocol,
         file,
-        workspaceId: uploadWorkspaceId,
-        workspaceName: selectedWorkspace?.name ?? newWorkspaceName,
-        scriptUrl: selectedScript?.scriptUrl,
-        scriptName: selectedScript?.scriptName,
+        workspaceId: spawnedWorkspaceId ?? resolvedId,
+        workspaceName: selectedWorkspace?.name ?? selectedProtocol.name,
       },
       (state) => {
-        if (state.phase === 'error' && state.error?.includes('sign in again')) {
-          setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))
+        if (watch.current) return // the dialog was closed, or another run started: no longer this one's
+        if (state.phase === 'running') setCloseLocked(false) // in OSB's task now: closing only stops watching
+        if (state.phase === 'failed' && state.error?.toLowerCase().includes(SIGN_IN_AGAIN)) {
+          setForm((prev) => ({
+            ...prev, step: 'upload', uploadMessage: '', spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
+          }))
           onAuthRequired?.()
           return
         }
-        // The workspace only exists once `finalize` succeeds — open its tab then, not earlier.
-        if (state.phase === 'done' && state.workspaceId !== undefined) {
-          setForm(prev => ({ ...prev, spawnedWorkspaceId: state.workspaceId }))
-          openWorkspaceTab(state.workspaceId)
-        }
         setForm((prev) => ({
           ...prev,
-          uploadMessage: state.phase === 'error' ? (state.error ?? state.message) : state.message,
-          ...(state.phase === 'done' ? { step: 'success' } : {}),
-          ...(state.phase === 'error' ? { step: 'upload' } : {}),
+          spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
+          uploadMessage: state.phase === 'failed' ? `${state.message}: ${state.error}` : state.message,
+          outputsDir: state.outputsDir ?? prev.outputsDir,
+          runSteps: state.steps,
+          ...(state.phase === 'succeeded' ? { step: 'success' } : {}),
+          ...(state.phase === 'stillRunning' ? { step: 'stillRunning' } : {}),
+          ...(state.phase === 'failed' ? { step: 'failed' } : {}),
         }))
       },
-      abortRef,
+      watch,
     )
   }
 
   const stepIndex = step === 'select' ? 0 : 1
-  const canGoNext = !!behavioralTask && !!protocol
-  const canUpload = !!file
+  const canGoNext = !!protocol
+  const canUpload = !!file && !fileProblem
 
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={closeLocked ? undefined : onClose}
       maxWidth={false}
       slotProps={{
         paper: {
@@ -206,7 +241,13 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
               }}
             />
           )}
-          <IconButton onClick={onClose} size="small" sx={{ color: 'text.primary' }}>
+          <IconButton
+            onClick={onClose}
+            disabled={closeLocked}
+            title={closeLocked ? 'Wait until the analysis has started in the workspace' : undefined}
+            size="small"
+            sx={{ color: 'text.primary' }}
+          >
             <CloseIcon fontSize="small" />
           </IconButton>
         </Stack>
@@ -216,10 +257,10 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
       {step === 'select' ? (
         <Box>
           <Typography sx={{ fontFamily: 'Adriane Text, serif', fontWeight: 400, fontSize: '24px', lineHeight: 1, color: '#FFFFFF' }}>
-            Select behavioral task
+            Select behavioral task / protocol
           </Typography>
           <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: 'text.secondary', mt: 0.5 }}>
-            Select a behavioral task and protocol. Optionally pick an existing workspace, or leave it empty to create a new one.
+            Select a behavioral task / protocol. Optionally pick an existing workspace, or leave it empty to create a new one.
           </Typography>
         </Box>
       ) : (
@@ -243,32 +284,16 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
           <Stack direction="row" sx={{ flex: 1, gap: 6 }}>
             <Stack sx={{ flex: 7, gap: 4 }}>
               <Box>
-                <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: '#FFFFFF', mb: 1 }}>Behavioral task</Typography>
-                <Select
-                  fullWidth
-                  value={behavioralTask}
-                  onChange={(e) => setForm((prev) => ({ ...prev, behavioralTask: e.target.value }))}
-                  displayEmpty
-                  sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px' }}
-                  renderValue={(v) => v || <span style={{ color: '#FFFFFF99' }}>Select behavioral task..</span>}
-                >
-                  {protocols.map((p) => (
-                    <MenuItem key={p.name} value={p.name} sx={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>{p.name}</MenuItem>
-                  ))}
-                </Select>
-              </Box>
-
-              <Box>
-                <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: '#FFFFFF', mb: 1 }}>Protocol</Typography>
+                <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: '#FFFFFF', mb: 1 }}>Behavioral task / Protocol</Typography>
                 <Select
                   fullWidth
                   value={protocol}
                   onChange={(e) => setForm((prev) => ({ ...prev, protocol: e.target.value }))}
                   displayEmpty
                   sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px' }}
-                  renderValue={(v) => v || <span style={{ color: '#FFFFFF99' }}>Select protocol..</span>}
+                  renderValue={(v) => v || <span style={{ color: '#FFFFFF99' }}>Select behavioral task / protocol..</span>}
                 >
-                  {protocols.map((p) => (
+                  {runnableProtocols.map((p) => (
                     <MenuItem key={p.name} value={p.name} sx={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>{p.name}</MenuItem>
                   ))}
                 </Select>
@@ -301,16 +326,15 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
             <Stack sx={{ flex: 3, borderTop: '1px solid', borderColor: 'divider', pl: 4, pt: 2, gap: 1.5 }}>
               <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: '14px', lineHeight: 1, color: '#FFFFFF' }}>Protocol docs</Typography>
               <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: 1, color: '#FFFFFFCC' }}>
-                Download protocol docs based on your experiment type.
+                Read how this protocol's analysis works and what it expects as input.
               </Typography>
               <Button
                 variant="outlined"
                 size="small"
-                endIcon={<KeyboardArrowDownIcon />}
-                disabled={!protocol}
+                endIcon={<OpenInNewIcon />}
                 sx={{ alignSelf: 'flex-start', mt: 1 }}
               >
-                Download
+                Open docs
               </Button>
             </Stack>
           </Stack>
@@ -320,7 +344,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
         {step === 'upload' && (
           <Stack sx={{ flex: 1, gap: 2 }}>
           {uploadMessage && (
-            <Typography variant="body2" sx={{ color: 'error.main', px: 0.5 }}>
+            <Typography variant="body2" sx={{ color: 'error.main', px: 0.5, whiteSpace: 'pre-wrap' }}>
               {uploadMessage}
             </Typography>
           )}
@@ -329,7 +353,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".zip"
+                accept={inputFormats?.join(',')}
                 hidden
                 onChange={(e) => setForm((prev) => ({ ...prev, file: e.target.files?.[0] ?? null }))}
               />
@@ -354,14 +378,21 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
                 }}
               >
                 {file ? (
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                  </Typography>
+                  <>
+                    <Typography variant="body2" sx={{ opacity: 0.8 }}>
+                      {file.name} ({formatBytes(file.size)})
+                    </Typography>
+                    {fileProblem && (
+                      <Typography variant="body2" sx={{ color: 'error.main', textAlign: 'center', px: 4 }}>
+                        {fileProblem}
+                      </Typography>
+                    )}
+                  </>
                 ) : (
                   <>
                     <CloudUploadOutlinedIcon sx={{ fontSize: 36, opacity: 0.35 }} />
                     <Typography variant="body2" sx={{ opacity: 0.4 }}>
-                      Click here or drag file to upload (.zip)
+                      Click here or drag file to upload{inputFormats ? ` (${inputFormats.join(', ')})` : ''}
                     </Typography>
                   </>
                 )}
@@ -371,7 +402,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
             <Stack sx={{ flex: 3, borderTop: '1px solid', borderColor: 'divider', pl: 4, pt: 2, gap: 1.5 }}>
               <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 500, fontSize: '14px', lineHeight: 1, color: '#FFFFFF' }}>Protocol template</Typography>
               <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: 1, color: '#FFFFFFCC' }}>
-                Download protocol template based on your experiment type.
+                Download an example input file for this protocol and fill in your data the same way.
               </Typography>
               <Button
                 variant="outlined"
@@ -386,25 +417,32 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
           </Stack>
         )}
 
-        {/* Loading */}
-        {step === 'uploading' && (
-          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Typography variant="body1" sx={{ opacity: 0.55 }}>
-              {uploadMessage || 'Uploading your data..'}
-            </Typography>
-          </Box>
-        )}
-
-        {/* Success */}
-        {step === 'success' && (
-          <Stack sx={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-            <CheckCircleOutlineIcon sx={{ fontSize: 44, opacity: 0.6 }} />
-            <Typography variant="body1" sx={{ textAlign: 'center' }}>
-              Your files has been successfully uploaded to Open Source Brain.
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.45 }}>
-              {uploadMessage || 'You can close this dialog.'}
-            </Typography>
+        {/* Running, finished or failed: the same checklist, with a different header */}
+        {(step === 'uploading' || step === 'success' || step === 'stillRunning' || step === 'failed') && (
+          <Stack sx={{ flex: 1, gap: 3, minWidth: 0, overflowY: 'auto', py: 1 }}>
+            <Stack sx={{ alignItems: 'center', gap: 1.5, textAlign: 'center' }}>
+              {step === 'uploading' && <CircularProgress size={28} />}
+              {step === 'success' && <CheckCircleOutlineIcon sx={{ fontSize: 40, color: 'success.main' }} />}
+              {step === 'stillRunning' && <HourglassEmptyIcon sx={{ fontSize: 40, opacity: 0.7 }} />}
+              {step === 'failed' && <ErrorOutlineIcon sx={{ fontSize: 40, color: 'error.main' }} />}
+              <Typography
+                variant="body1"
+                sx={{ opacity: 0.9, whiteSpace: 'pre-wrap', color: step === 'failed' ? 'error.main' : undefined }}
+              >
+                {uploadMessage || (step === 'success' ? 'The analysis finished.' : 'Starting..')}
+              </Typography>
+              {(step === 'success' || step === 'stillRunning') && outputsDir && (
+                <Typography variant="body2" sx={{ opacity: 0.6 }}>
+                  {step === 'stillRunning' ? 'Results will be in' : 'Results are in'} <code>{outputsDir}/</code> in your workspace.
+                </Typography>
+              )}
+              {step !== 'uploading' && spawnedWorkspaceId !== undefined && (
+                <Button variant="outlined" onClick={() => openWorkspaceTab(spawnedWorkspaceId)}>
+                  Open workspace
+                </Button>
+              )}
+            </Stack>
+            {runSteps.length > 0 && <RunChecklist steps={runSteps} />}
           </Stack>
         )}
       </Box>
@@ -430,7 +468,17 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
             disabled={!canUpload}
             onClick={handleUpload}
           >
-            {spawnedWorkspaceId !== undefined ? 'Retry' : 'Upload'}
+            {spawnedWorkspaceId !== undefined ? 'Retry' : 'Upload and run'}
+          </Button>
+        </Box>
+      )}
+      {step === 'failed' && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5 }}>
+          <Button variant="outlined" onClick={() => setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))}>
+            Back
+          </Button>
+          <Button variant="contained" endIcon={<ArrowForwardIcon />} onClick={handleUpload}>
+            Retry
           </Button>
         </Box>
       )}

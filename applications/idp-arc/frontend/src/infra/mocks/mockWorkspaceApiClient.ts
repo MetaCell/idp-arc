@@ -1,4 +1,9 @@
-import type { IWorkspaceApi } from '../../core/ports/IWorkspaceApi'
+import type {
+  ImportResourceInput,
+  IWorkspaceApi,
+  StartRunInput,
+  WorkspaceResourceState,
+} from '../../core/ports/IWorkspaceApi'
 import type { Workspace } from '../../core/types'
 
 const MOCK_WORKSPACES: Workspace[] = [
@@ -42,7 +47,7 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
     return [...this.workspaces]
   }
 
-  async createWorkspace(_token: string, name: string): Promise<number> {
+  async createWorkspace(_token: string, name: string, tags: string[] = []): Promise<number> {
     await delay(600)
     const id = nextId++
     this.workspaces.push({
@@ -51,8 +56,57 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
       description: 'Created in mock mode',
       timestamp_created: new Date().toISOString(),
     })
-    console.info(`[MockWorkspaceApiClient] createWorkspace("${name}") → id=${id}`)
+    console.info(`[MockWorkspaceApiClient] createWorkspace("${name}", [${tags.join(', ')}]) → id=${id}`)
     return id
+  }
+
+  // Imports: pending for a few polls, then gone (as OSB's scan drops non-indexed files).
+  private imports: { name: string; pendingPolls: number }[] = []
+  /** What OSB's scan would list once the imports are done: the repository's notebooks. */
+  private notebooks: WorkspaceResourceState[] = []
+  /** Polls left showing a run as running (OSB's placeholder while its workflow runs). */
+  private runPolls = 0
+  private runCount = 0
+
+  async getWorkspaceResources(_token: string, _workspaceId: number): Promise<WorkspaceResourceState[]> {
+    await delay(200)
+    this.imports.forEach((i) => { i.pendingPolls -= 1 })
+    this.imports = this.imports.filter((i) => i.pendingPolls > 0)
+    if (this.imports.length) {
+      return [{ id: -1, name: 'Importing resources into workspace' }, ...this.imports.map((i, n) => ({ id: 100 + n, name: i.name, status: 'p' as const }))]
+    }
+    if (this.runPolls > 0) {
+      this.runPolls -= 1
+      if (this.runPolls === 0) this.notebooks = this.executed
+      return [{ id: -1, name: 'Refreshing resources' }, ...this.notebooks]
+    }
+    return this.notebooks
+  }
+
+  async importResource(_token: string, input: ImportResourceInput): Promise<void> {
+    await delay(300)
+    console.info(`[MockWorkspaceApiClient] importResource(${input.name} → ${input.folder}/)`)
+    this.imports.push({ name: input.name, pendingPolls: 2 })
+    if (input.resourceType === 'g') {
+      this.notebooks = ['01_load.ipynb', '02_analysis.ipynb'].map((nb, n) => ({
+        id: 200 + n, name: nb, status: 'a' as const, path: `${input.folder}/${input.name}/notebooks/${nb}`,
+      }))
+    }
+  }
+
+  /** A run's executed notebooks: listed once its workflow (and scan) is over; every run succeeds here. */
+  private executed: WorkspaceResourceState[] = []
+
+  async startRun(_token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }> {
+    await delay(300)
+    const workflow = `osb-run-notebooks-job-mock${++this.runCount}`
+    this.runPolls = 3
+    this.executed = input.notebooks.map((nb, n) => {
+      const name = nb.split('/').pop()!
+      return { id: 300 + n, name, status: 'a' as const, path: `${input.results.notebooks}/${name}` }
+    })
+    console.info(`[MockWorkspaceApiClient] startRun(#${workspaceId}, ${input.repo.dir}: ${input.notebooks.join(', ')}) → ${workflow}`)
+    return { workflow }
   }
 }
 
