@@ -25,6 +25,9 @@ export interface RunProtocolDefinition {
   pythonPath?: string[]
   install?: string[]
   inputFormats?: string[]
+  /** The image the notebooks run in (their environment): an OSB application's name (e.g. `netpyne`)
+   *  or an image reference from a registry OSB allows. Without it, OSB's default (JupyterLab). */
+  image?: string
 }
 
 export interface RunProtocolInput {
@@ -250,6 +253,7 @@ export function createRunProtocolUseCase(
         inputDir: hasData ? layout.inputs : undefined,
         outputDir: layout.outputs,
         results: { notebooks: layout.notebooks, log: layout.log },
+        ...(protocol.image ? { image: protocol.image } : {}),
       })
       progress.outputsDir = layout.run
       // Followed through `GET /workspace/{id}`, as the imports are: while a workflow for the

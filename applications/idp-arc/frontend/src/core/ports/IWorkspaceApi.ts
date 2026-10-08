@@ -37,6 +37,8 @@ export interface StartRunInput {
   outputDir: string
   /** Where the executed notebooks and the log go on the volume. */
   results: { notebooks: string; log: string }
+  /** The image the notebooks run in: an OSB application's name or an image reference. OSB's JupyterLab without it. */
+  image?: string
 }
 
 /**

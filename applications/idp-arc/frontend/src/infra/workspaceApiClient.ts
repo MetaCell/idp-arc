@@ -114,7 +114,7 @@ export class WorkspaceApiClient implements IWorkspaceApi {
   }
 
   async startRun(token: string, workspaceId: number, input: StartRunInput): Promise<{ workflow: string }> {
-    const { repo, setup, notebooks, inputDir, outputDir, results } = input
+    const { repo, setup, notebooks, inputDir, outputDir, results, image } = input
     const res = await fetch(`${this.baseApiUrl}/workspace/${workspaceId}/run`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -125,6 +125,7 @@ export class WorkspaceApiClient implements IWorkspaceApi {
         ...(inputDir ? { input_dir: inputDir } : {}),
         output_dir: outputDir,
         results,
+        ...(image ? { image } : {}),
       }),
     })
     if (!res.ok) {
