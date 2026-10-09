@@ -5,12 +5,7 @@ import {
   AppBar,
   Box,
   Button,
-  CircularProgress,
   Container,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Drawer,
   IconButton,
   Menu,
@@ -22,14 +17,16 @@ import {
   useScrollTrigger,
 } from '@mui/material'
 import type { ReactNode } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { authClient } from '../app/container'
+import { authClient, emberAuth } from '../app/container'
 import { useAppContext } from '../AppContext'
 import { Logo } from '../Icons'
 import DataUploadDialog from './DataUploadDialog'
 import { registerUploadOpener } from './UploadContext'
+import LoginDialog from './LoginDialog'
+import { takeLoginDialogReturn } from './loginReturn'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
 
@@ -41,6 +38,9 @@ export interface PageLayoutProps {
   cta?: ReactNode
   showDivider?: boolean
 }
+
+/** Read once per page load: a login started in the Login dialog left or reloaded the page. */
+let pendingLoginReturn = takeLoginDialogReturn()
 
 export default function PageLayout({
   children,
@@ -54,11 +54,21 @@ export default function PageLayout({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [avatarAnchor, setAvatarAnchor] = useState<HTMLElement | null>(null)
   const avatarMenuOpen = Boolean(avatarAnchor)
-  const [waitingForLogin, setWaitingForLogin] = useState(false)
-  const popupRef = useRef<Window | null>(null)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  // Back from a login started in the Login dialog (EMBER's redirect, or the reload after OSB's
+  // popup): it opens again, showing what is left, until it is closed.
+  const [loginDialogOpen, setLoginDialogOpen] = useState(() => pendingLoginReturn)
+  const closeLoginDialog = () => {
+    pendingLoginReturn = false
+    setLoginDialogOpen(false)
+  }
 
-  async function handleLogin() {
+  /**
+   * Opens OSB's (Keycloak) login in a popup. When it completes, the popup posts to this window and
+   * App.tsx reloads the page; `onEnded` is for the popup being closed without that. Returns how to
+   * stop waiting, or null when it fell back to a full-page redirect.
+   */
+  async function startOsbLogin(onEnded: () => void): Promise<{ cancel: () => void } | null> {
     let loginUrl: string
     try {
       loginUrl = await authClient.getLoginUrl(`${window.location.origin}/`)
@@ -66,36 +76,50 @@ export default function PageLayout({
       // keycloak-js 26 + PKCE can throw if internal state is unset (e.g. after
       // token expiry). Fall back to a full-page redirect via kc.login().
       authClient.login()
-      return
+      return null
     }
     const w = 480, h = 600
     const left = Math.round((screen.width - w) / 2)
     const top = Math.round((screen.height - h) / 2)
-    popupRef.current = window.open(loginUrl, 'kc-login', `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`)
-    setWaitingForLogin(true)
-
+    const popup = window.open(loginUrl, 'kc-login', `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`)
+    if (!popup) {
+      authClient.login()
+      return null
+    }
     const poll = setInterval(() => {
-      if (popupRef.current?.closed) {
+      if (popup.closed) {
         clearInterval(poll)
-        setWaitingForLogin(false)
+        // Closed without completing (completing reloads the page first): no dialog to reopen.
+        takeLoginDialogReturn()
+        onEnded()
       }
     }, 500)
+    return { cancel: () => { clearInterval(poll); popup.close(); takeLoginDialogReturn(); onEnded() } }
   }
 
-  function cancelLogin() {
-    popupRef.current?.close()
-    setWaitingForLogin(false)
-  }
   const navigate = useNavigate()
   const location = useLocation()
-  const { authState, username } = useAppContext()
+  const { authState } = useAppContext()
   const isAuthenticated = authState === 'authenticated'
+  // Uploading needs both logins: EMBER-DANDI (where the data goes) and OSB (where it is analysed).
+  // EMBER's popup sign-in doesn't reload the page, so it updates this state.
+  const [emberSignedIn, setEmberSignedIn] = useState(() => emberAuth.isConnected())
+  const loginsDone = isAuthenticated && emberSignedIn && emberAuth.isConnected()
+  /** Every "Data upload" button: the upload dialog when signed in, else the Login dialog. */
+  const openUploadOrLogin = () => (loginsDone ? setUploadDialogOpen(true) : setLoginDialogOpen(true))
+  /** Logs out of both: IDP forgets its EMBER token (EMBER has no logout call), then OSB's
+   *  Keycloak session ends, which reloads the page. */
+  const logout = () => {
+    emberAuth.disconnect()
+    setEmberSignedIn(false)
+    if (isAuthenticated) authClient.logout()
+  }
+  const anySignedIn = isAuthenticated || emberSignedIn
 
   useEffect(() => {
-    registerUploadOpener(() =>
-      isAuthenticated ? setUploadDialogOpen(true) : void handleLogin()
-    )
-  }, [isAuthenticated])
+    registerUploadOpener(openUploadOrLogin)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loginsDone])
 
   const navItems = [
     { label: t('nav.protocols'), path: '/protocols' },
@@ -280,18 +304,18 @@ export default function PageLayout({
                 </Button>
               ))}
               {
-                !isAuthenticated && <Button variant="text" onClick={handleLogin}>{t('nav.login')}</Button>
+                !loginsDone && <Button variant="text" onClick={() => setLoginDialogOpen(true)}>{t('nav.login')}</Button>
               }
               <Button
                 variant="contained"
                 endIcon={<ArrowIcon />}
-                onClick={() => isAuthenticated ? setUploadDialogOpen(true) : void handleLogin()}
+                onClick={() => openUploadOrLogin()}
               >
                 {t('nav.dataUpload')}
               </Button>
-              {isAuthenticated && (
+              {anySignedIn && (
                 <>
-                  <Tooltip title={`${t('nav.loggedInAs')} ${username}`}>
+                  <Tooltip title={t('account.title')}>
                     <Box
                       component="button"
                       id="avatar-button"
@@ -300,7 +324,7 @@ export default function PageLayout({
                       aria-expanded={avatarMenuOpen ? 'true' : undefined}
                       onClick={(e) => setAvatarAnchor(e.currentTarget)}
                       sx={styles.avatar}
-                      aria-label={username}
+                      aria-label={t('account.title')}
                     />
                   </Tooltip>
                   <Menu
@@ -312,7 +336,7 @@ export default function PageLayout({
                     transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                     slotProps={{ paper: { sx: styles.avatarMenu } }}
                   >
-                    <MenuItem onClick={() => { setAvatarAnchor(null); authClient.logout() }}>
+                    <MenuItem onClick={() => { setAvatarAnchor(null); logout() }}>
                       {t('nav.logout')}
                     </MenuItem>
                   </Menu>
@@ -365,23 +389,24 @@ export default function PageLayout({
                 {label}
               </Button>
             ))}
-            {isAuthenticated ? (
+            {!loginsDone && (
               <Button
                 variant="text"
                 fullWidth
                 sx={styles.drawerNavButton}
-                onClick={() => { setDrawerOpen(false); authClient.logout() }}
-              >
-                {t('nav.logout')}
-              </Button>
-            ) : (
-              <Button
-                variant="text"
-                fullWidth
-                sx={styles.drawerNavButton}
-                onClick={() => { setDrawerOpen(false); void handleLogin() }}
+                onClick={() => { setDrawerOpen(false); setLoginDialogOpen(true) }}
               >
                 {t('nav.login')}
+              </Button>
+            )}
+            {anySignedIn && (
+              <Button
+                variant="text"
+                fullWidth
+                sx={styles.drawerNavButton}
+                onClick={() => { setDrawerOpen(false); logout() }}
+              >
+                {t('nav.logout')}
               </Button>
             )}
             <Button
@@ -389,8 +414,7 @@ export default function PageLayout({
               endIcon={<ArrowIcon />}
               onClick={() => {
                 setDrawerOpen(false)
-                if (isAuthenticated) setUploadDialogOpen(true)
-                else handleLogin()
+                openUploadOrLogin()
               }}
             >
               {t('nav.dataUpload')}
@@ -466,20 +490,19 @@ export default function PageLayout({
         </Container>
       </Box>
 
-      <DataUploadDialog open={uploadDialogOpen} onClose={() => setUploadDialogOpen(false)} onAuthRequired={handleLogin} />
+      <DataUploadDialog
+        open={uploadDialogOpen}
+        onClose={() => setUploadDialogOpen(false)}
+        onAuthRequired={() => setLoginDialogOpen(true)}
+      />
+      <LoginDialog
+        open={loginDialogOpen}
+        onClose={closeLoginDialog}
+        onOsbLogin={startOsbLogin}
+        osbSignedIn={isAuthenticated}
+        onEmberSignedIn={() => setEmberSignedIn(true)}
+      />
 
-      <Dialog open={waitingForLogin} onClose={cancelLogin}>
-        <DialogTitle>{t('nav.signingIn')}</DialogTitle>
-        <DialogContent>
-          <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-            <CircularProgress size={20} />
-            <Typography variant="body2">{t('nav.completeSignIn')}</Typography>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={cancelLogin}>{t('nav.cancel')}</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   )
 }

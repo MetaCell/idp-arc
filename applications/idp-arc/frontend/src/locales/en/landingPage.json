@@ -60,5 +60,26 @@
       "about": "About",
       "contact": "Contact"
     }
+  },
+  "account": {
+    "title": "Your accounts"
+  },
+  "loginDialog": {
+    "title": "Login",
+    "subtitle": "Login or sign up to view or upload data.",
+    "notice": "Login to both is required to upload & view your data.",
+    "emberTitle": "EMBER-DANDI",
+    "emberDescription": "Upload your data in EMBER-DANDI",
+    "osbTitle": "Open Source Brain",
+    "osbDescription": "Explore and analyze your uploaded data and community data with our integration with Open Source Brain (OSB).",
+    "login": "Login",
+    "signedIn": "Signed in",
+    "loggedIn": "Logged in",
+    "emberWaiting": "Sign in in the EMBER-DANDI window…",
+    "osbWaiting": "Sign in in the Open Source Brain window…",
+    "finishingSignIn": "Finishing sign in…",
+    "closeWindow": "You can close this window and go back to IDP.",
+    "cancel": "Cancel",
+    "close": "Close"
   }
 }

@@ -9,6 +9,9 @@ COPY frontend/ ./
 # Baked into the bundle by Vite at build time; the Codefresh pipeline passes it as a build argument.
 ARG VITE_UPLOAD_BUCKET_URL
 ENV VITE_UPLOAD_BUCKET_URL=${VITE_UPLOAD_BUCKET_URL}
+# EMBER-DANDI OAuth application (public client, PKCE) registered for this IDP origin.
+ARG VITE_EMBER_CLIENT_ID
+ENV VITE_EMBER_CLIENT_ID=${VITE_EMBER_CLIENT_ID}
 RUN yarn build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine

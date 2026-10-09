@@ -20,6 +20,8 @@ import { KeycloakAuthClient } from '../infra/keycloakAuthClient'
 import { WorkspaceApiClient } from '../infra/workspaceApiClient'
 import { DandiApiClient } from '../infra/dandiApiClient'
 import { PublicBucketObjectStore } from '../infra/publicBucketObjectStore'
+import { EmberOAuthClient, EMBER_CALLBACK_PATH } from '../infra/emberOAuthClient'
+import { EMBER_API_ORIGIN_DEFAULT } from '../infra/emberUrls'
 import type { IObjectStore } from '../core/ports/IObjectStore'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
 import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
@@ -37,6 +39,12 @@ const WORKSPACES_LIST_URL =
   `${WWW_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
 const FRONTEND_BASE  = `${PROTOCOL}://www.${BASE_DOMAIN}`
 
+/** EMBER-DANDI's API origin: where the OAuth login goes, and what OSB downloads assets from. */
+const EMBER_ORIGIN = (import.meta.env.VITE_EMBER_ORIGIN ?? EMBER_API_ORIGIN_DEFAULT).replace(/\/+$/, '')
+/** Same-origin path for the browser's own EMBER calls (Vite proxy in dev, nginx deployed): EMBER's
+ *  token response carries no CORS headers. */
+const EMBER_FETCH_BASE = '/ember-proxy'
+
 // ─── Infrastructure singletons ────────────────────────────────────────────────
 
 export const authClient = new KeycloakAuthClient({
@@ -49,6 +57,17 @@ const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
 // DANDI upload endpoints live in OSB's `workspaces` app (the admin key has to sit wherever
 // they run) — same API base as every other workspace call.
 const dandiApi     = new DandiApiClient(WORKSPACES_API)
+
+/** Signs the researcher in to EMBER-DANDI (OAuth in a popup, a full-page redirect if it is blocked);
+ *  their token stays in the browser. */
+export const emberAuth = new EmberOAuthClient({
+  authOrigin: EMBER_ORIGIN,
+  apiBase: EMBER_FETCH_BASE,
+  clientId: import.meta.env.VITE_EMBER_CLIENT_ID ?? '',
+  redirectUri: `${window.location.origin}${EMBER_CALLBACK_PATH}`,
+})
+export { EMBER_CALLBACK_PATH }
+export { EmberPopupBlocked, EmberSignInCancelled } from '../infra/emberOAuthClient'
 
 /** Scenario 1: where uploads go before OSB imports them (`gs://maabcd`). Used by the upload flow. */
 export const objectStore: IObjectStore = new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
