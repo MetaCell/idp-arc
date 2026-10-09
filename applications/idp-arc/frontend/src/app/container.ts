@@ -21,7 +21,7 @@ import { WorkspaceApiClient } from '../infra/workspaceApiClient'
 import { DandiApiClient } from '../infra/dandiApiClient'
 import { PublicBucketObjectStore } from '../infra/publicBucketObjectStore'
 import { EmberOAuthClient, EMBER_CALLBACK_PATH } from '../infra/emberOAuthClient'
-import { EMBER_API_ORIGIN_DEFAULT } from '../infra/emberUrls'
+import { EMBER_API_ORIGIN_DEFAULT, EMBER_WEB_ORIGIN } from '../infra/emberUrls'
 import type { IObjectStore } from '../core/ports/IObjectStore'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
 import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
@@ -89,6 +89,12 @@ export const runProtocol = createRunProtocolUseCase(authClient, workspaceApi, ob
 export const createAndUploadToDandi = createCreateAndUploadToDandiUseCase(authClient, dandiApi)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** The researcher's workspaces on OSB ("My workspaces"). */
+export const OSB_WORKSPACES_URL = `${FRONTEND_BASE}/`
+
+/** The signed-in researcher's own dandisets on EMBER-DANDI's website. */
+export const MY_DANDISETS_URL = `${EMBER_WEB_ORIGIN}/dandiset/my`
 
 /**
  * Builds the public URL for a given workspace id.

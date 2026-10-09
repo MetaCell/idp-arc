@@ -20,7 +20,7 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { authClient, emberAuth } from '../app/container'
+import { authClient, emberAuth, MY_DANDISETS_URL, OSB_WORKSPACES_URL } from '../app/container'
 import { useAppContext } from '../AppContext'
 import { Logo } from '../Icons'
 import DataUploadDialog from './DataUploadDialog'
@@ -55,6 +55,8 @@ export default function PageLayout({
   const [avatarAnchor, setAvatarAnchor] = useState<HTMLElement | null>(null)
   const avatarMenuOpen = Boolean(avatarAnchor)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  /** The protocol the upload dialog opens on (e.g. from a protocol's page). */
+  const [uploadProtocol, setUploadProtocol] = useState<string | undefined>()
   // Back from a login started in the Login dialog (EMBER's redirect, or the reload after OSB's
   // popup): it opens again, showing what is left, until it is closed.
   const [loginDialogOpen, setLoginDialogOpen] = useState(() => pendingLoginReturn)
@@ -106,7 +108,11 @@ export default function PageLayout({
   const [emberSignedIn, setEmberSignedIn] = useState(() => emberAuth.isConnected())
   const loginsDone = isAuthenticated && emberSignedIn && emberAuth.isConnected()
   /** Every "Data upload" button: the upload dialog when signed in, else the Login dialog. */
-  const openUploadOrLogin = () => (loginsDone ? setUploadDialogOpen(true) : setLoginDialogOpen(true))
+  const openUploadOrLogin = (protocolName?: string) => {
+    if (!loginsDone) return setLoginDialogOpen(true)
+    setUploadProtocol(protocolName)
+    setUploadDialogOpen(true)
+  }
   /** Logs out of both: IDP forgets its EMBER token (EMBER has no logout call), then OSB's
    *  Keycloak session ends, which reloads the page. */
   const logout = () => {
@@ -124,7 +130,10 @@ export default function PageLayout({
   const navItems = [
     { label: t('nav.protocols'), path: '/protocols' },
     { label: t('nav.about'), path: '/about' },
-    ...(isAuthenticated ? [{ label: t('nav.myWorkspaces'), path: 'https://www.v2dev.opensourcebrain.org/', external: true }] : []),
+    ...(isAuthenticated ? [
+      { label: t('nav.myWorkspaces'), path: OSB_WORKSPACES_URL, external: true },
+      { label: t('nav.myDandisets'), path: MY_DANDISETS_URL, external: true },
+    ] : []),
   ]
 
   const isActive = (path: string) => location.pathname === path
@@ -492,6 +501,7 @@ export default function PageLayout({
 
       <DataUploadDialog
         open={uploadDialogOpen}
+        initialProtocol={uploadProtocol}
         onClose={() => setUploadDialogOpen(false)}
         onAuthRequired={() => setLoginDialogOpen(true)}
       />

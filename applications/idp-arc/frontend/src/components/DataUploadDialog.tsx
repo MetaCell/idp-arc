@@ -36,11 +36,13 @@ type DialogStep = 'select' | 'upload' | 'uploading' | 'success' | 'stillRunning'
 
 export interface DataUploadDialogProps {
   open: boolean
+  /** Protocol (name) to start on; ignored unless it can be run. */
+  initialProtocol?: string
   onClose: () => void
   onAuthRequired?: () => void
 }
 
-export default function DataUploadDialog({ open, onClose, onAuthRequired }: DataUploadDialogProps) {
+export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
 
   interface FormState {
@@ -102,7 +104,7 @@ export default function DataUploadDialog({ open, onClose, onAuthRequired }: Data
       if (watchRef.current) watchRef.current.current = true
       return
     }
-    setForm(INITIAL_FORM)
+    setForm({ ...INITIAL_FORM, protocol: runnableProtocols.some((p) => p.name === initialProtocol) ? initialProtocol! : '' })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
