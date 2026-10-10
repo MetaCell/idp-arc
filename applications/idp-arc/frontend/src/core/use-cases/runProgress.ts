@@ -1,13 +1,13 @@
-import type { RunPhase, RunState, RunStep, StepState } from '../types'
+import type { RunCheckpoint, RunPhase, RunState, RunStep, RunStepId, StepState } from '../types'
 import { UserFacingError, userMessage } from '../userMessages'
 
 export type OnRunState = (state: RunState) => void
 
 /** A failure that belongs to one step, so only that row is marked failed. */
 export class StepError extends Error {
-  readonly step: string
+  readonly step: RunStepId
   readonly original: unknown
-  constructor(step: string, cause: unknown) {
+  constructor(step: RunStepId, cause: unknown) {
     super(cause instanceof Error ? cause.message : String(cause))
     this.step = step
     this.original = cause
@@ -28,15 +28,17 @@ export class RunProgress {
   dandisetId?: string
   outputsDir?: string
   doi?: { doi: string; url?: string }
+  /** Reported with every state, so the last one the dialog sees is up to date. */
+  checkpoint?: RunCheckpoint
 
-  constructor(report: OnRunState, steps: { id: string; label: string }[], workspaceId?: number) {
+  constructor(report: OnRunState, steps: { id: RunStepId; label: string }[], workspaceId?: number) {
     this.report = report
     this.steps = steps.map((s) => ({ ...s, state: 'pending' }))
     this.workspaceId = workspaceId
   }
 
   /** A step starts; `phase` is what the whole run is doing now. */
-  start(id: string, phase: RunPhase, message: string, detail?: string) {
+  start(id: RunStepId, phase: RunPhase, message: string, detail?: string) {
     if (this.ended) return
     this.phase = phase
     this.set(id, 'running', detail)
@@ -44,19 +46,19 @@ export class RunProgress {
   }
 
   /** A running step reports progress (upload bytes, run state). */
-  update(id: string, detail: string, message: string) {
+  update(id: RunStepId, detail: string, message: string) {
     if (this.ended) return
     this.set(id, 'running', detail)
     this.emit(message)
   }
 
-  done(id: string, detail?: string, message?: string) {
+  done(id: RunStepId, detail?: string, message?: string) {
     if (this.ended) return
     this.set(id, 'succeeded', detail)
     if (message) this.emit(message)
   }
 
-  skip(id: string, detail?: string) {
+  skip(id: RunStepId, detail?: string) {
     this.set(id, 'skipped', detail)
   }
 
@@ -69,7 +71,7 @@ export class RunProgress {
   }
 
   /** Still running past the watch limit: stops following it; the run carries on in the workspace. */
-  stopWatching(id: string, message: string) {
+  stopWatching(id: RunStepId, message: string) {
     if (this.ended) return
     this.ended = true
     this.phase = 'stillRunning'
@@ -94,11 +96,14 @@ export class RunProgress {
   }
 
   emit(message: string, error?: string) {
-    const { phase, steps, workspaceId, dandisetId, outputsDir } = this
-    this.report({ phase, message, steps, workspaceId, outputsDir, ...(dandisetId ? { dandisetId } : {}), ...(this.doi ? { doi: this.doi } : {}), ...(error ? { error } : {}) })
+    const { phase, steps, workspaceId, dandisetId, outputsDir, checkpoint } = this
+    this.report({
+      phase, message, steps, workspaceId, outputsDir,
+      ...(dandisetId ? { dandisetId } : {}), ...(this.doi ? { doi: this.doi } : {}), ...(error ? { error } : {}), ...(checkpoint ? { checkpoint: { ...checkpoint } } : {}),
+    })
   }
 
-  private set(id: string, state: StepState, detail?: string) {
+  private set(id: RunStepId, state: StepState, detail?: string) {
     // A running step keeps its last detail unless given a new one.
     this.steps = this.steps.map((s) =>
       s.id === id ? { ...s, state, detail: detail ?? (state === 'running' ? s.detail : undefined) } : s)
@@ -107,7 +112,7 @@ export class RunProgress {
 
 /** Runs one step, so a failure is attributed to that step's row (not to another one running in
  * parallel, like the upload). */
-export async function inStep<T>(step: string, run: () => Promise<T>): Promise<T> {
+export async function inStep<T>(step: RunStepId, run: () => Promise<T>): Promise<T> {
   try {
     return await run()
   } catch (err) {

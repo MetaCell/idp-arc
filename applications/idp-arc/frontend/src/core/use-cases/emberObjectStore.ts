@@ -22,10 +22,23 @@ export { EMBER_SIGN_IN }
  * The browser sends the bytes both times. The second transfer is usually empty: EMBER stores each
  * content once, and answers with the existing blob instead of parts.
  *
+ * Each finished part is reported as a checkpoint (EmberUploadCheckpoint): given back on a retry,
+ * the dandiset is not created again and a copy already made is not made again.
+ *
  * No wait for "valid" before returning: the blob is checked against the etag when the upload is
  * validated (synchronously, before the asset exists), so its download link works at once.
  * Asset *metadata* validation is a separate, asynchronous check that a plain file may never pass.
  */
+/** What a put has done so far; see IObjectStore's UploadCheckpoint. */
+export interface EmberUploadCheckpoint {
+  /** The researcher's dandiset, once picked or created. */
+  userDandisetId?: string
+  /** Their own copy, once registered. */
+  own?: { assetId: string; assetPath: string }
+  /** The MAABCD copy is registered. */
+  maabcdDone?: boolean
+}
+
 export function createEmberObjectStore(
   osbAuth: Pick<IAuthClient, 'getToken'>,
   emberAuth: Pick<IEmberAuth, 'getToken'>,
@@ -42,30 +55,43 @@ export function createEmberObjectStore(
       const token = emberAuth.getToken()
       if (!token) throw new UserFacingError(EMBER_SIGN_IN, 'No EMBER-DANDI token (not signed in, or it expired)')
       const maabcdDandisetId = input.dandisets?.maabcd || undefined
+      const saved: EmberUploadCheckpoint = { ...(input.resume as EmberUploadCheckpoint | undefined) }
+      const save = (patch: EmberUploadCheckpoint) => {
+        Object.assign(saved, patch)
+        input.onCheckpoint?.({ ...saved })
+      }
 
-      // Bytes counted across both transfers, so the progress bar runs once from 0 to 100%.
+      // Bytes counted across both transfers, so the progress bar runs once from 0 to 100%; a copy
+      // made by an earlier attempt counts as sent.
       const transfers = maabcdDandisetId ? 2 : 1
       const total = file.size * transfers
-      let done = 0
+      let done = (saved.own ? file.size : 0) + (maabcdDandisetId && saved.maabcdDone ? file.size : 0)
       const progress = (sentInTransfer: number) => onProgress?.(Math.min(done + sentInTransfer, total), total)
       const skipTransfer = () => { done += file.size; progress(0) }
+      progress(0)
 
-      const { etag, parts: plan } = await computeDandiEtag(file)
+      const needsMaabcd = !!maabcdDandisetId && !saved.maabcdDone
+      const { etag, parts: plan } = !saved.own || needsMaabcd ? await computeDandiEtag(file) : { etag: '', parts: [] }
 
       // 1. The researcher's own copy.
       const protocol = input.dandisets?.protocol ?? { id: input.protocolId, name: input.protocolId }
-      const userDandisetId = input.dandisets?.user
+      const userDandisetId = saved.userDandisetId || input.dandisets?.user
         || await dandisets.createForProtocol(input.dandisets?.newName || `IDP upload: ${protocol.name}`, protocol)
-      const path = `${pathSafe(input.protocolId)}/${crypto.randomUUID()}/${pathSafe(file.name)}`
-      const init = await direct.initUpload(token, userDandisetId, file.size, etag)
-      const uploaded = await putParts(init.parts, plan, file, progress)
-      if (!init.parts.length) skipTransfer(); else done += file.size
-      const asset = await direct.finalizeUpload(token, {
-        uploadId: init.uploadId, dandisetId: userDandisetId, path, parts: uploaded, blobId: init.blobId,
-      })
+      if (saved.userDandisetId !== userDandisetId) save({ userDandisetId })
+      let asset = saved.own
+      if (!asset) {
+        const path = `${pathSafe(input.protocolId)}/${crypto.randomUUID()}/${pathSafe(file.name)}`
+        const init = await direct.initUpload(token, userDandisetId, file.size, etag)
+        const uploaded = await putParts(init.parts, plan, file, progress)
+        if (!init.parts.length) skipTransfer(); else done += file.size
+        asset = await direct.finalizeUpload(token, {
+          uploadId: init.uploadId, dandisetId: userDandisetId, path, parts: uploaded, blobId: init.blobId,
+        })
+        save({ own: { assetId: asset.assetId, assetPath: asset.assetPath } })
+      }
 
       // 2. The MAABCD copy, through OSB.
-      if (maabcdDandisetId) {
+      if (needsMaabcd) {
         const osbToken = await osbAuth.getToken()
         const brokered = await osb.getUploadUrls(osbToken, {
           dandisetId: maabcdDandisetId, filename: file.name, size: file.size, dandiEtag: etag,
@@ -79,6 +105,7 @@ export function createEmberObjectStore(
           parts: brokered.blobId ? undefined : brokeredParts,
           blobId: brokered.blobId,
         })
+        save({ maabcdDone: true })
       }
       progress(0)
 

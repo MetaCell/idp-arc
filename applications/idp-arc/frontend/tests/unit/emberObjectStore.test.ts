@@ -9,8 +9,10 @@ import { UserFacingError } from '../../src/core/userMessages'
 const ORIGIN = 'https://api-dandi.example.org'
 const file = () => new File(['animal data'], 'animal 01.xlsx')
 
-function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: boolean } = {}) {
+function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: boolean; failOsbOnce?: boolean; failDirectOnce?: boolean } = {}) {
   const calls: string[] = []
+  let osbFails = opts.failOsbOnce ? 1 : 0
+  let directFails = opts.failDirectOnce ? 1 : 0
   const direct: IDandiDirectApi = {
     async listOwnDandisets() { return [] },
     async createDandiset() { throw new Error('created through the protocol use case') },
@@ -21,6 +23,7 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
     async getLatestPublished() { return null },
     async initUpload(token, dandisetId) {
       calls.push(`direct-init:${token}:${dandisetId}`)
+      if (directFails > 0) { directFails -= 1; throw new Error('EMBER initialize failed') }
       return opts.dedupDirect ? { parts: [], blobId: 'blob-1' } : { uploadId: 'up-1', parts: [{ partNumber: 1, size: 11, url: 'https://s3/direct' }] }
     },
     async putPart(url) { calls.push(`put:${url}`); return `etag-${url.split('/').pop()}` },
@@ -32,6 +35,7 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
   const osb: IEmberUploadApi = {
     async getUploadUrls(token, input) {
       calls.push(`osb-urls:${token}:${input.dandisetId}:${input.filename}:${input.dandiEtag.endsWith('-1')}`)
+      if (osbFails > 0) { osbFails -= 1; throw new Error('OSB get_upload_urls failed (HTTP 503)') }
       if (opts.dedupOsb) return { dandisetId: input.dandisetId, path: 'u/x/f', parts: [], blobId: 'blob-1' }
       const parts = opts.shortParts ? [] : [{ partNumber: 1, url: 'https://s3/osb' }]
       return { dandisetId: input.dandisetId, path: 'u/x/f', uploadId: 'up-2', parts: opts.shortParts ? [...parts, { partNumber: 1, url: 'https://s3/a' }, { partNumber: 2, url: 'https://s3/b' }] : parts }
@@ -117,6 +121,57 @@ test('without an EMBER-DANDI sign-in nothing starts and the user is asked to sig
     (err: unknown) => err instanceof UserFacingError && err.message === EMBER_SIGN_IN,
   )
   assert.deepEqual(calls, [])
+})
+
+// ── Retry: carrying on from the checkpoint ───────────────────────────────────────────────────
+
+test('a retry after the MAABCD copy failed makes only that copy', async () => {
+  const { calls, store } = fakes({ failOsbOnce: true })
+  const checkpoints: unknown[] = []
+  const input = {
+    file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' },
+    onCheckpoint: (c: unknown) => checkpoints.push(c),
+  }
+  await assert.rejects(store().put(input), /HTTP 503/)
+  const resume = checkpoints.at(-1) as Record<string, unknown>
+  assert.deepEqual(resume, { userDandisetId: '000123', own: { assetId: 'asset-1', assetPath: (resume.own as { assetPath: string }).assetPath } })
+  calls.length = 0
+
+  const progress: number[] = []
+  const stored = await store().put({ ...input, resume }, (sent, total) => progress.push(sent / total))
+
+  assert.deepEqual(calls, ['osb-urls:osb-token:000533:animal 01.xlsx:true', 'put:https://s3/osb', 'osb-validate:000533:etag-osb'])
+  // Still the researcher's own copy that the run imports.
+  assert.equal(stored.url, `${ORIGIN}/api/assets/asset-1/download/`)
+  assert.equal(progress[0], 0.5, 'the copy made earlier counts as sent')
+  assert.equal(progress.at(-1), 1)
+  assert.deepEqual(checkpoints.at(-1), { ...resume, maabcdDone: true })
+})
+
+test('a retry after the own copy failed reuses the dandiset it created', async () => {
+  const { calls, store } = fakes({ failDirectOnce: true })
+  const checkpoints: unknown[] = []
+  const input = {
+    file: file(), protocolId: 'asst', userSub: 'u',
+    dandisets: { newName: 'ASST (IDP)', protocol: { id: 'asst', name: 'ASST' } },
+    onCheckpoint: (c: unknown) => checkpoints.push(c),
+  }
+  await assert.rejects(store().put(input), /initialize failed/)
+  assert.deepEqual(checkpoints.at(-1), { userDandisetId: '000777' })
+
+  const stored = await store().put({ ...input, resume: checkpoints.at(-1) as Record<string, unknown> })
+
+  assert.equal(calls.filter((c) => c.startsWith('create:')).length, 1, 'the dandiset is created once')
+  assert.equal(stored.dandisetId, '000777')
+})
+
+test('a retry with everything done makes no copy at all', async () => {
+  const { calls, store } = fakes()
+  const resume = { userDandisetId: '000123', own: { assetId: 'asset-1', assetPath: 'p/x/f' }, maabcdDone: true }
+  const stored = await store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' }, resume })
+
+  assert.deepEqual(calls, [])
+  assert.equal(stored.url, `${ORIGIN}/api/assets/asset-1/download/`)
 })
 
 test('the stored upload publishes the dandiset it went into, for its DOI', async () => {

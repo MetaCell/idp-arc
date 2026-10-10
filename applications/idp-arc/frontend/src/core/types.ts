@@ -1,3 +1,5 @@
+import type { StoredObject, UploadCheckpoint } from './ports/IObjectStore'
+
 /**
  * Core domain types — shared by ports, use-cases, and the UI layer.
  *
@@ -65,11 +67,24 @@ export type RunPhase =
   | 'succeeded'
   | 'failed'
 
+/** The run's steps, in order: their ids in the checklist (runProtocol's STEPS). */
+export const RUN_STEP = {
+  upload: 'upload',
+  workspace: 'workspace',
+  repo: 'repo',
+  data: 'data',
+  imports: 'imports',
+  run: 'run',
+  doi: 'doi',
+} as const
+
+export type RunStepId = (typeof RUN_STEP)[keyof typeof RUN_STEP]
+
 export type StepState = 'pending' | 'running' | 'succeeded' | 'skipped' | 'failed'
 
 /** One line of the run's checklist in the UI. */
 export interface RunStep {
-  id: string
+  id: RunStepId
   label: string
   state: StepState
   detail?: string
@@ -88,4 +103,32 @@ export interface RunState {
   /** The DOI of the version published at the end of the run. */
   doi?: { doi: string; url?: string }
   error?: string
+  /** What the run has done so far; given back on a retry, it carries on from there. */
+  checkpoint?: RunCheckpoint
+}
+
+/**
+ * What a run has done so far (runProtocol), kept by the dialog for a retry. It holds only for the
+ * same protocol, file, dandiset choice and sharing choice (canResume); anything else starts over.
+ */
+export interface RunCheckpoint {
+  protocolId: string
+  /** The file it was for: name, size and last-modified time. */
+  fileKey: string | null
+  /** The dandiset picked when it started (undefined: a new one). */
+  dandisetChoice?: string
+  shareWithMaabcd: boolean
+  /** The upload, part way: the store's own checkpoint. */
+  upload?: UploadCheckpoint
+  /** The upload, finished. */
+  stored?: StoredObject
+  workspaceId?: number
+  /** The workspace is recorded with the upload (in the dandiset's metadata). */
+  workspaceRecorded?: boolean
+  /** When this run's folder was named (workspaceLayout); reused until the notebooks are submitted. */
+  runFolderAt?: string
+  repoImported?: boolean
+  dataImported?: boolean
+  /** The notebooks ran and passed, in this folder: a retry goes straight to the DOI. */
+  ranIn?: string
 }

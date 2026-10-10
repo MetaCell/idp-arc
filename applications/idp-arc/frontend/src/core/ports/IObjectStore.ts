@@ -3,6 +3,10 @@
  * (emberObjectStore.ts) or a public bucket (publicBucketObjectStore.ts). The run doesn't know which.
  */
 
+/** Where an interrupted upload got to, in the store's own terms: reported while it uploads, and
+ *  passed back to pick up from there. The bucket has none (one request per file). */
+export type UploadCheckpoint = Readonly<Record<string, unknown>>
+
 export interface ObjectUploadInput {
   file: File
   /** The protocol's stable id (protocols.json): groups uploads by protocol. */
@@ -19,6 +23,10 @@ export interface ObjectUploadInput {
     /** The protocol's MAABCD dandiset (protocols.json `maabcdDandisetId`), uploaded to through OSB. */
     maabcd?: string
   }
+  /** From an earlier, interrupted put of the same file: what it already did is not done again. */
+  resume?: UploadCheckpoint
+  /** Gets the checkpoint each time a part of the upload is done. */
+  onCheckpoint?: (checkpoint: UploadCheckpoint) => void
 }
 
 export interface StoredObject {

@@ -1,3 +1,5 @@
+import { RUN_STEP, type RunStepId } from './types'
+
 /**
  * What the user reads when a run fails: one plain sentence per step. Technical details (HTTP
  * errors, OSB's messages) go to the browser console; the run's own log is in its results folder.
@@ -12,14 +14,14 @@ export class UserFacingError extends Error {
   }
 }
 
-const STEP_FAILED: Record<string, string> = {
-  upload: 'Your file could not be uploaded. Check your connection and try again.',
-  workspace: 'The workspace could not be prepared. Please try again.',
-  repo: 'The analysis code could not be added to the workspace. Please try again.',
-  data: 'Your file could not be added to the workspace. Please try again.',
-  imports: 'The files could not be copied into the workspace. Please try again.',
-  run: 'The analysis did not finish. Open the workspace to see what happened.',
-  doi: 'Your data could not be published with a DOI. Please try again.',
+const STEP_FAILED: Record<RunStepId, string> = {
+  [RUN_STEP.upload]: 'Your file could not be uploaded. Check your connection and try again.',
+  [RUN_STEP.workspace]: 'The workspace could not be prepared. Please try again.',
+  [RUN_STEP.repo]: 'The analysis code could not be added to the workspace. Please try again.',
+  [RUN_STEP.data]: 'Your file could not be added to the workspace. Please try again.',
+  [RUN_STEP.imports]: 'The files could not be copied into the workspace. Please try again.',
+  [RUN_STEP.run]: 'The analysis did not finish. Open the workspace to see what happened.',
+  [RUN_STEP.doi]: 'Your data could not be published with a DOI. Please try again.',
 }
 
 /** Says the EMBER-DANDI session is missing or over. Deliberately not SIGN_IN_AGAIN's wording,
@@ -30,7 +32,7 @@ export const EMBER_SIGN_IN = 'Please sign in with EMBER-DANDI and try again.'
 export const SIGN_IN_AGAIN = 'sign in again'
 
 /** The user's text for an error thrown during `step`. */
-export function userMessage(err: unknown, step?: string): string {
+export function userMessage(err: unknown, step?: RunStepId): string {
   if (err instanceof UserFacingError) return err.message
   // The auth client's "Please sign in again." can come from any step that asks for a token: kept,
   // so the dialog can send the user to sign in instead of suggesting a retry that fails the same way.

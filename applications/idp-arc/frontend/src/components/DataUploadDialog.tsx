@@ -18,16 +18,18 @@ import CloseIcon from '@mui/icons-material/Close'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
-import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
 import { emberAuth, getWorkspaceUrl, listProtocolDandisets, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
 import { EMBER_SIGN_IN } from '../core/userMessages'
 import { useAppContext } from '../AppContext'
-import type { RunStep } from '../core/types'
+import type { RunCheckpoint, RunStep } from '../core/types'
 import RunChecklist from './RunChecklist'
+import { createSessionStore, useSessionStore } from './sessionStore'
+import DoiField from './DoiField'
 import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
+import { canResume } from '../core/use-cases/runProtocol'
 import { formatBytes } from '../core/formatBytes'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
@@ -46,44 +48,57 @@ export interface DataUploadDialogProps {
   onAuthRequired?: () => void
 }
 
+interface FormState {
+step: DialogStep
+  protocol: string
+  file: File | null
+  isDragging: boolean
+  uploadMessage: string
+  /** ID of the workspace spawned in the current dialog session; drives retry behaviour. */
+  spawnedWorkspaceId: number | undefined
+  /** Where the last run's results are, relative to the workspace root. */
+  outputsDir: string
+  /** The DOI the run's data was published with. */
+  doi?: { doi: string; url?: string }
+  /** The run's checklist (upload, imports, run), as last reported by the use-case. */
+  runSteps: RunStep[]
+  /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
+  dandisetId: string
+  /** Also upload into the protocol's MAABCD dandiset; on by default. */
+  shareWithMaabcd: boolean
+  /** What the last attempt got done: a retry carries on from there (the run checks it still applies). */
+  checkpoint?: RunCheckpoint
+  /** The finished run's result has been on screen: the next opening starts a new upload. */
+  resultSeen?: boolean
+}
+
+const INITIAL_FORM: FormState = {
+  step: 'select',
+  protocol: '',
+  file: null,
+  isDragging: false,
+  uploadMessage: '',
+  spawnedWorkspaceId: undefined,
+  outputsDir: '',
+  runSteps: [],
+  dandisetId: '',
+  shareWithMaabcd: true,
+}
+
+/**
+ * The dialog's state, including a run in progress: kept outside the dialog, so closing it (or
+ * moving to another page, which remounts it) neither stops the run nor forgets it. Reopening shows
+ * it again, until a finished run's result has been seen.
+ */
+const session = createSessionStore<FormState>(INITIAL_FORM)
+const setForm = session.set
+/** The run being watched; each run gets its own token, so stopping one never revives another. */
+let currentWatch: { current: boolean } | null = null
+
 export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
-
-  interface FormState {
-    step: DialogStep
-    protocol: string
-    file: File | null
-    isDragging: boolean
-    uploadMessage: string
-    /** ID of the workspace spawned in the current dialog session; drives retry behaviour. */
-    spawnedWorkspaceId: number | undefined
-    /** Where the last run's results are, relative to the workspace root. */
-    outputsDir: string
-    /** The DOI the run's data was published with. */
-    doi?: { doi: string; url?: string }
-    /** The run's checklist (upload, imports, run), as last reported by the use-case. */
-    runSteps: RunStep[]
-    /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
-    dandisetId: string
-    /** Also upload into the protocol's MAABCD dandiset; on by default. */
-    shareWithMaabcd: boolean
-  }
-
-  const INITIAL_FORM: FormState = {
-    step: 'select',
-    protocol: '',
-    file: null,
-    isDragging: false,
-    uploadMessage: '',
-    spawnedWorkspaceId: undefined,
-    outputsDir: '',
-    runSteps: [],
-    dandisetId: '',
-    shareWithMaabcd: true,
-  }
-
-  const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi } = form
+  const [form] = useSessionStore(session)
+  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi, checkpoint } = form
   // EMBER-DANDI: the upload goes to the researcher's own account. Choosing a protocol lists their
   // dandisets for it, each with the workspace it runs in, so choosing one chooses both.
   const usesEmber = UPLOAD_BACKEND === 'ember'
@@ -91,44 +106,40 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const [protocolDandisets, setProtocolDandisets] = useState<ProtocolDandiset[] | null>(null)
   const [dandisetsError, setDandisetsError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
-  // The run being watched; each run gets its own token, so stopping one never revives another.
-  const watchRef = useRef<{ current: boolean } | null>(null)
 
-  // The dialog can't be closed from clicking Upload until the notebooks have started in OSB:
-  // before that, closing would abandon the upload or the imports half way (and the user would
-  // have to start over). Once they run in OSB's task, closing only stops watching.
-  const [closeLocked, setCloseLocked] = useState(false)
-  const [doiCopied, setDoiCopied] = useState(false)
-  const copyDoi = (value: string) => {
-    navigator.clipboard?.writeText(value).then(() => setDoiCopied(true), () => setDoiCopied(false))
-  }
+  // While a run is being set up, uploaded or watched, ask before the page is reloaded or closed,
+  // with the dialog open or not: the upload is driven by this tab and would be lost, and the
+  // progress view would lose track of the run (which itself carries on in the workspace). Browsers
+  // show their own generic "Leave site?" text. This can't stop sleep, a crash, or a discarded tab.
   useEffect(() => {
-    if (step !== 'uploading') setCloseLocked(false) // finished, failed, or sent back to the form
-  }, [step])
-
-  // While a run is being set up, uploaded or watched, ask before the page is reloaded or closed:
-  // the upload is driven by this tab and would be lost, and the progress view would lose track
-  // of the run (which itself carries on in the workspace). Browsers show their own generic
-  // "Leave site?" text. This can't stop sleep, a crash, or the browser discarding the tab.
-  useEffect(() => {
-    if (!open || step !== 'uploading') return
+    if (step !== 'uploading') return
     const warn = (e: BeforeUnloadEvent) => {
       e.preventDefault()
       e.returnValue = '' // still needed by some browsers to show the prompt
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [open, step])
+  }, [step])
 
+  /** A fresh form, on the protocol the dialog was opened for. */
+  const freshForm = () => setForm({
+    ...INITIAL_FORM, protocol: runnableProtocols.some((p) => p.name === initialProtocol) ? initialProtocol! : '',
+  })
+
+  // Opening shows the current run: running, failed (for Retry), or finished and not yet seen
+  // (it ended while the dialog was closed). Otherwise it starts a new upload.
   useEffect(() => {
-    if (!open) {
-      // Stops watching only: the run itself carries on in the workspace.
-      if (watchRef.current) watchRef.current.current = true
-      return
-    }
-    setForm({ ...INITIAL_FORM, protocol: runnableProtocols.some((p) => p.name === initialProtocol) ? initialProtocol! : '' })
+    if (!open) return
+    const current = session.get()
+    const unstarted = current.step === 'select' || (current.step === 'upload' && !current.checkpoint)
+    if (unstarted || current.resultSeen) freshForm()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+  // A finished run's result counts as seen once it is on screen.
+  const finished = step === 'success' || step === 'stillRunning'
+  useEffect(() => {
+    if (open && finished) setForm((prev) => (prev.resultSeen ? prev : { ...prev, resultSeen: true }))
+  }, [open, finished])
 
   // The chosen protocol's dandisets; the first is preselected, with its workspace.
   const protocolId = runnableProtocols.find((p) => p.name === protocol)?.id
@@ -141,7 +152,9 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
       .then((list) => {
         if (!current) return
         setProtocolDandisets(list)
-        setForm((prev) => ({ ...prev, dandisetId: list[0]?.id ?? '', spawnedWorkspaceId: list[0]?.workspaceId }))
+        // Only while choosing: reopening on a run must not change its dandiset or workspace.
+        setForm((prev) => (prev.step !== 'select' ? prev
+          : { ...prev, dandisetId: list[0]?.id ?? '', spawnedWorkspaceId: list[0]?.workspaceId }))
       })
       .catch((err: unknown) => {
         console.error('Could not list the EMBER-DANDI dandisets', err)
@@ -180,12 +193,10 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
   const handleUpload = async () => {
     if (!file || fileProblem || !selectedProtocol) return
-    setCloseLocked(true)
     setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [], doi: undefined }))
-    setDoiCopied(false)
-    if (watchRef.current) watchRef.current.current = true
+    if (currentWatch) currentWatch.current = true
     const watch = { current: false }
-    watchRef.current = watch
+    currentWatch = watch
 
     await runProtocol(
       {
@@ -197,13 +208,14 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
         workspaceName: selectedProtocol.name,
         dandisetId: dandisetId || undefined,
         shareWithMaabcd,
+        resume: checkpoint,
       },
       (state) => {
-        if (watch.current) return // the dialog was closed, or another run started: no longer this one's
-        if (state.phase === 'running') setCloseLocked(false) // in OSB's task now: closing only stops watching
+        if (watch.current) return // another run started: no longer this one's
         if (state.phase === 'failed' && state.error?.toLowerCase().includes(SIGN_IN_AGAIN)) {
           setForm((prev) => ({
             ...prev, step: 'upload', uploadMessage: '', spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
+            checkpoint: state.checkpoint ?? prev.checkpoint,
           }))
           onAuthRequired?.()
           return
@@ -214,6 +226,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           setForm((prev) => ({
             ...prev, step: 'select', uploadMessage: EMBER_SIGN_IN,
             spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId, dandisetId: state.dandisetId ?? prev.dandisetId,
+            checkpoint: state.checkpoint ?? prev.checkpoint,
           }))
           return
         }
@@ -226,6 +239,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           outputsDir: state.outputsDir ?? prev.outputsDir,
           doi: state.doi ?? prev.doi,
           runSteps: state.steps,
+          checkpoint: state.checkpoint ?? prev.checkpoint,
           ...(state.phase === 'succeeded' ? { step: 'success' } : {}),
           ...(state.phase === 'stillRunning' ? { step: 'stillRunning' } : {}),
           ...(state.phase === 'failed' ? { step: 'failed' } : {}),
@@ -235,6 +249,13 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     )
   }
 
+  // "Retry" only when an earlier attempt can be carried on (same protocol, file, dandiset and
+  // sharing choice); choosing a dandiset that already has a workspace is still a new run.
+  const resumable = !!selectedProtocol && canResume(checkpoint, {
+    protocol: selectedProtocol, file, workspaceName: selectedProtocol.name,
+    workspaceId: spawnedWorkspaceId, dandisetId: dandisetId || undefined, shareWithMaabcd,
+  })
+
   const stepIndex = step === 'select' ? 0 : 1
   const canGoNext = !!protocol && (!usesEmber || (emberSignedIn && protocolDandisets !== null))
   const canUpload = !!file && !fileProblem && emberSignedIn
@@ -242,7 +263,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   return (
     <Dialog
       open={open}
-      onClose={closeLocked ? undefined : onClose}
+      onClose={onClose}
       maxWidth={false}
       slotProps={{
         paper: {
@@ -293,8 +314,6 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           )}
           <IconButton
             onClick={onClose}
-            disabled={closeLocked}
-            title={closeLocked ? 'Wait until the analysis has started in the workspace' : undefined}
             size="small"
             sx={{ color: 'text.primary' }}
           >
@@ -538,20 +557,6 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                   {step === 'stillRunning' ? 'Results will be in' : 'Results are in'} <code>{outputsDir}/</code> in your workspace.
                 </Typography>
               )}
-              {step === 'success' && doi && (
-                <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <Typography variant="body2" sx={{ opacity: 0.6 }}>DOI</Typography>
-                  <Typography component="code" variant="body2" sx={{ fontFamily: 'monospace', userSelect: 'all' }}>{doi.doi}</Typography>
-                  <Button size="small" variant="outlined" startIcon={<ContentCopyIcon />} onClick={() => copyDoi(doi.doi)}>
-                    {doiCopied ? 'Copied' : 'Copy'}
-                  </Button>
-                  {doi.url && (
-                    <Button size="small" variant="text" endIcon={<OpenInNewIcon />} href={doi.url} target="_blank" rel="noopener noreferrer">
-                      View
-                    </Button>
-                  )}
-                </Stack>
-              )}
               {step !== 'uploading' && spawnedWorkspaceId !== undefined && (
                 <Button variant="outlined" onClick={() => openWorkspaceTab(spawnedWorkspaceId)}>
                   Open workspace
@@ -559,6 +564,12 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
               )}
             </Stack>
             {runSteps.length > 0 && <RunChecklist steps={runSteps} />}
+            {/* Under the checklist, after its last row, "Publish your data with a DOI". */}
+            {step === 'success' && doi && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', maxWidth: '100%', overflowX: 'auto', mt: 3 }}>
+                <DoiField doi={doi.doi} />
+              </Box>
+            )}
           </Stack>
         )}
       </Box>
@@ -587,7 +598,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
             disabled={!canUpload}
             onClick={handleUpload}
           >
-            {spawnedWorkspaceId !== undefined ? 'Retry' : 'Upload and run'}
+            {resumable ? 'Retry' : 'Upload and run'}
           </Button>
         </Box>
       )}
