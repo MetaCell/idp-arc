@@ -84,8 +84,7 @@ const protocolDandisets = createProtocolDandisetsUseCases({
   emberAuth, direct: emberDirect, osbDomain: OSB_DOMAIN, workspaceUrl: (id) => getWorkspaceUrl(id),
 })
 
-/** Where uploads go before OSB imports them: the public bucket (Scenario 1), or EMBER-DANDI
- *  (Scenario 2: the researcher's own dandiset, plus the protocol's MAABCD dandiset through OSB). */
+/** Where uploads go before OSB imports them (UPLOAD_BACKEND): EMBER-DANDI, or the public bucket. */
 export const objectStore: IObjectStore = UPLOAD_BACKEND === 'ember'
   ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_ORIGIN)
   : new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
@@ -99,11 +98,11 @@ export const loadWorkspaces = createLoadWorkspacesUseCase(authClient, workspaceA
 export const createWorkspace = createCreateWorkspaceUseCase(authClient, workspaceApi)
 
 /** Uploads the researcher's file, imports it and the protocol's repository into the workspace
- * through OSB, and runs the notebooks in OSB's Argo task (MAABCD–OSB design). */
+ * through OSB, and runs the notebooks in OSB's Argo task. */
 export const runProtocol = createRunProtocolUseCase(authClient, workspaceApi, objectStore)
 
-/** DANDI-backed upload (Route A, see IDP-43 notes); `finalize` also runs the selected
- * protocol's script server-side (jupyter_kernel_client.py in OSBv2's workspaces app). */
+/** The earlier DANDI-backed upload; `finalize` also runs the selected protocol's script on OSB
+ * (jupyter_kernel_client.py in OSBv2's workspaces app). */
 export const createAndUploadToDandi = createCreateAndUploadToDandiUseCase(authClient, dandiApi)
 
 /** The researcher's EMBER-DANDI dandisets for a protocol, each with the workspace it runs in when

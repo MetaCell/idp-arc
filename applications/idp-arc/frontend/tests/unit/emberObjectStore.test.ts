@@ -1,4 +1,4 @@
-// The Scenario 2 upload (core/use-cases/emberObjectStore.ts) against in-memory ports. Run: yarn test:unit
+// The EMBER-DANDI upload (core/use-cases/emberObjectStore.ts) against in-memory ports. Run: yarn test:unit
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createEmberObjectStore, EMBER_SIGN_IN } from '../../src/core/use-cases/emberObjectStore'

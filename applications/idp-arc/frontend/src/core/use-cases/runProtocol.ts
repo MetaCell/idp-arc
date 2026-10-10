@@ -28,8 +28,8 @@ export interface RunProtocolDefinition {
   /** The image the notebooks run in (their environment): an OSB application's name (e.g. `netpyne`)
    *  or an image reference from a registry OSB allows. Without it, OSB's default (JupyterLab). */
   image?: string
-  /** Scenario 2: the protocol's MAABCD dandiset on EMBER-DANDI, which every contributor's upload
-   *  is also copied into (through OSB). Empty or absent: no MAABCD copy. */
+  /** The protocol's MAABCD dandiset on EMBER-DANDI, which each upload is also copied into
+   *  (through OSB). Empty or absent: no MAABCD copy. */
   maabcdDandisetId?: string
 }
 
@@ -41,8 +41,8 @@ export interface RunProtocolInput {
   workspaceId?: number
   /** Name for the workspace created when `workspaceId` is undefined. */
   workspaceName: string
-  /** Scenario 2: the researcher's own EMBER-DANDI dandiset to upload into; a new one is created
-   *  when undefined. The bucket (Scenario 1) ignores it. */
+  /** The researcher's EMBER-DANDI dandiset to upload into; undefined creates one. The bucket
+   *  ignores it. */
   dandisetId?: string
   /** Also upload into the protocol's MAABCD dandiset, when it has one (the default). */
   shareWithMaabcd?: boolean
@@ -71,13 +71,11 @@ const STEPS = [
 ]
 
 /**
- * Runs a protocol on the researcher's data, per the MAABCD–OSB design. Before anything
- * moves, the protocol and the file are checked; then, one step per entry in STEPS:
+ * Runs a protocol on the researcher's data. Before anything moves, the protocol and the file are
+ * checked; then, one step per entry in STEPS:
  *
- *   1. Upload through IObjectStore: browser → public bucket (Scenario 1), or → EMBER-DANDI
- *      (Scenario 2, emberObjectStore.ts); the URL it returns is what OSB imports. It goes first
- *      (the design runs it in parallel with the workspace side): nothing is created in OSB until
- *      the file is safely in the bucket, so a failed upload leaves no empty workspace.
+ *   1. Upload through IObjectStore (EMBER-DANDI or the public bucket); OSB imports from the URL
+ *      it returns. It goes first, so a failed upload leaves no empty workspace behind.
  *   2. Workspace: the selected one, or a new one tagged `maabcd:<protocol id>`.
  *   3. Import the repository and
  *   4. import the data, both through OSB (`POST /workspaceresource`) into this run's own folder
@@ -127,8 +125,8 @@ export function createRunProtocolUseCase(
       const stored = file ? await inStep('upload', () => uploadFile(file, userId)) : null
       if (stopped()) return
 
-      // 2. Get the workspace: the selected one, or a new one; recorded with the upload (Scenario 2:
-      // in the dandiset's metadata, so the next upload for this protocol finds both).
+      // 2. Get the workspace: the selected one, or a new one, recorded in the dandiset's metadata so
+      // the next upload for this protocol finds both.
       const workspaceId = await inStep('workspace', async () => {
         const id = await prepareWorkspace()
         await stored?.recordWorkspace?.(id)

@@ -1,6 +1,5 @@
 /**
- * A protocol's repository, from its `repoZipUrl` in protocols.json (GitHub's codeload archive, as
- * the MAABCD–OSB design names it), e.g.
+ * A protocol's repository, from its `repoZipUrl` in protocols.json (GitHub's codeload archive), e.g.
  * `https://codeload.github.com/maracbaylis/four-choice-example/zip/refs/heads/main`.
  */
 export interface ProtocolRepo {

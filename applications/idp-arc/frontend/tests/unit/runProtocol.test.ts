@@ -1,4 +1,4 @@
-// The Scenario 1 run (core/use-cases/runProtocol.ts) against in-memory ports. Run: yarn test:unit
+// The run (core/use-cases/runProtocol.ts) against in-memory ports. Run: yarn test:unit
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRunProtocolUseCase } from '../../src/core/use-cases/runProtocol'

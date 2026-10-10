@@ -10,22 +10,17 @@ import type { ProtocolDandisets } from './protocolDandisets'
 export { EMBER_SIGN_IN }
 
 /**
- * Scenario 2: the upload goes to EMBER-DANDI instead of the public bucket, behind the same
- * IObjectStore port, so the run (runProtocol) doesn't change. Each file is uploaded twice:
+ * The EMBER-DANDI object store. Each file is uploaded twice:
  *
- *   1. into the researcher's own dandiset, straight from the browser with their own EMBER token
- *      (picked in the dialog, or created here, recorded for the protocol). Its download URL is
- *      what OSB imports into their workspace, so this is the copy the run uses. Once the run has
- *      its workspace, `recordWorkspace` writes it into the dandiset's metadata
- *      (protocolDandisets.ts), so the next upload for this protocol finds both;
+ *   1. into the researcher's own dandiset, from the browser with their EMBER token. This is the
+ *      copy OSB imports into their workspace; `recordWorkspace` then writes that workspace into
+ *      the dandiset's metadata, so the next upload for the protocol finds both;
  *   2. into the protocol's MAABCD dandiset (protocols.json `maabcdDandisetId`), through OSB's
- *      `/ember` endpoints, which sign with OSB's key. OSB files it under the uploader's own id,
- *      so the dandiset holds every contributor's uploads for the protocol, one folder each.
- *      Skipped when the protocol has no MAABCD dandiset configured.
+ *      `/ember` endpoints, which sign with the MAABCD account's key. Skipped when the protocol has
+ *      none, or the researcher chose not to share.
  *
- * The browser moves the bytes both times. The second transfer is normally empty: EMBER keeps one
- * blob per content, so it answers the second initialize with that blob and no parts (to be
- * confirmed with EMBER for blobs that live in another account's dandiset).
+ * The browser sends the bytes both times. The second transfer is usually empty: EMBER stores each
+ * content once, and answers with the existing blob instead of parts.
  *
  * No wait for "valid" before returning: the blob is checked against the etag when the upload is
  * validated (synchronously, before the asset exists), so its download link works at once.

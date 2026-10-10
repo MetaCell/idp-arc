@@ -79,7 +79,7 @@ export interface RunState {
   /** Every step of the run, in order, for the checklist. */
   steps: RunStep[]
   workspaceId?: number
-  /** Scenario 2: the researcher's EMBER-DANDI dandiset the upload went into (kept for a retry). */
+  /** The researcher's EMBER-DANDI dandiset the upload went into; a retry reuses it. */
   dandisetId?: string
   /** This run's results folder, relative to the workspace root. */
   outputsDir?: string

@@ -1,7 +1,6 @@
 /**
- * Where a researcher's upload comes to rest before OSB imports it into the workspace (MAABCD–OSB
- * Integration design, "Upload port + adapter"). Scenario 1 is a public bucket; Scenario 2 swaps
- * in an EMBER-DANDI adapter behind this same port, so the upload flow doesn't change.
+ * Where a researcher's upload is stored before OSB imports it into the workspace: EMBER-DANDI
+ * (emberObjectStore.ts) or a public bucket (publicBucketObjectStore.ts). The run doesn't know which.
  */
 
 export interface ObjectUploadInput {
@@ -10,7 +9,7 @@ export interface ObjectUploadInput {
   protocolId: string
   /** The uploader's Keycloak id (`sub`): groups uploads by contributor. */
   userSub: string
-  /** Scenario 2 (EMBER-DANDI) only; the bucket ignores it. */
+  /** EMBER-DANDI only; the bucket ignores it. */
   dandisets?: {
     /** The researcher's own dandiset; created (named `newName`) when undefined. */
     user?: string
@@ -27,9 +26,9 @@ export interface StoredObject {
   url: string
   /** The object's name in its store, for messages and logs. */
   key: string
-  /** Scenario 2: the researcher's dandiset it went into (created by this upload, possibly). */
+  /** EMBER-DANDI: the researcher's dandiset it went into (possibly created by this upload). */
   dandisetId?: string
-  /** Scenario 2: records the run's workspace with the upload (in the dandiset's metadata). */
+  /** EMBER-DANDI: records the run's workspace in the dandiset's metadata. */
   recordWorkspace?: (workspaceId: number) => Promise<void>
 }
 

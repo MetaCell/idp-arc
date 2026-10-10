@@ -81,9 +81,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
   const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd } = form
-  // EMBER-DANDI (Scenario 2): the upload goes to the researcher's own account (signed in to from the
-  // Login dialog). With the protocol, the dialog finds their dandisets for that protocol, each
-  // naming the workspace it runs in (its metadata): choosing one chooses both.
+  // EMBER-DANDI: the upload goes to the researcher's own account. Choosing a protocol lists their
+  // dandisets for it, each with the workspace it runs in, so choosing one chooses both.
   const usesEmber = UPLOAD_BACKEND === 'ember'
   const emberSignedIn = !usesEmber || emberAuth.isConnected()
   const [protocolDandisets, setProtocolDandisets] = useState<ProtocolDandiset[] | null>(null)
