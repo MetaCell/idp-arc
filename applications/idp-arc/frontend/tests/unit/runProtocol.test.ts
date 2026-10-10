@@ -1,7 +1,7 @@
-// The Scenario 1 run (core/use-cases/runProtocol.ts) against in-memory ports. Run: yarn test:unit
+// The run (core/use-cases/runProtocol.ts) against in-memory ports. Run: yarn test:unit
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { createRunProtocolUseCase } from '../../src/core/use-cases/runProtocol'
+import { canResume, createRunProtocolUseCase } from '../../src/core/use-cases/runProtocol'
 import { RUN_SETTINGS } from '../../src/core/runSettings'
 import type { IWorkspaceApi, ImportResourceInput, StartRunInput, WorkspaceResourceState } from '../../src/core/ports/IWorkspaceApi'
 import type { IObjectStore } from '../../src/core/ports/IObjectStore'
@@ -87,7 +87,8 @@ test('uploads, imports both into the run folder, waits, runs, and reports the ru
 
   assert.equal(last.phase, 'succeeded', last.error)
   assert.equal(last.workspaceId, 42)
-  assert.deepEqual(last.steps.map((s) => s.state), Array(6).fill('succeeded'))
+  // The bucket can't publish: no DOI step.
+  assert.deepEqual(last.steps.map((s) => s.state), [...Array(6).fill('succeeded'), 'skipped'])
   assert.ok(f.calls.includes('create:Four-choice:maabcd:four-choice-reversal'))
 
   // <protocol>/run-<protocol>-<UTC time>/: the code and the upload, imported into the run's folder.
@@ -161,7 +162,7 @@ test('without a file: no upload, no data import, the notebooks run on the exampl
   assert.equal(last.phase, 'succeeded')
   assert.deepEqual(f.imports.map((i) => i.resourceType), ['g'])
   assert.equal(f.runInput()?.inputDir, undefined)
-  assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'data'])
+  assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'data', 'doi'])
 })
 
 test('a failed upload marks only the upload step failed', async () => {
@@ -296,4 +297,236 @@ test('an ended session mid-run asks to sign in again', async () => {
   const last = states.pop()!
   assert.equal(last.phase, 'failed')
   assert.match(last.error ?? '', /sign in again/)
+})
+
+test('an EMBER-DANDI upload gets the run\'s workspace recorded in its dandiset, and the dialog the dandiset id', async () => {
+  const f = fakes()
+  const seen: { dandisets?: unknown } = {}
+  const store: IObjectStore = {
+    async put(input) {
+      f.calls.push('upload')
+      seen.dandisets = input.dandisets
+      return {
+        url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777',
+        recordWorkspace: async (id) => { f.calls.push(`record:${id}`) },
+      }
+    },
+  }
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, store)(
+    { protocol: { ...FOUR_CHOICE, maabcdDandisetId: '000533' }, file: file(), workspaceName: 'Four-choice', dandisetId: '000123' },
+    (s) => states.push(s))
+  const last = states[states.length - 1]
+
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(last.dandisetId, '000777')
+  // Recorded once the workspace exists, before anything is imported into it.
+  const create = f.calls.findIndex((c) => c.startsWith('create:'))
+  assert.equal(f.calls[create + 1], 'record:42')
+  assert.deepEqual(seen.dandisets, {
+    user: '000123', newName: 'Four-choice reversal digging task (IDP)', maabcd: '000533',
+    protocol: { id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/maracbaylis/four-choice-example' },
+  })
+})
+
+test('with "Share with MAABCD" unticked, nothing goes to the protocol\'s MAABCD dandiset', async () => {
+  const f = fakes()
+  const seen: { dandisets?: { maabcd?: string } } = {}
+  const store: IObjectStore = {
+    async put(input) {
+      seen.dandisets = input.dandisets
+      return { url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777' }
+    },
+  }
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, store)(
+    { protocol: { ...FOUR_CHOICE, maabcdDandisetId: '000533' }, file: file(), workspaceName: 'Four-choice', shareWithMaabcd: false },
+    (s) => states.push(s))
+
+  assert.equal(states[states.length - 1].phase, 'succeeded')
+  assert.equal(seen.dandisets?.maabcd, undefined)
+})
+
+// ── Retry: carrying on from the checkpoint ───────────────────────────────────────────────────
+
+/** Makes `method` of the fake workspace API throw the first `times` times it is called. */
+function failFirst<K extends keyof IWorkspaceApi>(f: ReturnType<typeof fakes>, method: K, times = 1, when: (...args: Parameters<IWorkspaceApi[K]>) => boolean = () => true) {
+  const original = f.api[method] as (...args: unknown[]) => Promise<unknown>
+  let left = times
+  f.api[method] = (async (...args: Parameters<IWorkspaceApi[K]>) => {
+    if (left > 0 && when(...args)) { left -= 1; throw new Error(`${String(method)} failed`) }
+    return original(...args)
+  }) as IWorkspaceApi[K]
+}
+/** The researcher's file: the same File object on every attempt, as the dialog keeps it. */
+const data = new File(['x'], 'animal_01.xlsx', { lastModified: 1_700_000_000_000 })
+const count = (calls: string[], name: string) => calls.filter((c) => c === name || c.startsWith(`${name}:`)).length
+
+test('a retry after the data import failed imports only the data, into the same folder', async () => {
+  const f = fakes()
+  failFirst(f, 'importResource', 1, (_t, input) => input.resourceType === 'e')
+  const first = (await run(f, { file: data })).at(-1)!
+  assert.equal(first.phase, 'failed')
+  assert.equal(first.steps.find((s) => s.id === 'data')?.state, 'failed')
+
+  const last = (await run(f, { file: data, workspaceId: first.workspaceId, resume: first.checkpoint })).at(-1)!
+
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(count(f.calls, 'upload'), 1, 'uploaded once')
+  assert.equal(count(f.calls, 'create'), 1, 'one workspace')
+  assert.equal(count(f.calls, 'import:g'), 1, 'the code imported once')
+  // (the failed attempt never reached the fake, so only the retry's import is recorded)
+  assert.equal(count(f.calls, 'import:e'), 1, 'the data imported, on the retry')
+  const [repo, dataImport] = f.imports
+  assert.equal(dataImport.folder, `${repo.folder}/inputs`, 'into the same run folder')
+  assert.deepEqual(last.steps.filter((s) => s.detail === 'Done earlier').map((s) => s.id), ['upload', 'repo'])
+})
+
+test('when waiting for the imports fails, the retry imports into a new run folder', async () => {
+  const f = fakes()
+  failFirst(f, 'getWorkspaceResources')
+  const first = (await run(f, { file: data })).at(-1)!
+  assert.equal(first.steps.find((s) => s.id === 'imports')?.state, 'failed')
+  assert.equal(first.checkpoint?.runFolderAt, undefined)
+
+  const last = (await run(f, { file: data, workspaceId: first.workspaceId, resume: first.checkpoint })).at(-1)!
+
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(count(f.calls, 'upload'), 1)
+  assert.equal(count(f.calls, 'create'), 1)
+  assert.equal(count(f.calls, 'import:g'), 2, 'the code imported again')
+  assert.equal(count(f.calls, 'import:e'), 2, 'the data imported again')
+})
+
+test('once the notebooks were submitted, a retry runs them again without uploading again', async () => {
+  const f = fakes({ runFails: 'notebook' })
+  const first = (await run(f, { file: data })).at(-1)!
+  assert.equal(first.steps.find((s) => s.id === 'run')?.state, 'failed')
+
+  await run(f, { file: data, workspaceId: first.workspaceId, resume: first.checkpoint })
+
+  assert.equal(count(f.calls, 'upload'), 1)
+  assert.equal(count(f.calls, 'create'), 1)
+  assert.equal(count(f.calls, 'import:g'), 2, 'the code again (the first run consumed it)')
+  assert.equal(count(f.calls, 'run'), 2)
+})
+
+test('a failed upload is retried, and a later failure keeps the upload', async () => {
+  const f = fakes()
+  const put = f.store.put
+  let uploads = 0
+  f.store.put = async (input, onProgress) => {
+    uploads += 1
+    if (uploads === 1) throw new Error('network')
+    return put(input, onProgress)
+  }
+  const first = (await run(f, { file: data })).at(-1)!
+  assert.equal(first.steps.find((s) => s.id === 'upload')?.state, 'failed')
+  assert.equal(first.checkpoint?.stored, undefined)
+
+  const last = (await run(f, { file: data, resume: first.checkpoint })).at(-1)!
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(uploads, 2)
+})
+
+test('another file, protocol or sharing choice starts over instead of carrying on', async () => {
+  const f = fakes()
+  failFirst(f, 'importResource', 1, (_t, input) => input.resourceType === 'e')
+  const first = (await run(f, { file: data })).at(-1)!
+  const resume = first.checkpoint!
+
+  const changed = new File(['x'], 'animal_01.xlsx', { lastModified: data.lastModified + 1 })
+  assert.equal(canResume(resume, { protocol: FOUR_CHOICE, file: changed, workspaceName: 'x', workspaceId: first.workspaceId }), false,
+    'same name and size, but changed since')
+  const input = { protocol: FOUR_CHOICE, file: data, workspaceName: 'x', workspaceId: first.workspaceId }
+  assert.equal(canResume(resume, input), true)
+  assert.equal(canResume(resume, { ...input, protocol: { ...FOUR_CHOICE, id: 'asst' } }), false)
+  assert.equal(canResume(resume, { ...input, shareWithMaabcd: false }), false)
+  assert.equal(canResume(resume, { ...input, dandisetId: '000999' }), false)
+  assert.equal(canResume(resume, { ...input, workspaceId: 7 }), false)
+
+  await run(f, { file: new File(['y'], 'animal_02.xlsx'), workspaceId: first.workspaceId, resume })
+  assert.equal(count(f.calls, 'upload'), 2, 'the other file is uploaded')
+})
+
+// ── The DOI ──────────────────────────────────────────────────────────────────────────────────
+
+test('an EMBER-DANDI upload is published once the notebooks have run, and the DOI is reported', async () => {
+  const f = fakes()
+  const order: string[] = []
+  f.api.startRun = ((startRun) => async (...args: Parameters<IWorkspaceApi['startRun']>) => {
+    order.push('run'); return startRun(...args)
+  })(f.api.startRun)
+  const store: IObjectStore = {
+    async put() {
+      return {
+        url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777',
+        publish: async () => { order.push('publish'); return { doi: '10.60533/ember-dandi.000777/0.261010.1200', url: 'https://ember/000777/0.261010.1200' } },
+      }
+    },
+  }
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, store)({ protocol: FOUR_CHOICE, file: file(), workspaceName: 'x' }, (s) => states.push(s))
+  const last = states.at(-1)!
+
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.deepEqual(order, ['run', 'publish'])
+  assert.deepEqual(last.doi, { doi: '10.60533/ember-dandi.000777/0.261010.1200', url: 'https://ember/000777/0.261010.1200' })
+  const doiStep = last.steps.find((s) => s.id === 'doi')!
+  assert.equal(doiStep.state, 'succeeded')
+  assert.equal(doiStep.detail, undefined, 'the DOI is shown in its own field, not as the row\'s detail')
+})
+
+test('no DOI when the notebooks fail, and a failed publish fails only its own step', async () => {
+  const published: string[] = []
+  const store = (fail: boolean): IObjectStore => ({
+    async put() {
+      return {
+        url: 'u', key: 'k', dandisetId: '000777',
+        publish: async () => { published.push('publish'); if (fail) throw new Error('EMBER publish failed (HTTP 400)'); return { doi: 'd' } },
+      }
+    },
+  })
+  const notebookFails = fakes({ runFails: 'notebook' })
+  const failedRun: RunState[] = []
+  await createRunProtocolUseCase(auth, notebookFails.api, store(false))({ protocol: FOUR_CHOICE, file: file(), workspaceName: 'x' }, (s) => failedRun.push(s))
+  assert.equal(failedRun.at(-1)!.phase, 'failed')
+  assert.deepEqual(published, [], 'nothing published after a failed run')
+
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, fakes().api, store(true))({ protocol: FOUR_CHOICE, file: file(), workspaceName: 'x' }, (s) => states.push(s))
+  const last = states.at(-1)!
+  assert.equal(last.phase, 'failed')
+  assert.deepEqual(last.steps.filter((s) => s.state !== 'succeeded').map((s) => `${s.id}:${s.state}`), ['doi:failed'])
+})
+
+test('a retry after the DOI step failed only publishes: the notebooks are not run again', async () => {
+  const f = fakes()
+  let publishes = 0
+  const store: IObjectStore = {
+    async put() {
+      f.calls.push('upload')
+      return {
+        url: 'u', key: 'k', dandisetId: '000777',
+        publish: async () => { publishes += 1; if (publishes === 1) throw new Error('EMBER publish failed'); return { doi: 'doi/000777' } },
+      }
+    },
+  }
+  const attempt = async (resume?: RunState['checkpoint'], workspaceId?: number) => {
+    const states: RunState[] = []
+    await createRunProtocolUseCase(auth, f.api, store)({ protocol: FOUR_CHOICE, file: data, workspaceName: 'x', resume, workspaceId }, (s) => states.push(s))
+    return states.at(-1)!
+  }
+  const first = await attempt()
+  assert.equal(first.steps.find((s) => s.id === 'doi')?.state, 'failed')
+
+  const last = await attempt(first.checkpoint, first.workspaceId)
+
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(last.doi?.doi, 'doi/000777')
+  assert.equal(count(f.calls, 'run'), 1, 'the notebooks ran once')
+  assert.equal(count(f.calls, 'upload'), 1)
+  assert.equal(count(f.calls, 'import:g'), 1)
+  assert.equal(last.outputsDir, first.outputsDir, 'the results stay where the run put them')
+  assert.deepEqual(last.steps.filter((s) => s.detail === 'Done earlier').map((s) => s.id), ['upload', 'repo', 'data', 'imports', 'run'])
 })

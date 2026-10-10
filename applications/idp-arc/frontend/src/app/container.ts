@@ -20,7 +20,13 @@ import { KeycloakAuthClient } from '../infra/keycloakAuthClient'
 import { WorkspaceApiClient } from '../infra/workspaceApiClient'
 import { DandiApiClient } from '../infra/dandiApiClient'
 import { PublicBucketObjectStore } from '../infra/publicBucketObjectStore'
+import { EmberOAuthClient, EMBER_CALLBACK_PATH } from '../infra/emberOAuthClient'
+import { EmberDandiDirectClient } from '../infra/emberDandiDirectClient'
+import { EmberUploadApiClient } from '../infra/emberUploadApiClient'
+import { EMBER_API_ORIGIN_DEFAULT, EMBER_WEB_ORIGIN } from '../infra/emberUrls'
 import type { IObjectStore } from '../core/ports/IObjectStore'
+import { createEmberObjectStore } from '../core/use-cases/emberObjectStore'
+import { createProtocolDandisetsUseCases, type ProtocolDandiset } from '../core/use-cases/protocolDandisets'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
 import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
 import { createCreateWorkspaceUseCase } from '../core/use-cases/createWorkspace'
@@ -29,13 +35,25 @@ import { createRunProtocolUseCase } from '../core/use-cases/runProtocol'
 // ─── Config ───────────────────────────────────────────────────────────────────
 // All environment-specific URLs live here (or read from import.meta.env in Vite).
 
-const BASE_DOMAIN    = import.meta.env.VITE_OSB_BASE_DOMAIN ?? 'v2dev.opensourcebrain.org'
-const PROTOCOL       = import.meta.env.VITE_OSB_PROTOCOL ?? 'https'
-const WWW_BASE       = import.meta.env.DEV ? '/api-proxy' : `${PROTOCOL}://www.${BASE_DOMAIN}`
-const WORKSPACES_API = `${WWW_BASE}/proxy/workspaces/api`
+const OSB_DOMAIN     = import.meta.env.VITE_OSB_BASE_DOMAIN ?? 'v2dev.opensourcebrain.org'
+const OSB_SCHEME     = import.meta.env.VITE_OSB_PROTOCOL ?? 'https'
+const OSB_API_BASE   = import.meta.env.DEV ? '/api-proxy' : `${OSB_SCHEME}://www.${OSB_DOMAIN}`
+const WORKSPACES_API = `${OSB_API_BASE}/proxy/workspaces/api`
 const WORKSPACES_LIST_URL =
-  `${WWW_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
-const FRONTEND_BASE  = `${PROTOCOL}://www.${BASE_DOMAIN}`
+  `${OSB_API_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
+const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
+
+/** Where uploads go: `ember` (EMBER-DANDI) or `bucket` (the public bucket named by
+ *  VITE_UPLOAD_BUCKET_URL). Change it here to switch. */
+export const UPLOAD_BACKEND = 'ember' as 'bucket' | 'ember'
+/** The OSB (Keycloak) user whose EMBER-DANDI key (user attribute `EMBER_API_KEY`) signs the copy
+ *  into the protocol's MAABCD dandiset. */
+const MAABCD_EMBER_USERNAME = 'maabcd-consortium'
+/** EMBER-DANDI's API origin: where the OAuth login goes, and what OSB downloads assets from. */
+const EMBER_ORIGIN = (import.meta.env.VITE_EMBER_ORIGIN ?? EMBER_API_ORIGIN_DEFAULT).replace(/\/+$/, '')
+/** Same-origin path for the browser's own EMBER calls (Vite proxy in dev, nginx deployed): EMBER's
+ *  token response carries no CORS headers. */
+const EMBER_FETCH_BASE = '/ember-proxy'
 
 // ─── Infrastructure singletons ────────────────────────────────────────────────
 
@@ -50,8 +68,26 @@ const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
 // they run) — same API base as every other workspace call.
 const dandiApi     = new DandiApiClient(WORKSPACES_API)
 
-/** Scenario 1: where uploads go before OSB imports them (`gs://maabcd`). Used by the upload flow. */
-export const objectStore: IObjectStore = new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
+/** Signs the researcher in to EMBER-DANDI (OAuth in a popup, a full-page redirect if it is blocked);
+ *  their token stays in the browser. */
+export const emberAuth = new EmberOAuthClient({
+  authOrigin: EMBER_ORIGIN,
+  apiBase: EMBER_FETCH_BASE,
+  clientId: import.meta.env.VITE_EMBER_CLIENT_ID ?? '',
+  redirectUri: `${window.location.origin}${EMBER_CALLBACK_PATH}`,
+})
+export { EMBER_CALLBACK_PATH }
+export { EmberPopupBlocked, EmberSignInCancelled } from '../infra/emberOAuthClient'
+const emberDirect = new EmberDandiDirectClient(EMBER_FETCH_BASE)
+/** The researcher's dandisets by protocol, and the workspace each runs in (dandiset metadata). */
+const protocolDandisets = createProtocolDandisetsUseCases({
+  emberAuth, direct: emberDirect, osbDomain: OSB_DOMAIN, workspaceUrl: (id) => getWorkspaceUrl(id),
+})
+
+/** Where uploads go before OSB imports them (UPLOAD_BACKEND): EMBER-DANDI, or the public bucket. */
+export const objectStore: IObjectStore = UPLOAD_BACKEND === 'ember'
+  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_ORIGIN)
+  : new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────
 
@@ -62,19 +98,33 @@ export const loadWorkspaces = createLoadWorkspacesUseCase(authClient, workspaceA
 export const createWorkspace = createCreateWorkspaceUseCase(authClient, workspaceApi)
 
 /** Uploads the researcher's file, imports it and the protocol's repository into the workspace
- * through OSB, and runs the notebooks in OSB's Argo task (MAABCD–OSB design, Scenario 1). */
+ * through OSB, and runs the notebooks in OSB's Argo task. */
 export const runProtocol = createRunProtocolUseCase(authClient, workspaceApi, objectStore)
 
-/** DANDI-backed upload (Route A, see IDP-43 notes); `finalize` also runs the selected
- * protocol's script server-side (jupyter_kernel_client.py in OSBv2's workspaces app). */
+/** The earlier DANDI-backed upload; `finalize` also runs the selected protocol's script on OSB
+ * (jupyter_kernel_client.py in OSBv2's workspaces app). */
 export const createAndUploadToDandi = createCreateAndUploadToDandiUseCase(authClient, dandiApi)
+
+/** The researcher's EMBER-DANDI dandisets for a protocol, each with the workspace it runs in when
+ *  they still have it: what the upload dialog offers once a protocol is chosen. */
+export async function listProtocolDandisets(protocolId: string): Promise<ProtocolDandiset[]> {
+  const ownWorkspaceIds = (await loadWorkspaces()).map((w) => Number(w.id))
+  return protocolDandisets.listForProtocol(protocolId, ownWorkspaceIds)
+}
+export type { ProtocolDandiset }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** The researcher's workspaces on OSB ("My workspaces"). */
+export const OSB_WORKSPACES_URL = `${OSB_WEB_ORIGIN}/`
+
+/** The signed-in researcher's own dandisets on EMBER-DANDI's website. */
+export const MY_DANDISETS_URL = `${EMBER_WEB_ORIGIN}/dandiset/my`
+
 /**
  * Builds the public URL for a given workspace id.
- * Centralised here so no component needs to know BASE_DOMAIN.
+ * Centralised here so no component needs to know OSB_DOMAIN.
  */
 export function getWorkspaceUrl(workspaceId: number): string {
-  return `${FRONTEND_BASE}/workspaces/open/${workspaceId}/jupyter`
+  return `${OSB_WEB_ORIGIN}/workspaces/open/${workspaceId}/jupyter`
 }
