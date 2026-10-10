@@ -9,9 +9,20 @@ import type { IAuthClient } from '../core/ports/IAuthClient'
  */
 export class KeycloakAuthClient implements IAuthClient {
   private readonly kc: Keycloak
+  private sessionEndedListeners: (() => void)[] = []
 
   constructor(config: { url: string; realm: string; clientId: string }) {
     this.kc = new Keycloak(config)
+    // keycloak-js clears its tokens when a refresh is refused (the Keycloak session is over).
+    this.kc.onAuthLogout = () => this.sessionEnded()
+  }
+
+  onSessionEnded(listener: () => void): void {
+    this.sessionEndedListeners.push(listener)
+  }
+
+  private sessionEnded() {
+    for (const listener of this.sessionEndedListeners) listener()
   }
 
   init(): Promise<boolean> {
@@ -31,13 +42,17 @@ export class KeycloakAuthClient implements IAuthClient {
   }
 
   async getToken(minValidity = 30): Promise<string> {
+    let refreshed = true
     try {
       await this.kc.updateToken(minValidity)
     } catch {
-      // No refresh token available (check-sso without offline session).
-      // Fall through and use the current token if it still exists.
+      // No refresh token available (check-sso without offline session), or Keycloak unreachable.
+      // Fall through and use the current token if it is still valid.
+      refreshed = false
     }
-    if (!this.kc.token) {
+    // An expired token that couldn't be refreshed is as good as none: OSB would refuse it.
+    if (!this.kc.token || (!refreshed && this.kc.isTokenExpired())) {
+      this.sessionEnded()
       throw new Error('No access token available. Please sign in again.')
     }
     return this.kc.token

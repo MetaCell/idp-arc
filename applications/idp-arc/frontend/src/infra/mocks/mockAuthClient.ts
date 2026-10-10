@@ -34,6 +34,10 @@ export class MockAuthClient implements IAuthClient {
     console.info('[MockAuthClient] login() called — no-op in mock mode')
   }
 
+  onSessionEnded(): void {
+    // The mock session never ends.
+  }
+
   logout(): void {
     console.info('[MockAuthClient] logout() called — no-op in mock mode')
   }

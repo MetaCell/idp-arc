@@ -107,9 +107,24 @@ export default function PageLayout({
   // EMBER's popup sign-in doesn't reload the page, so it updates this state.
   const [emberSignedIn, setEmberSignedIn] = useState(() => emberAuth.isConnected())
   const loginsDone = isAuthenticated && emberSignedIn && emberAuth.isConnected()
-  /** Every "Data upload" button: the upload dialog when signed in, else the Login dialog. */
-  const openUploadOrLogin = (protocolName?: string) => {
-    if (!loginsDone) return setLoginDialogOpen(true)
+  /**
+   * Whether each login still holds, checked now rather than as of the page load: an EMBER token
+   * expires, and an OSB session can end without the page knowing until a token is asked for (the
+   * auth client then reports it, and the app shows OSB as signed out).
+   */
+  const checkLogins = async () => {
+    const ember = emberAuth.isConnected()
+    setEmberSignedIn(ember)
+    const osb = isAuthenticated && await authClient.getToken().then(() => true, () => false)
+    return ember && osb
+  }
+  const openLoginDialog = () => {
+    void checkLogins()
+    setLoginDialogOpen(true)
+  }
+  /** Every "Data upload" button: the upload dialog when both logins hold, else the Login dialog. */
+  const openUploadOrLogin = async (protocolName?: string) => {
+    if (!(await checkLogins())) return setLoginDialogOpen(true)
     setUploadProtocol(protocolName)
     setUploadDialogOpen(true)
   }
@@ -313,7 +328,7 @@ export default function PageLayout({
                 </Button>
               ))}
               {
-                !loginsDone && <Button variant="text" onClick={() => setLoginDialogOpen(true)}>{t('nav.login')}</Button>
+                !loginsDone && <Button variant="text" onClick={openLoginDialog}>{t('nav.login')}</Button>
               }
               <Button
                 variant="contained"
@@ -403,7 +418,7 @@ export default function PageLayout({
                 variant="text"
                 fullWidth
                 sx={styles.drawerNavButton}
-                onClick={() => { setDrawerOpen(false); setLoginDialogOpen(true) }}
+                onClick={() => { setDrawerOpen(false); openLoginDialog() }}
               >
                 {t('nav.login')}
               </Button>
@@ -503,7 +518,7 @@ export default function PageLayout({
         open={uploadDialogOpen}
         initialProtocol={uploadProtocol}
         onClose={() => setUploadDialogOpen(false)}
-        onAuthRequired={() => setLoginDialogOpen(true)}
+        onAuthRequired={openLoginDialog}
       />
       <LoginDialog
         open={loginDialogOpen}

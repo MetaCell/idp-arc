@@ -90,6 +90,12 @@ function App() {
             return
           }
           setAuthState(authenticated ? 'authenticated' : 'unauthenticated')
+          // The OSB session can end later (its refresh refused): show it as signed out then, so
+          // the Login dialog offers OSB's login again instead of "Logged in".
+          authClient.onSessionEnded(() => {
+            setAuthState('unauthenticated')
+            setTokenParsed(null)
+          })
           if (authenticated && authClient.tokenParsed) {
             setTokenParsed(authClient.tokenParsed)
           }
