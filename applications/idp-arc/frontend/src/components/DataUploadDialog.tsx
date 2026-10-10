@@ -3,7 +3,9 @@ import {
   Box,
   Button,
   CircularProgress,
+  Checkbox,
   Dialog,
+  FormControlLabel,
   IconButton,
   MenuItem,
   Select,
@@ -60,6 +62,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     runSteps: RunStep[]
     /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
     dandisetId: string
+    /** Also upload into the protocol's MAABCD dandiset; on by default. */
+    shareWithMaabcd: boolean
   }
 
   const INITIAL_FORM: FormState = {
@@ -72,10 +76,11 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     outputsDir: '',
     runSteps: [],
     dandisetId: '',
+    shareWithMaabcd: true,
   }
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId } = form
+  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd } = form
   // EMBER-DANDI (Scenario 2): the upload goes to the researcher's own account (signed in to from the
   // Login dialog). With the protocol, the dialog finds their dandisets for that protocol, each
   // naming the workspace it runs in (its metadata): choosing one chooses both.
@@ -184,6 +189,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
         workspaceId: spawnedWorkspaceId,
         workspaceName: selectedProtocol.name,
         dandisetId: dandisetId || undefined,
+        shareWithMaabcd,
       },
       (state) => {
         if (watch.current) return // the dialog was closed, or another run started: no longer this one's
@@ -383,6 +389,21 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                     </>
                   )}
                 </Box>
+              )}
+              {usesEmber && selectedProtocol?.maabcdDandisetId && (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={shareWithMaabcd}
+                      onChange={(e) => setForm((prev) => ({ ...prev, shareWithMaabcd: e.target.checked }))}
+                    />
+                  }
+                  label={
+                    <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: '#FFFFFF' }}>
+                      Share a copy of this data with the MAABCD consortium
+                    </Typography>
+                  }
+                />
               )}
             </Stack>
 

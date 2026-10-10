@@ -77,7 +77,8 @@ researcher's workspace from there.
 - **`ember`** (default): EMBER-DANDI, into the researcher's own dandiset and the protocol's
   MAABCD dandiset (`maabcdDandisetId` in `src/data/protocols.json`). Needs `VITE_EMBER_CLIENT_ID`,
   an EMBER-DANDI OAuth application (public client, PKCE) with `<this app's origin>/ember-callback`
-  as a redirect URI, and OSB's `ember-api-key` secret for the MAABCD copy.
+  as a redirect URI, and, for the MAABCD copy, the
+  `EMBER_API_KEY` attribute on the OSB user named by `MAABCD_EMBER_USERNAME` (`container.ts`).
 - **`bucket`**: a public bucket open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL`.
   Its CORS must allow PUT from this app's origin.
 

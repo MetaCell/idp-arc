@@ -1,7 +1,8 @@
 /**
  * IEmberUploadApi — OSB's two EMBER-DANDI endpoints (`/ember/get_upload_urls`,
  * `/ember/validate_upload`), authenticated with the OSB (Keycloak) token. OSB signs the upload
- * with its own EMBER-DANDI key, which never reaches the browser; the browser still PUTs the bytes.
+ * with the EMBER-DANDI key held on a Keycloak user (the adapter names it), which never reaches the
+ * browser; the browser still PUTs the bytes.
  *
  * OSB doesn't know what the dandiset is for: IDP names it (the protocol's MAABCD dandiset, from
  * protocols.json). OSB builds the asset path itself, under the caller's own id.

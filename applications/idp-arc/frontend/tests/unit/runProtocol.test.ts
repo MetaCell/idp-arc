@@ -327,3 +327,21 @@ test('an EMBER-DANDI upload gets the run\'s workspace recorded in its dandiset, 
     protocol: { id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/maracbaylis/four-choice-example' },
   })
 })
+
+test('with "Share with MAABCD" unticked, nothing goes to the protocol\'s MAABCD dandiset', async () => {
+  const f = fakes()
+  const seen: { dandisets?: { maabcd?: string } } = {}
+  const store: IObjectStore = {
+    async put(input) {
+      seen.dandisets = input.dandisets
+      return { url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777' }
+    },
+  }
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, store)(
+    { protocol: { ...FOUR_CHOICE, maabcdDandisetId: '000533' }, file: file(), workspaceName: 'Four-choice', shareWithMaabcd: false },
+    (s) => states.push(s))
+
+  assert.equal(states[states.length - 1].phase, 'succeeded')
+  assert.equal(seen.dandisets?.maabcd, undefined)
+})

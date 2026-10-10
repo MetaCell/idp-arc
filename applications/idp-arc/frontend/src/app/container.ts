@@ -46,6 +46,9 @@ const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
 /** Where uploads go: `ember` (EMBER-DANDI) or `bucket` (the public bucket named by
  *  VITE_UPLOAD_BUCKET_URL). Change it here to switch. */
 export const UPLOAD_BACKEND = 'ember' as 'bucket' | 'ember'
+/** The OSB (Keycloak) user whose EMBER-DANDI key (user attribute `EMBER_API_KEY`) signs the copy
+ *  into the protocol's MAABCD dandiset. */
+const MAABCD_EMBER_USERNAME = 'maabcd-consortium'
 /** EMBER-DANDI's API origin: where the OAuth login goes, and what OSB downloads assets from. */
 const EMBER_ORIGIN = (import.meta.env.VITE_EMBER_ORIGIN ?? EMBER_API_ORIGIN_DEFAULT).replace(/\/+$/, '')
 /** Same-origin path for the browser's own EMBER calls (Vite proxy in dev, nginx deployed): EMBER's
@@ -84,7 +87,7 @@ const protocolDandisets = createProtocolDandisetsUseCases({
 /** Where uploads go before OSB imports them: the public bucket (Scenario 1), or EMBER-DANDI
  *  (Scenario 2: the researcher's own dandiset, plus the protocol's MAABCD dandiset through OSB). */
 export const objectStore: IObjectStore = UPLOAD_BACKEND === 'ember'
-  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API), protocolDandisets, EMBER_ORIGIN)
+  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_ORIGIN)
   : new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────

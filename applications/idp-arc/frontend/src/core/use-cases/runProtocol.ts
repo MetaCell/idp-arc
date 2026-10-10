@@ -44,6 +44,8 @@ export interface RunProtocolInput {
   /** Scenario 2: the researcher's own EMBER-DANDI dandiset to upload into; a new one is created
    *  when undefined. The bucket (Scenario 1) ignores it. */
   dandisetId?: string
+  /** Also upload into the protocol's MAABCD dandiset, when it has one (the default). */
+  shareWithMaabcd?: boolean
 }
 
 /**
@@ -178,7 +180,7 @@ export function createRunProtocolUseCase(
           user: input.dandisetId,
           newName: `${protocol.name} (IDP)`,
           protocol: { id: protocol.id, name: protocol.name, url: repoPage(protocol.repoZipUrl) },
-          maabcd: protocol.maabcdDandisetId,
+          maabcd: input.shareWithMaabcd === false ? undefined : protocol.maabcdDandisetId,
         },
       }, (sent, total) => {
         if (Date.now() - lastReport < RUN_SETTINGS.uploadProgressMs && sent < total) return

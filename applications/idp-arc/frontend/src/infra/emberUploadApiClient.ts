@@ -9,9 +9,11 @@ import type {
 /**
  * EmberUploadApiClient — OSB's `/ember/get_upload_urls` and `/ember/validate_upload`, on the same
  * workspaces API as every other OSB call, with the OSB (Keycloak) token. OSB answers in snake_case.
+ *
+ * `keyUsername`: the Keycloak user whose EMBER-DANDI key (attribute `EMBER_API_KEY`) OSB signs with.
  */
 export class EmberUploadApiClient implements IEmberUploadApi {
-  constructor(private readonly baseApiUrl: string) {}
+  constructor(private readonly baseApiUrl: string, private readonly keyUsername: string) {}
 
   private async post<T>(token: string, path: string, body: unknown, what: string): Promise<T> {
     const res = await fetch(`${this.baseApiUrl}${path}`, {
@@ -34,6 +36,7 @@ export class EmberUploadApiClient implements IEmberUploadApi {
       parts?: { part_number: number; url: string }[]
       blob_id?: string | null
     }>(token, '/ember/get_upload_urls', {
+      username: this.keyUsername,
       dandiset_id: input.dandisetId,
       filename: input.filename,
       size: input.size,
@@ -51,6 +54,7 @@ export class EmberUploadApiClient implements IEmberUploadApi {
   async validateUpload(token: string, input: BrokeredValidateInput): Promise<BrokeredAsset> {
     const body = await this.post<{ asset_id: string; asset_path: string; download_url: string }>(
       token, '/ember/validate_upload', {
+        username: this.keyUsername,
         dandiset_id: input.dandisetId,
         path: input.path,
         ...(input.uploadId ? { upload_id: input.uploadId } : {}),
