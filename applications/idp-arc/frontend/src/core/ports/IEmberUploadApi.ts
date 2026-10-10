@@ -1,5 +1,5 @@
 /**
- * IEmberUploadApi — OSB's two EMBER-DANDI endpoints (`/ember/get_upload_urls`,
+ * IEmberUploadApi: OSB's two EMBER-DANDI endpoints (`/ember/get_upload_urls`,
  * `/ember/validate_upload`), authenticated with the OSB (Keycloak) token. OSB signs the upload
  * with the EMBER-DANDI key held on a Keycloak user (the adapter names it), which never reaches the
  * browser; the browser still PUTs the bytes.

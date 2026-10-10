@@ -15,7 +15,7 @@ export function markLoginDialogReturn(): void {
   try {
     sessionStorage.setItem(KEY, '1')
   } catch {
-    /* blocked storage — the login still works, the dialog just won't reopen by itself */
+    /* blocked storage: the login still works, the dialog just won't reopen by itself */
   }
 }
 

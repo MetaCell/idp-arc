@@ -140,10 +140,8 @@ export default function PageLayout({
   }
   const anySignedIn = isAuthenticated || emberSignedIn
 
-  useEffect(() => {
-    registerUploadOpener(openUploadOrLogin)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loginsDone])
+  // Re-registered on every render, so buttons outside this component never call a stale copy.
+  useEffect(() => { registerUploadOpener(openUploadOrLogin) })
 
   const navItems = [
     { label: t('nav.protocols'), path: '/protocols' },

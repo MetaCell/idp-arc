@@ -8,13 +8,13 @@ import type { IEmberAuth } from '../core/ports/IEmberAuth'
  * as `Bearer` with `read write` scope and a 24h lifetime.
  *
  * Caveat found the hard way: the token endpoint's OPTIONS preflight returns CORS headers, but
- * the POST response does not — so a browser cannot read the exchange result cross-origin. Hence
+ * the POST response does not, so a browser cannot read the exchange result cross-origin. Hence
  * the split between `authOrigin` and `apiBase` below: fetches go through IDP's own same-origin
  * `/ember-proxy` (Vite in dev, nginx deployed). Whether EMBER could fix this via the OAuth
  * application's `allowed_origins` is an open question for EMBER.
  *
  * The access token is held in memory and mirrored to sessionStorage so a page reload doesn't
- * force a re-login. The **refresh token is deliberately never stored** — it is the
+ * force a re-login. The **refresh token is deliberately never stored**: it is the
  * long-lived credential, and persisting it in browser storage would hand durable account access
  * to any XSS. A 24h access token means re-connecting at most once a day.
  */
@@ -47,8 +47,8 @@ export const EMBER_CALLBACK_PATH = '/ember-callback'
  * This has to happen before anything else reads the URL. keycloak-js treats `?code=`/`?state=`
  * as its OWN OAuth callback params: on init it tries to exchange them against Keycloak's token
  * endpoint and then strips them from the URL. Since it initialises on every route, it would
- * consume EMBER's authorization code before this client ever sees it — the symptom being a
- * silent "not connected" with a stray Keycloak token request in the network log.
+ * consume EMBER's authorization code before this client ever sees it (the symptom being a
+ * silent "not connected" with a stray Keycloak token request in the network log).
  *
  * Module evaluation runs during import, before React renders and before any effect fires, so
  * capturing here reliably wins that race.
@@ -62,7 +62,7 @@ const initialCallback: { code: string | null; error: string | null; state: strin
   const rawError = params.get('error')
   if (!code && !rawError) return null
 
-  // Authorization codes are single-use, so there is nothing to retry — strip immediately.
+  // Authorization codes are single-use, so there is nothing to retry: strip them at once.
   window.history.replaceState(null, '', window.location.pathname)
 
   return {
@@ -99,7 +99,7 @@ function write(key: string, value: string | null): void {
     if (value === null) sessionStorage.removeItem(key)
     else sessionStorage.setItem(key, value)
   } catch {
-    /* private mode / blocked storage — the in-memory copy still works for this page load */
+    /* private mode or blocked storage: the in-memory copy still works for this page load */
   }
 }
 
@@ -112,7 +112,7 @@ export class EmberOAuthClient implements IEmberAuth {
     private readonly config: {
       /**
        * Real EMBER-DANDI origin. Used for the /oauth/authorize/ navigation, which must reach
-       * EMBER directly — its login redirects out to GitHub, which returns to EMBER's own
+       * EMBER directly: its login redirects out to GitHub, which returns to EMBER's own
        * domain, so this leg cannot go through a dev proxy.
        */
       authOrigin: string
@@ -146,7 +146,7 @@ export class EmberOAuthClient implements IEmberAuth {
    */
   private async authorizeUrl(redirectUri: string, state: string): Promise<string> {
     if (!this.config.clientId) {
-      throw new Error('VITE_EMBER_CLIENT_ID is not set — register a public OAuth client first.')
+      throw new Error('VITE_EMBER_CLIENT_ID is not set; register a public OAuth client first.')
     }
     const verifier = base64url(crypto.getRandomValues(new Uint8Array(48)).buffer)
     write(VERIFIER_KEY, verifier)
@@ -256,7 +256,7 @@ export class EmberOAuthClient implements IEmberAuth {
   }
 
   async handleCallback(): Promise<string | null> {
-    // Reads the module-load snapshot, not the live URL — see `initialCallback` above.
+    // Reads the module-load snapshot, not the live URL (see `initialCallback` above).
     // Consumed once: React invokes effects twice in dev, and the code is single-use.
     if (!initialCallback || this.callbackConsumed) return null
     this.callbackConsumed = true
@@ -275,7 +275,7 @@ export class EmberOAuthClient implements IEmberAuth {
     }
     const verifier = read(VERIFIER_KEY)
     if (!verifier) {
-      throw new Error('No PKCE verifier found — the login was started in a different browser session.')
+      throw new Error('No PKCE verifier found: the login was started in a different browser session.')
     }
 
     const res = await fetch(`${this.config.apiBase}/oauth/token/`, {

@@ -1,5 +1,5 @@
 /**
- * IEmberAuth — per-user authentication against EMBER-DANDI.
+ * IEmberAuth: per-user authentication against EMBER-DANDI.
  *
  * Distinct from IAuthClient: that one authenticates the user to *this app* and OSB (Keycloak).
  * This one authorises the app to act against *EMBER-DANDI* as that user, so the researcher's own
@@ -21,7 +21,7 @@ export interface IEmberAuth {
   /**
    * Starts the authorization-code + PKCE flow by navigating to EMBER-DANDI.
    * `returnTo` is the path to send the user back to once the callback completes.
-   * Returns a promise that never resolves — the page unloads.
+   * Returns a promise that never resolves, since the page unloads.
    */
   connect(returnTo?: string): Promise<never>
 

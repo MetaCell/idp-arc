@@ -1,7 +1,7 @@
 import type { DandisetMetadata } from '../dandisetLinks'
 
 /**
- * IDandiDirectApi — EMBER-DANDI operations performed straight from the browser, authenticated with
+ * IDandiDirectApi: EMBER-DANDI operations performed straight from the browser, authenticated with
  * the researcher's own OAuth token (IEmberAuth). Used for the researcher's own copy of an upload;
  * the MAABCD copy goes through OSB instead (IEmberUploadApi), since only OSB holds that key.
  */
@@ -14,11 +14,11 @@ export interface DirectUploadPart {
 }
 
 export interface DirectInitResult {
-  /** Absent when EMBER already held this content — nothing to upload. */
+  /** Absent when EMBER already holds this content: nothing to upload. */
   uploadId?: string
   /** Empty when deduplicated; the caller then skips S3 entirely. */
   parts: DirectUploadPart[]
-  /** Set only on the deduplicated path — the existing blob to attach an asset to. */
+  /** Set only on the deduplicated path: the existing blob to attach an asset to. */
   blobId?: string
 }
 
@@ -29,7 +29,7 @@ export interface DirectUploadedPart {
 }
 
 export interface DirectFinalizeInput {
-  /** Absent on the deduplicated path — no upload session to complete. */
+  /** Absent on the deduplicated path: there is no upload session to complete. */
   uploadId?: string
   dandisetId: string
   path: string
@@ -75,24 +75,24 @@ export interface PublishedVersion {
 }
 
 export interface IDandiDirectApi {
-  /** `GET /dandisets/?user=me` — every dandiset this account owns, empty ones included. */
+  /** `GET /dandisets/?user=me`: every dandiset this account owns, empty ones included. */
   listOwnDandisets(token: string): Promise<OwnDandiset[]>
 
-  /** `POST /dandisets/` — creates a public dandiset and returns its identifier. `metadata` is
+  /** `POST /dandisets/`: creates a public dandiset and returns its identifier. `metadata` is
    *  merged into the default (a description). */
   createDandiset(token: string, name: string, metadata?: DandisetMetadata): Promise<string>
 
-  /** `GET /dandisets/{id}/versions/draft/` — the full draft metadata. */
+  /** `GET /dandisets/{id}/versions/draft/`: the full draft metadata. */
   getDraftMetadata(token: string, dandisetId: string): Promise<DandisetMetadata>
 
-  /** `PUT /dandisets/{id}/versions/draft/` — replaces the draft metadata. Only the draft is
+  /** `PUT /dandisets/{id}/versions/draft/`: replaces the draft metadata. Only the draft is
    *  writable; a published version is a frozen snapshot of it. */
   updateDraftMetadata(token: string, dandisetId: string, metadata: DandisetMetadata): Promise<void>
 
-  /** `GET /dandisets/{id}/versions/draft/info/` — whether the draft can be published. */
+  /** `GET /dandisets/{id}/versions/draft/info/`: whether the draft can be published. */
   getDraftStatus(token: string, dandisetId: string): Promise<DraftStatus>
 
-  /** `POST /dandisets/{id}/versions/draft/publish/` — starts publishing the draft as a new
+  /** `POST /dandisets/{id}/versions/draft/publish/`: starts publishing the draft as a new
    *  version. EMBER finishes it in the background. */
   publishDraft(token: string, dandisetId: string): Promise<void>
 

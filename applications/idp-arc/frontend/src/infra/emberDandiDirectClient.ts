@@ -17,15 +17,11 @@ import type {
 export const ALLOW_EMBARGOED = false
 
 /**
- * Talks to EMBER-DANDI's REST API directly from the browser with a per-user Bearer token.
+ * Talks to EMBER-DANDI's REST API directly from the browser, with the researcher's OAuth token.
  *
- * Every call here was verified against the live service (Sep 2026). Two findings are
- * load-bearing and easy to get wrong:
- *
- *  1. OAuth tokens use `Authorization: Bearer <token>`. The admin key uses
- *     `Authorization: token <key>` (Girder-derived). Using the wrong scheme is a silent 401.
- *  2. The S3 CompleteMultipartUpload POST works from a browser — it was assumed this would
- *     have to stay server-side, and it doesn't.
+ *  1. OAuth tokens go in `Authorization: Bearer <token>`; API keys use `token <key>` instead, and
+ *     the wrong scheme fails as a plain 401.
+ *  2. The S3 CompleteMultipartUpload POST works from the browser, so the whole upload stays here.
  *
  * `baseUrl` is IDP's same-origin `/ember-proxy` (Vite in dev, nginx deployed); see
  * EMBER_FETCH_BASE in container.ts.
@@ -170,7 +166,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
         }),
       },
     )
-    // Already registered at this path — a re-upload of the same file. Reuse it.
+    // Already registered at this path: a re-upload of the same file. Reuse it.
     if (res.status === 409) {
       return { assetPath: path, assetId: await this.findDraftAssetId(token, dandisetId, path) }
     }
@@ -209,7 +205,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
       }),
     })
 
-    // 409 means EMBER already has this exact content — nothing to transfer. Mirrors the
+    // 409 means EMBER already has this exact content, so there is nothing to transfer. Mirrors the
     // OSB adapter's handling of the same response.
     if (res.status === 409) {
       const blobId = await this.resolveBlobByDigest(token, dandiEtag)
@@ -235,7 +231,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
     const etag = res.headers.get('ETag')
     if (!etag) {
       throw new Error(
-        'S3 did not expose an ETag header on the part upload — the bucket needs ' +
+        'S3 did not expose an ETag header on the part upload; the bucket needs ' +
           'Access-Control-Expose-Headers: ETag in its CORS config.',
       )
     }
@@ -267,7 +263,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
       if (!complete.ok) await this.fail(complete, 'complete_upload')
       const completion = await complete.json()
 
-      // DANDI hands back a presigned S3 CompleteMultipartUpload request for us to execute —
+      // DANDI hands back a presigned S3 CompleteMultipartUpload request for us to execute:
       // it can't do it itself, since only the uploader holds the part ETags.
       const s3 = await fetch(completion.complete_url, {
         method: 'POST',
@@ -284,7 +280,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
       blobId = (await validate.json()).blob_id
     }
 
-    if (!blobId) throw new Error('No blob to register — neither an upload nor a dedup hit.')
+    if (!blobId) throw new Error('No blob to register: neither an upload nor a dedup hit.')
     return this.registerAsset(token, input.dandisetId, input.path, blobId)
   }
 }

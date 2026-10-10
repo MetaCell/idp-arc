@@ -7,7 +7,7 @@ import type {
 } from '../core/ports/IEmberUploadApi'
 
 /**
- * EmberUploadApiClient — OSB's `/ember/get_upload_urls` and `/ember/validate_upload`, on the same
+ * EmberUploadApiClient: OSB's `/ember/get_upload_urls` and `/ember/validate_upload`, on the same
  * workspaces API as every other OSB call, with the OSB (Keycloak) token. OSB answers in snake_case.
  *
  * `keyUsername`: the Keycloak user whose EMBER-DANDI key (attribute `EMBER_API_KEY`) OSB signs with.
