@@ -19,7 +19,8 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
-import { getWorkspaceUrl, runProtocol } from '../app/container'
+import { emberAuth, getWorkspaceUrl, listProtocolDandisets, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
+import { EMBER_SIGN_IN } from '../core/userMessages'
 import { useAppContext } from '../AppContext'
 import type { RunStep } from '../core/types'
 import RunChecklist from './RunChecklist'
@@ -57,6 +58,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     outputsDir: string
     /** The run's checklist (upload, imports, run), as last reported by the use-case. */
     runSteps: RunStep[]
+    /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
+    dandisetId: string
   }
 
   const INITIAL_FORM: FormState = {
@@ -68,10 +71,18 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     spawnedWorkspaceId: undefined,
     outputsDir: '',
     runSteps: [],
+    dandisetId: '',
   }
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps } = form
+  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId } = form
+  // EMBER-DANDI (Scenario 2): the upload goes to the researcher's own account (signed in to from the
+  // Login dialog). With the protocol, the dialog finds their dandisets for that protocol, each
+  // naming the workspace it runs in (its metadata): choosing one chooses both.
+  const usesEmber = UPLOAD_BACKEND === 'ember'
+  const emberSignedIn = !usesEmber || emberAuth.isConnected()
+  const [protocolDandisets, setProtocolDandisets] = useState<ProtocolDandiset[] | null>(null)
+  const [dandisetsError, setDandisetsError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   // The run being watched; each run gets its own token, so stopping one never revives another.
   const watchRef = useRef<{ current: boolean } | null>(null)
@@ -108,6 +119,36 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  // The chosen protocol's dandisets; the first is preselected, with its workspace.
+  const protocolId = runnableProtocols.find((p) => p.name === protocol)?.id
+  useEffect(() => {
+    setProtocolDandisets(null)
+    setDandisetsError('')
+    if (!open || !usesEmber || !emberSignedIn || !protocolId) return
+    let current = true
+    listProtocolDandisets(protocolId)
+      .then((list) => {
+        if (!current) return
+        setProtocolDandisets(list)
+        setForm((prev) => ({ ...prev, dandisetId: list[0]?.id ?? '', spawnedWorkspaceId: list[0]?.workspaceId }))
+      })
+      .catch((err: unknown) => {
+        console.error('Could not list the EMBER-DANDI dandisets', err)
+        if (!current) return
+        setProtocolDandisets([])
+        setDandisetsError('Your dandisets could not be listed; a new one will be created.')
+      })
+    return () => { current = false }
+  }, [open, usesEmber, emberSignedIn, protocolId])
+
+  /** Messages in the dandiset section: the dialog's own 14px Inter, quieter than labels. */
+  const noteText = { fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: '#FFFFFF99' }
+
+  const chooseDandiset = (id: string) => setForm((prev) => ({
+    ...prev, dandisetId: id, spawnedWorkspaceId: protocolDandisets?.find((d) => d.id === id)?.workspaceId,
+  }))
+
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const dropped = e.dataTransfer.files[0]
@@ -142,6 +183,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
         // instead of creating another one.
         workspaceId: spawnedWorkspaceId,
         workspaceName: selectedProtocol.name,
+        dandisetId: dandisetId || undefined,
       },
       (state) => {
         if (watch.current) return // the dialog was closed, or another run started: no longer this one's
@@ -153,9 +195,20 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           onAuthRequired?.()
           return
         }
+        if (state.phase === 'failed' && state.error === EMBER_SIGN_IN) {
+          // The EMBER-DANDI session ended: back to the form, where the sign-in button is.
+          // Back to the first step, which points to the Login dialog; the dandiset and workspace stay.
+          setForm((prev) => ({
+            ...prev, step: 'select', uploadMessage: EMBER_SIGN_IN,
+            spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId, dandisetId: state.dandisetId ?? prev.dandisetId,
+          }))
+          return
+        }
         setForm((prev) => ({
           ...prev,
           spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
+          // A dandiset this run created is reused by a retry, not created again.
+          dandisetId: state.dandisetId ?? prev.dandisetId,
           uploadMessage: state.phase === 'failed' ? `${state.message}: ${state.error}` : state.message,
           outputsDir: state.outputsDir ?? prev.outputsDir,
           runSteps: state.steps,
@@ -169,8 +222,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   }
 
   const stepIndex = step === 'select' ? 0 : 1
-  const canGoNext = !!protocol
-  const canUpload = !!file && !fileProblem
+  const canGoNext = !!protocol && (!usesEmber || (emberSignedIn && protocolDandisets !== null))
+  const canUpload = !!file && !fileProblem && emberSignedIn
 
   return (
     <Dialog
@@ -286,6 +339,51 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                   ))}
                 </Select>
               </Box>
+              {usesEmber && protocol && (
+                <Box>
+                  <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: '#FFFFFF', mb: 1 }}>Your EMBER-DANDI dandiset</Typography>
+                  {uploadMessage === EMBER_SIGN_IN && (
+                    <Typography sx={{ ...noteText, color: 'error.main', mb: 1 }}>{EMBER_SIGN_IN}</Typography>
+                  )}
+                  {!emberSignedIn ? (
+                    <Stack direction="row" sx={{ alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                      <Typography sx={noteText}>
+                        Your data is stored in your own EMBER-DANDI account. Log in to EMBER-DANDI to continue.
+                      </Typography>
+                      <Button variant="outlined" size="small" onClick={() => { onClose(); onAuthRequired?.() }}>Login</Button>
+                    </Stack>
+                  ) : protocolDandisets === null ? (
+                    <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5 }}>
+                      <CircularProgress size={16} />
+                      <Typography sx={noteText}>Finding your dandisets for this protocol…</Typography>
+                    </Stack>
+                  ) : protocolDandisets.length === 0 ? (
+                    <Typography sx={noteText}>
+                      {dandisetsError || 'No dandiset for this protocol yet. Your upload will create a new dandiset and workspace.'}
+                    </Typography>
+                  ) : (
+                    <>
+                      <Select
+                        fullWidth
+                        displayEmpty
+                        value={dandisetId}
+                        onChange={(e) => chooseDandiset(e.target.value)}
+                        sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px' }}
+                      >
+                        {protocolDandisets.map((d) => (
+                          <MenuItem key={d.id} value={d.id} sx={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>
+                            {d.name} ({d.id}){d.workspaceId !== undefined ? ` · workspace ${d.workspaceId}` : ' · new workspace'}
+                          </MenuItem>
+                        ))}
+                        <MenuItem value="" sx={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>Create a new dandiset and workspace</MenuItem>
+                      </Select>
+                      {dandisetsError && (
+                        <Typography sx={{ ...noteText, mt: 1 }}>{dandisetsError}</Typography>
+                      )}
+                    </>
+                  )}
+                </Box>
+              )}
             </Stack>
 
             <Stack sx={{ flex: 3, borderTop: '1px solid', borderColor: 'divider', pl: 4, pt: 2, gap: 1.5 }}>
@@ -311,6 +409,12 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           {uploadMessage && (
             <Typography variant="body2" sx={{ color: 'error.main', px: 0.5, whiteSpace: 'pre-wrap' }}>
               {uploadMessage}
+            </Typography>
+          )}
+          {usesEmber && (
+            <Typography variant="body2" sx={{ opacity: 0.7 }}>
+              {dandisetId ? `Uploading into your dandiset ${dandisetId}` : 'Uploading into a new dandiset in your EMBER-DANDI account'}
+              {spawnedWorkspaceId !== undefined ? `, analysed in workspace ${spawnedWorkspaceId}.` : ', analysed in a new workspace.'}
             </Typography>
           )}
           <Stack direction="row" sx={{ flex: 1, gap: 6 }}>

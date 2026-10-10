@@ -21,6 +21,10 @@ const STEP_FAILED: Record<string, string> = {
   run: 'The analysis did not finish. Open the workspace to see what happened.',
 }
 
+/** Says the EMBER-DANDI session is missing or over. Deliberately not SIGN_IN_AGAIN's wording,
+ *  which sends the user to the OSB (Keycloak) login instead. */
+export const EMBER_SIGN_IN = 'Please sign in with EMBER-DANDI and try again.'
+
 /** Says the session has ended; the dialog sends the user to sign in when the text contains it. */
 export const SIGN_IN_AGAIN = 'sign in again'
 

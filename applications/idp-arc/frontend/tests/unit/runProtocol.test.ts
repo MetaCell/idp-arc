@@ -297,3 +297,33 @@ test('an ended session mid-run asks to sign in again', async () => {
   assert.equal(last.phase, 'failed')
   assert.match(last.error ?? '', /sign in again/)
 })
+
+test('an EMBER-DANDI upload gets the run\'s workspace recorded in its dandiset, and the dialog the dandiset id', async () => {
+  const f = fakes()
+  const seen: { dandisets?: unknown } = {}
+  const store: IObjectStore = {
+    async put(input) {
+      f.calls.push('upload')
+      seen.dandisets = input.dandisets
+      return {
+        url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777',
+        recordWorkspace: async (id) => { f.calls.push(`record:${id}`) },
+      }
+    },
+  }
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, store)(
+    { protocol: { ...FOUR_CHOICE, maabcdDandisetId: '000533' }, file: file(), workspaceName: 'Four-choice', dandisetId: '000123' },
+    (s) => states.push(s))
+  const last = states[states.length - 1]
+
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(last.dandisetId, '000777')
+  // Recorded once the workspace exists, before anything is imported into it.
+  const create = f.calls.findIndex((c) => c.startsWith('create:'))
+  assert.equal(f.calls[create + 1], 'record:42')
+  assert.deepEqual(seen.dandisets, {
+    user: '000123', newName: 'Four-choice reversal digging task (IDP)', maabcd: '000533',
+    protocol: { id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/maracbaylis/four-choice-example' },
+  })
+})

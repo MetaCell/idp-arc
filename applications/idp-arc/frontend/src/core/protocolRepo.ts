@@ -25,3 +25,9 @@ export function parseRepoZipUrl(url: string | undefined): ProtocolRepo | null {
   const folderRef = kind === 'tags' && /^v\d/.test(ref) ? ref.slice(1) : ref
   return { owner, repo, ref, folder: `${repo}-${folderRef.replace(/\//g, '-')}` }
 }
+
+/** The repository's page on GitHub, for a `repoZipUrl`; undefined if it isn't a codeload URL. */
+export function repoPage(url: string | undefined): string | undefined {
+  const r = parseRepoZipUrl(url)
+  return r ? `https://github.com/${r.owner}/${r.repo}` : undefined
+}

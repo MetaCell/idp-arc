@@ -25,6 +25,7 @@ export class RunProgress {
   /** Set once the run has failed or finished: nothing reports over the outcome after that. */
   private ended = false
   workspaceId?: number
+  dandisetId?: string
   outputsDir?: string
 
   constructor(report: OnRunState, steps: { id: string; label: string }[], workspaceId?: number) {
@@ -92,8 +93,8 @@ export class RunProgress {
   }
 
   emit(message: string, error?: string) {
-    const { phase, steps, workspaceId, outputsDir } = this
-    this.report({ phase, message, steps, workspaceId, outputsDir, ...(error ? { error } : {}) })
+    const { phase, steps, workspaceId, dandisetId, outputsDir } = this
+    this.report({ phase, message, steps, workspaceId, outputsDir, ...(dandisetId ? { dandisetId } : {}), ...(error ? { error } : {}) })
   }
 
   private set(id: string, state: StepState, detail?: string) {

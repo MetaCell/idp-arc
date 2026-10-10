@@ -21,8 +21,12 @@ import { WorkspaceApiClient } from '../infra/workspaceApiClient'
 import { DandiApiClient } from '../infra/dandiApiClient'
 import { PublicBucketObjectStore } from '../infra/publicBucketObjectStore'
 import { EmberOAuthClient, EMBER_CALLBACK_PATH } from '../infra/emberOAuthClient'
+import { EmberDandiDirectClient } from '../infra/emberDandiDirectClient'
+import { EmberUploadApiClient } from '../infra/emberUploadApiClient'
 import { EMBER_API_ORIGIN_DEFAULT, EMBER_WEB_ORIGIN } from '../infra/emberUrls'
 import type { IObjectStore } from '../core/ports/IObjectStore'
+import { createEmberObjectStore } from '../core/use-cases/emberObjectStore'
+import { createProtocolDandisetsUseCases, type ProtocolDandiset } from '../core/use-cases/protocolDandisets'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
 import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
 import { createCreateWorkspaceUseCase } from '../core/use-cases/createWorkspace'
@@ -39,6 +43,9 @@ const WORKSPACES_LIST_URL =
   `${WWW_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
 const FRONTEND_BASE  = `${PROTOCOL}://www.${BASE_DOMAIN}`
 
+/** Where uploads go: `ember` (Scenario 2, EMBER-DANDI) or `bucket` (Scenario 1, the public
+ *  bucket gs://maabcd, VITE_UPLOAD_BUCKET_URL). Change it here to switch. */
+export const UPLOAD_BACKEND = 'ember' as 'bucket' | 'ember'
 /** EMBER-DANDI's API origin: where the OAuth login goes, and what OSB downloads assets from. */
 const EMBER_ORIGIN = (import.meta.env.VITE_EMBER_ORIGIN ?? EMBER_API_ORIGIN_DEFAULT).replace(/\/+$/, '')
 /** Same-origin path for the browser's own EMBER calls (Vite proxy in dev, nginx deployed): EMBER's
@@ -68,9 +75,17 @@ export const emberAuth = new EmberOAuthClient({
 })
 export { EMBER_CALLBACK_PATH }
 export { EmberPopupBlocked, EmberSignInCancelled } from '../infra/emberOAuthClient'
+const emberDirect = new EmberDandiDirectClient(EMBER_FETCH_BASE)
+/** The researcher's dandisets by protocol, and the workspace each runs in (dandiset metadata). */
+const protocolDandisets = createProtocolDandisetsUseCases({
+  emberAuth, direct: emberDirect, osbDomain: BASE_DOMAIN, workspaceUrl: (id) => getWorkspaceUrl(id),
+})
 
-/** Scenario 1: where uploads go before OSB imports them (`gs://maabcd`). Used by the upload flow. */
-export const objectStore: IObjectStore = new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
+/** Where uploads go before OSB imports them: the public bucket (Scenario 1), or EMBER-DANDI
+ *  (Scenario 2: the researcher's own dandiset, plus the protocol's MAABCD dandiset through OSB). */
+export const objectStore: IObjectStore = UPLOAD_BACKEND === 'ember'
+  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API), protocolDandisets, EMBER_ORIGIN)
+  : new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────
 
@@ -81,12 +96,20 @@ export const loadWorkspaces = createLoadWorkspacesUseCase(authClient, workspaceA
 export const createWorkspace = createCreateWorkspaceUseCase(authClient, workspaceApi)
 
 /** Uploads the researcher's file, imports it and the protocol's repository into the workspace
- * through OSB, and runs the notebooks in OSB's Argo task (MAABCD–OSB design, Scenario 1). */
+ * through OSB, and runs the notebooks in OSB's Argo task (MAABCD–OSB design). */
 export const runProtocol = createRunProtocolUseCase(authClient, workspaceApi, objectStore)
 
 /** DANDI-backed upload (Route A, see IDP-43 notes); `finalize` also runs the selected
  * protocol's script server-side (jupyter_kernel_client.py in OSBv2's workspaces app). */
 export const createAndUploadToDandi = createCreateAndUploadToDandiUseCase(authClient, dandiApi)
+
+/** The researcher's EMBER-DANDI dandisets for a protocol, each with the workspace it runs in when
+ *  they still have it: what the upload dialog offers once a protocol is chosen. */
+export async function listProtocolDandisets(protocolId: string): Promise<ProtocolDandiset[]> {
+  const ownWorkspaceIds = (await loadWorkspaces()).map((w) => Number(w.id))
+  return protocolDandisets.listForProtocol(protocolId, ownWorkspaceIds)
+}
+export type { ProtocolDandiset }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

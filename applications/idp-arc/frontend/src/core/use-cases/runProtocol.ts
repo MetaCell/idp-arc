@@ -3,7 +3,7 @@ import type { IObjectStore, StoredObject } from '../ports/IObjectStore'
 import type { IWorkspaceApi, WorkspaceResourceState } from '../ports/IWorkspaceApi'
 import { formatBytes } from '../formatBytes'
 import { inputFileProblem } from '../inputFormats'
-import { parseRepoZipUrl } from '../protocolRepo'
+import { parseRepoZipUrl, repoPage } from '../protocolRepo'
 import { RUN_SETTINGS } from '../runSettings'
 import { UserFacingError } from '../userMessages'
 import { workspaceLayout } from '../workspaceLayout'
@@ -28,6 +28,9 @@ export interface RunProtocolDefinition {
   /** The image the notebooks run in (their environment): an OSB application's name (e.g. `netpyne`)
    *  or an image reference from a registry OSB allows. Without it, OSB's default (JupyterLab). */
   image?: string
+  /** Scenario 2: the protocol's MAABCD dandiset on EMBER-DANDI, which every contributor's upload
+   *  is also copied into (through OSB). Empty or absent: no MAABCD copy. */
+  maabcdDandisetId?: string
 }
 
 export interface RunProtocolInput {
@@ -38,6 +41,9 @@ export interface RunProtocolInput {
   workspaceId?: number
   /** Name for the workspace created when `workspaceId` is undefined. */
   workspaceName: string
+  /** Scenario 2: the researcher's own EMBER-DANDI dandiset to upload into; a new one is created
+   *  when undefined. The bucket (Scenario 1) ignores it. */
+  dandisetId?: string
 }
 
 /**
@@ -63,10 +69,11 @@ const STEPS = [
 ]
 
 /**
- * Runs a protocol on the researcher's data, per the MAABCD–OSB design (Scenario 1). Before anything
+ * Runs a protocol on the researcher's data, per the MAABCD–OSB design. Before anything
  * moves, the protocol and the file are checked; then, one step per entry in STEPS:
  *
- *   1. Upload: browser → public bucket (IObjectStore); its URL is what OSB imports. It goes first
+ *   1. Upload through IObjectStore: browser → public bucket (Scenario 1), or → EMBER-DANDI
+ *      (Scenario 2, emberObjectStore.ts); the URL it returns is what OSB imports. It goes first
  *      (the design runs it in parallel with the workspace side): nothing is created in OSB until
  *      the file is safely in the bucket, so a failed upload leaves no empty workspace.
  *   2. Workspace: the selected one, or a new one tagged `maabcd:<protocol id>`.
@@ -118,8 +125,13 @@ export function createRunProtocolUseCase(
       const stored = file ? await inStep('upload', () => uploadFile(file, userId)) : null
       if (stopped()) return
 
-      // 2. Get the workspace: the selected one, or a new one.
-      const workspaceId = await inStep('workspace', prepareWorkspace)
+      // 2. Get the workspace: the selected one, or a new one; recorded with the upload (Scenario 2:
+      // in the dandiset's metadata, so the next upload for this protocol finds both).
+      const workspaceId = await inStep('workspace', async () => {
+        const id = await prepareWorkspace()
+        await stored?.recordWorkspace?.(id)
+        return id
+      })
       if (stopped()) return
 
       // 3. Import the analysis code (the protocol's repository).
@@ -160,12 +172,22 @@ export function createRunProtocolUseCase(
       const message = `Uploading ${file.name}…`
       progress.start('upload', 'uploading', message, `0 B of ${formatBytes(file.size)}`)
       let lastReport = 0
-      const stored = await objectStore.put({ file, protocolId: protocol.id, userSub: userId }, (sent, total) => {
+      const stored = await objectStore.put({
+        file, protocolId: protocol.id, userSub: userId,
+        dandisets: {
+          user: input.dandisetId,
+          newName: `${protocol.name} (IDP)`,
+          protocol: { id: protocol.id, name: protocol.name, url: repoPage(protocol.repoZipUrl) },
+          maabcd: protocol.maabcdDandisetId,
+        },
+      }, (sent, total) => {
         if (Date.now() - lastReport < RUN_SETTINGS.uploadProgressMs && sent < total) return
         lastReport = Date.now()
         const pct = total ? Math.round((sent / total) * 100) : 100
         progress.update('upload', `${formatBytes(sent)} of ${formatBytes(total)} (${pct}%)`, message)
       })
+      // Kept by the dialog, so a retry uploads into the same dandiset rather than creating another.
+      if (stored.dandisetId) progress.dandisetId = stored.dandisetId
       progress.done('upload', undefined, 'Upload finished')
       return stored
     }
