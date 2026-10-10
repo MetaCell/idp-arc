@@ -103,10 +103,13 @@ export default function PageLayout({
   const location = useLocation()
   const { authState } = useAppContext()
   const isAuthenticated = authState === 'authenticated'
+  // Signed in to OSB only while there is a token: the session can end (or the auth client be
+  // replaced, as a dev hot reload does) without authState hearing of it.
+  const osbSignedIn = isAuthenticated && authClient.tokenParsed !== null
   // Uploading needs both logins: EMBER-DANDI (where the data goes) and OSB (where it is analysed).
   // EMBER's popup sign-in doesn't reload the page, so it updates this state.
   const [emberSignedIn, setEmberSignedIn] = useState(() => emberAuth.isConnected())
-  const loginsDone = isAuthenticated && emberSignedIn && emberAuth.isConnected()
+  const loginsDone = osbSignedIn && emberSignedIn && emberAuth.isConnected()
   /**
    * Whether each login still holds, checked now rather than as of the page load: an EMBER token
    * expires, and an OSB session can end without the page knowing until a token is asked for (the
@@ -115,7 +118,7 @@ export default function PageLayout({
   const checkLogins = async () => {
     const ember = emberAuth.isConnected()
     setEmberSignedIn(ember)
-    const osb = isAuthenticated && await authClient.getToken().then(() => true, () => false)
+    const osb = osbSignedIn && await authClient.getToken().then(() => true, () => false)
     return ember && osb
   }
   const openLoginDialog = () => {
@@ -524,7 +527,7 @@ export default function PageLayout({
         open={loginDialogOpen}
         onClose={closeLoginDialog}
         onOsbLogin={startOsbLogin}
-        osbSignedIn={isAuthenticated}
+        osbSignedIn={osbSignedIn}
         onEmberSignedIn={() => setEmberSignedIn(true)}
       />
 
