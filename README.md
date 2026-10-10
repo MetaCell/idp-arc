@@ -78,8 +78,8 @@ researcher's workspace from there.
   MAABCD dandiset (`maabcdDandisetId` in `src/data/protocols.json`). Needs `VITE_EMBER_CLIENT_ID`,
   an EMBER-DANDI OAuth application (public client, PKCE) with `<this app's origin>/ember-callback`
   as a redirect URI, and OSB's `ember-api-key` secret for the MAABCD copy.
-- **`bucket`**: a public bucket open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL`
-  (e.g. `https://storage.googleapis.com/maabcd`). Its CORS must allow PUT from this app's origin.
+- **`bucket`**: a public bucket open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL`.
+  Its CORS must allow PUT from this app's origin.
 
 ---
 

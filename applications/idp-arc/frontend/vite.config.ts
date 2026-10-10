@@ -8,10 +8,10 @@ import https from 'node:https'
 // Must use loadEnv(), not process.env — Vite doesn't load .env into process.env for this
 // file, so process.env here silently falls back to the production domain.
 const env = loadEnv(process.env.NODE_ENV ?? 'development', process.cwd(), '')
-const BASE_DOMAIN = env.VITE_OSB_BASE_DOMAIN || 'v2dev.opensourcebrain.org'
-const PROTOCOL    = env.VITE_OSB_PROTOCOL || 'https'
+const OSB_DOMAIN = env.VITE_OSB_BASE_DOMAIN || 'v2dev.opensourcebrain.org'
+const OSB_SCHEME = env.VITE_OSB_PROTOCOL || 'https'
 
-const WWW_ORIGIN = `${PROTOCOL}://www.${BASE_DOMAIN}`
+const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
 /**
  * Optional HTTPS for the dev server: EMBER-DANDI's OAuth application only accepts https://
  * redirect URIs, so its sign-in needs https://localhost:5173 (registered as
@@ -35,14 +35,14 @@ const devHttps = loadDevHttpsCerts()
 const EMBER_ORIGIN = env.VITE_EMBER_ORIGIN || 'https://api-dandi.emberarchive.org'
 
 // eslint-disable-next-line no-console
-console.log(`[vite] proxying OSB -> ${WWW_ORIGIN}`)
+console.log(`[vite] proxying OSB -> ${OSB_WEB_ORIGIN}`)
 
 // IPv4 lookups and reused connections for every proxied call. macOS resolves `*.local` names
 // (local minikube: `osb.local`) through multicast DNS first, and the IPv6 query only falls back
 // to /etc/hosts after a 5 s timeout, which Node paid on each new upstream connection: every
 // proxied request took 5 s or more (measured 30 Sep: 5018 ms default lookup vs 6 ms for IPv4).
 const agentOptions = { keepAlive: true, family: 4 }
-const upstreamAgent = PROTOCOL === 'https' ? new https.Agent(agentOptions) : new http.Agent(agentOptions)
+const upstreamAgent = OSB_SCHEME === 'https' ? new https.Agent(agentOptions) : new http.Agent(agentOptions)
 
 export default defineConfig({
   plugins: [react()],
@@ -61,7 +61,7 @@ export default defineConfig({
     },
     proxy: {
       '/api-proxy': {
-        target: WWW_ORIGIN,
+        target: OSB_WEB_ORIGIN,
         agent: upstreamAgent,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-proxy/, ''),

@@ -35,16 +35,16 @@ import { createRunProtocolUseCase } from '../core/use-cases/runProtocol'
 // ─── Config ───────────────────────────────────────────────────────────────────
 // All environment-specific URLs live here (or read from import.meta.env in Vite).
 
-const BASE_DOMAIN    = import.meta.env.VITE_OSB_BASE_DOMAIN ?? 'v2dev.opensourcebrain.org'
-const PROTOCOL       = import.meta.env.VITE_OSB_PROTOCOL ?? 'https'
-const WWW_BASE       = import.meta.env.DEV ? '/api-proxy' : `${PROTOCOL}://www.${BASE_DOMAIN}`
-const WORKSPACES_API = `${WWW_BASE}/proxy/workspaces/api`
+const OSB_DOMAIN     = import.meta.env.VITE_OSB_BASE_DOMAIN ?? 'v2dev.opensourcebrain.org'
+const OSB_SCHEME     = import.meta.env.VITE_OSB_PROTOCOL ?? 'https'
+const OSB_API_BASE   = import.meta.env.DEV ? '/api-proxy' : `${OSB_SCHEME}://www.${OSB_DOMAIN}`
+const WORKSPACES_API = `${OSB_API_BASE}/proxy/workspaces/api`
 const WORKSPACES_LIST_URL =
-  `${WWW_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
-const FRONTEND_BASE  = `${PROTOCOL}://www.${BASE_DOMAIN}`
+  `${OSB_API_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
+const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
 
-/** Where uploads go: `ember` (Scenario 2, EMBER-DANDI) or `bucket` (Scenario 1, the public
- *  bucket gs://maabcd, VITE_UPLOAD_BUCKET_URL). Change it here to switch. */
+/** Where uploads go: `ember` (EMBER-DANDI) or `bucket` (the public bucket named by
+ *  VITE_UPLOAD_BUCKET_URL). Change it here to switch. */
 export const UPLOAD_BACKEND = 'ember' as 'bucket' | 'ember'
 /** EMBER-DANDI's API origin: where the OAuth login goes, and what OSB downloads assets from. */
 const EMBER_ORIGIN = (import.meta.env.VITE_EMBER_ORIGIN ?? EMBER_API_ORIGIN_DEFAULT).replace(/\/+$/, '')
@@ -78,7 +78,7 @@ export { EmberPopupBlocked, EmberSignInCancelled } from '../infra/emberOAuthClie
 const emberDirect = new EmberDandiDirectClient(EMBER_FETCH_BASE)
 /** The researcher's dandisets by protocol, and the workspace each runs in (dandiset metadata). */
 const protocolDandisets = createProtocolDandisetsUseCases({
-  emberAuth, direct: emberDirect, osbDomain: BASE_DOMAIN, workspaceUrl: (id) => getWorkspaceUrl(id),
+  emberAuth, direct: emberDirect, osbDomain: OSB_DOMAIN, workspaceUrl: (id) => getWorkspaceUrl(id),
 })
 
 /** Where uploads go before OSB imports them: the public bucket (Scenario 1), or EMBER-DANDI
@@ -114,15 +114,15 @@ export type { ProtocolDandiset }
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** The researcher's workspaces on OSB ("My workspaces"). */
-export const OSB_WORKSPACES_URL = `${FRONTEND_BASE}/`
+export const OSB_WORKSPACES_URL = `${OSB_WEB_ORIGIN}/`
 
 /** The signed-in researcher's own dandisets on EMBER-DANDI's website. */
 export const MY_DANDISETS_URL = `${EMBER_WEB_ORIGIN}/dandiset/my`
 
 /**
  * Builds the public URL for a given workspace id.
- * Centralised here so no component needs to know BASE_DOMAIN.
+ * Centralised here so no component needs to know OSB_DOMAIN.
  */
 export function getWorkspaceUrl(workspaceId: number): string {
-  return `${FRONTEND_BASE}/workspaces/open/${workspaceId}/jupyter`
+  return `${OSB_WEB_ORIGIN}/workspaces/open/${workspaceId}/jupyter`
 }
