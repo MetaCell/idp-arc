@@ -68,6 +68,7 @@ const STEPS = [
   { id: 'data', label: 'Import your data' },
   { id: 'imports', label: 'Wait for the imports to finish' },
   { id: 'run', label: 'Run the notebooks' },
+  { id: 'doi', label: 'Publish your data with a DOI' },
 ]
 
 /**
@@ -92,6 +93,8 @@ const STEPS = [
  *      the run task removes the code once it has copied it (discard_repo). It is followed, like the
  *      imports, through `GET /workspace/{id}`'s placeholder: that shows when it ends. Whether it
  *      succeeded is in which folder its executed notebooks are then listed.
+ *   7. Publish the researcher's dandiset as a new version (EMBER-DANDI only): its DOI cites this
+ *      data. Skipped by the bucket, and without a file.
  *
  * No lab server is started: the imports and the run are OSB's own Argo workflows, and their
  * affinity to the workspace is met by their own pods (verified 5 Oct on a never-opened workspace).
@@ -118,6 +121,7 @@ export function createRunProtocolUseCase(
       if (!file) {
         progress.skip('upload')
         progress.skip('data')
+        progress.skip('doi')
       }
       progress.emit('Starting…')
 
@@ -146,7 +150,15 @@ export function createRunProtocolUseCase(
       if (!notebooks) return
 
       // 6. Run the notebooks.
-      await inStep('run', () => runNotebooks(workspaceId, repoDir, notebooks, layout, !!stored))
+      const ran = await inStep('run', () => runNotebooks(workspaceId, repoDir, notebooks, layout, !!stored))
+      if (!ran) return
+
+      // 7. Publish the dandiset, for a DOI.
+      if (stored?.publish) {
+        const publish = stored.publish
+        if (!(await inStep('doi', () => publishForDoi(publish)))) return
+      } else progress.skip('doi')
+      progress.finish('The analysis has finished')
     } catch (err) {
       progress.fail(err)
     }
@@ -258,8 +270,9 @@ export function createRunProtocolUseCase(
     }
 
     /** Step 6. */
+    /** Step 6. True once the notebooks have all run; false if it stopped watching first. */
     async function runNotebooks(workspaceId: number, repoDir: string, notebooks: string[],
-      layout: ReturnType<typeof workspaceLayout>, hasData: boolean) {
+      layout: ReturnType<typeof workspaceLayout>, hasData: boolean): Promise<boolean> {
       progress.start('run', 'running', 'Starting the notebooks…', 'Submitting')
       await workspaceApi.startRun(await token(), workspaceId, {
         // Removed once copied: every run gets the repository as it is now.
@@ -290,7 +303,7 @@ export function createRunProtocolUseCase(
         return seen ? !running : Date.now() - submitted > RUN_SETTINGS.runStartTimeoutMs
       }, { everyMs: RUN_SETTINGS.runPollMs, timeoutMs: RUN_SETTINGS.runTimeoutMs, stopped })
       if (ended === 'timeout') progress.stopWatching('run', 'Still running in the workspace; open it to follow the results')
-      if (ended !== 'done') return
+      if (ended !== 'done') return false
 
       // Whether it succeeded. The run task leaves the executed notebooks in notebooks/ if every one
       // passed, else in notebooks.failed/ (the failed one last), and its workflow ends with a scan
@@ -304,13 +317,23 @@ export function createRunProtocolUseCase(
         failedAt = paths.filter((path) => path.startsWith(failedDir)).sort().pop()
         return !!failedAt || executed.every((path) => paths.includes(path))
       }, { everyMs: RUN_SETTINGS.runPollMs, timeoutMs: RUN_SETTINGS.runResultTimeoutMs, stopped })
-      if (listed === 'stopped') return
+      if (listed === 'stopped') return false
       // The user reads the run step's plain sentence; which notebook failed goes to the console.
       if (failedAt) throw new Error(`${failedAt} failed; see ${layout.log}`)
       // Neither: it stopped before any notebook ran (e.g. installing the requirements).
       if (listed === 'timeout') throw new Error(`The run ended with no executed notebooks in ${layout.notebooks}/ or ${failedDir}; see ${layout.log}`)
       progress.done('run', `Results in ${layout.run}/`)
-      progress.finish('The analysis has finished')
+      return true
+    }
+
+    /** Step 7. The published version's DOI; null if the dialog was closed meanwhile. */
+    async function publishForDoi(publish: NonNullable<StoredObject['publish']>) {
+      progress.start('doi', 'publishing', 'Publishing your data…', 'Waiting for EMBER-DANDI to check it')
+      const published = await publish(stopped)
+      if (!published) return null
+      progress.doi = published
+      progress.done('doi', published.doi)
+      return published
     }
   }
 }

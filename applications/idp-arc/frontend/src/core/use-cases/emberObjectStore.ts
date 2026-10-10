@@ -31,7 +31,7 @@ export function createEmberObjectStore(
   emberAuth: Pick<IEmberAuth, 'getToken'>,
   direct: IDandiDirectApi,
   osb: IEmberUploadApi,
-  dandisets: Pick<ProtocolDandisets, 'createForProtocol' | 'recordWorkspace'>,
+  dandisets: Pick<ProtocolDandisets, 'createForProtocol' | 'recordWorkspace' | 'publish'>,
   /** EMBER's public API origin (`https://api-dandi.emberarchive.org`): the download link has to
    *  work from OSB's cluster, so never the browser's same-origin proxy. */
   emberApiOrigin: string,
@@ -87,6 +87,10 @@ export function createEmberObjectStore(
         key: asset.assetPath,
         dandisetId: userDandisetId,
         recordWorkspace: (workspaceId: number) => dandisets.recordWorkspace(userDandisetId, workspaceId, protocol),
+        publish: async (stopped) => {
+          const version = await dandisets.publish(userDandisetId, stopped)
+          return version?.doi ? { doi: version.doi, url: version.url } : null
+        },
       }
 
       async function putParts(parts: { partNumber: number; url: string }[], plan: PartPlan[], file: File,

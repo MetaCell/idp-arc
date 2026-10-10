@@ -27,6 +27,7 @@ export class RunProgress {
   workspaceId?: number
   dandisetId?: string
   outputsDir?: string
+  doi?: { doi: string; url?: string }
 
   constructor(report: OnRunState, steps: { id: string; label: string }[], workspaceId?: number) {
     this.report = report
@@ -94,7 +95,7 @@ export class RunProgress {
 
   emit(message: string, error?: string) {
     const { phase, steps, workspaceId, dandisetId, outputsDir } = this
-    this.report({ phase, message, steps, workspaceId, outputsDir, ...(dandisetId ? { dandisetId } : {}), ...(error ? { error } : {}) })
+    this.report({ phase, message, steps, workspaceId, outputsDir, ...(dandisetId ? { dandisetId } : {}), ...(this.doi ? { doi: this.doi } : {}), ...(error ? { error } : {}) })
   }
 
   private set(id: string, state: StepState, detail?: string) {

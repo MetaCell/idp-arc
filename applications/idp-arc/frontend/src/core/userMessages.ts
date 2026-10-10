@@ -19,6 +19,7 @@ const STEP_FAILED: Record<string, string> = {
   data: 'Your file could not be added to the workspace. Please try again.',
   imports: 'The files could not be copied into the workspace. Please try again.',
   run: 'The analysis did not finish. Open the workspace to see what happened.',
+  doi: 'Your data could not be published with a DOI. Please try again.',
 }
 
 /** Says the EMBER-DANDI session is missing or over. Deliberately not SIGN_IN_AGAIN's wording,

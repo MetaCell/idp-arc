@@ -18,6 +18,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
+import ContentCopyIcon from '@mui/icons-material/ContentCopyOutlined'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
@@ -58,6 +59,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     spawnedWorkspaceId: number | undefined
     /** Where the last run's results are, relative to the workspace root. */
     outputsDir: string
+    /** The DOI the run's data was published with. */
+    doi?: { doi: string; url?: string }
     /** The run's checklist (upload, imports, run), as last reported by the use-case. */
     runSteps: RunStep[]
     /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
@@ -80,7 +83,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   }
 
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
-  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd } = form
+  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi } = form
   // EMBER-DANDI: the upload goes to the researcher's own account. Choosing a protocol lists their
   // dandisets for it, each with the workspace it runs in, so choosing one chooses both.
   const usesEmber = UPLOAD_BACKEND === 'ember'
@@ -95,6 +98,10 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   // before that, closing would abandon the upload or the imports half way (and the user would
   // have to start over). Once they run in OSB's task, closing only stops watching.
   const [closeLocked, setCloseLocked] = useState(false)
+  const [doiCopied, setDoiCopied] = useState(false)
+  const copyDoi = (value: string) => {
+    navigator.clipboard?.writeText(value).then(() => setDoiCopied(true), () => setDoiCopied(false))
+  }
   useEffect(() => {
     if (step !== 'uploading') setCloseLocked(false) // finished, failed, or sent back to the form
   }, [step])
@@ -174,7 +181,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const handleUpload = async () => {
     if (!file || fileProblem || !selectedProtocol) return
     setCloseLocked(true)
-    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [] }))
+    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [], doi: undefined }))
+    setDoiCopied(false)
     if (watchRef.current) watchRef.current.current = true
     const watch = { current: false }
     watchRef.current = watch
@@ -216,6 +224,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           dandisetId: state.dandisetId ?? prev.dandisetId,
           uploadMessage: state.phase === 'failed' ? `${state.message}: ${state.error}` : state.message,
           outputsDir: state.outputsDir ?? prev.outputsDir,
+          doi: state.doi ?? prev.doi,
           runSteps: state.steps,
           ...(state.phase === 'succeeded' ? { step: 'success' } : {}),
           ...(state.phase === 'stillRunning' ? { step: 'stillRunning' } : {}),
@@ -528,6 +537,20 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                 <Typography variant="body2" sx={{ opacity: 0.6 }}>
                   {step === 'stillRunning' ? 'Results will be in' : 'Results are in'} <code>{outputsDir}/</code> in your workspace.
                 </Typography>
+              )}
+              {step === 'success' && doi && (
+                <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Typography variant="body2" sx={{ opacity: 0.6 }}>DOI</Typography>
+                  <Typography component="code" variant="body2" sx={{ fontFamily: 'monospace', userSelect: 'all' }}>{doi.doi}</Typography>
+                  <Button size="small" variant="outlined" startIcon={<ContentCopyIcon />} onClick={() => copyDoi(doi.doi)}>
+                    {doiCopied ? 'Copied' : 'Copy'}
+                  </Button>
+                  {doi.url && (
+                    <Button size="small" variant="text" endIcon={<OpenInNewIcon />} href={doi.url} target="_blank" rel="noopener noreferrer">
+                      View
+                    </Button>
+                  )}
+                </Stack>
               )}
               {step !== 'uploading' && spawnedWorkspaceId !== undefined && (
                 <Button variant="outlined" onClick={() => openWorkspaceTab(spawnedWorkspaceId)}>

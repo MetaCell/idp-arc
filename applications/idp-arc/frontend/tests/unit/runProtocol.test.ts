@@ -87,7 +87,8 @@ test('uploads, imports both into the run folder, waits, runs, and reports the ru
 
   assert.equal(last.phase, 'succeeded', last.error)
   assert.equal(last.workspaceId, 42)
-  assert.deepEqual(last.steps.map((s) => s.state), Array(6).fill('succeeded'))
+  // The bucket can't publish: no DOI step.
+  assert.deepEqual(last.steps.map((s) => s.state), [...Array(6).fill('succeeded'), 'skipped'])
   assert.ok(f.calls.includes('create:Four-choice:maabcd:four-choice-reversal'))
 
   // <protocol>/run-<protocol>-<UTC time>/: the code and the upload, imported into the run's folder.
@@ -161,7 +162,7 @@ test('without a file: no upload, no data import, the notebooks run on the exampl
   assert.equal(last.phase, 'succeeded')
   assert.deepEqual(f.imports.map((i) => i.resourceType), ['g'])
   assert.equal(f.runInput()?.inputDir, undefined)
-  assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'data'])
+  assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'data', 'doi'])
 })
 
 test('a failed upload marks only the upload step failed', async () => {
@@ -344,4 +345,55 @@ test('with "Share with MAABCD" unticked, nothing goes to the protocol\'s MAABCD 
 
   assert.equal(states[states.length - 1].phase, 'succeeded')
   assert.equal(seen.dandisets?.maabcd, undefined)
+})
+
+// ── The DOI ──────────────────────────────────────────────────────────────────────────────────
+
+test('an EMBER-DANDI upload is published once the notebooks have run, and the DOI is reported', async () => {
+  const f = fakes()
+  const order: string[] = []
+  f.api.startRun = ((startRun) => async (...args: Parameters<IWorkspaceApi['startRun']>) => {
+    order.push('run'); return startRun(...args)
+  })(f.api.startRun)
+  const store: IObjectStore = {
+    async put() {
+      return {
+        url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777',
+        publish: async () => { order.push('publish'); return { doi: '10.60533/ember-dandi.000777/0.261010.1200', url: 'https://ember/000777/0.261010.1200' } },
+      }
+    },
+  }
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, store)({ protocol: FOUR_CHOICE, file: file(), workspaceName: 'x' }, (s) => states.push(s))
+  const last = states.at(-1)!
+
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.deepEqual(order, ['run', 'publish'])
+  assert.deepEqual(last.doi, { doi: '10.60533/ember-dandi.000777/0.261010.1200', url: 'https://ember/000777/0.261010.1200' })
+  const doiStep = last.steps.find((s) => s.id === 'doi')!
+  assert.equal(doiStep.state, 'succeeded')
+  assert.equal(doiStep.detail, '10.60533/ember-dandi.000777/0.261010.1200')
+})
+
+test('no DOI when the notebooks fail, and a failed publish fails only its own step', async () => {
+  const published: string[] = []
+  const store = (fail: boolean): IObjectStore => ({
+    async put() {
+      return {
+        url: 'u', key: 'k', dandisetId: '000777',
+        publish: async () => { published.push('publish'); if (fail) throw new Error('EMBER publish failed (HTTP 400)'); return { doi: 'd' } },
+      }
+    },
+  })
+  const notebookFails = fakes({ runFails: 'notebook' })
+  const failedRun: RunState[] = []
+  await createRunProtocolUseCase(auth, notebookFails.api, store(false))({ protocol: FOUR_CHOICE, file: file(), workspaceName: 'x' }, (s) => failedRun.push(s))
+  assert.equal(failedRun.at(-1)!.phase, 'failed')
+  assert.deepEqual(published, [], 'nothing published after a failed run')
+
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, fakes().api, store(true))({ protocol: FOUR_CHOICE, file: file(), workspaceName: 'x' }, (s) => states.push(s))
+  const last = states.at(-1)!
+  assert.equal(last.phase, 'failed')
+  assert.deepEqual(last.steps.filter((s) => s.state !== 'succeeded').map((s) => `${s.id}:${s.state}`), ['doi:failed'])
 })

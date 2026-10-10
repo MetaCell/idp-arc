@@ -16,6 +16,9 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
     async createDandiset() { throw new Error('created through the protocol use case') },
     async getDraftMetadata() { return {} },
     async updateDraftMetadata() {},
+    async getDraftStatus() { return { status: 'Valid', errors: [] } },
+    async publishDraft() {},
+    async getLatestPublished() { return null },
     async initUpload(token, dandisetId) {
       calls.push(`direct-init:${token}:${dandisetId}`)
       return opts.dedupDirect ? { parts: [], blobId: 'blob-1' } : { uploadId: 'up-1', parts: [{ partNumber: 1, size: 11, url: 'https://s3/direct' }] }
@@ -41,6 +44,7 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
   const dandisets = {
     async createForProtocol(name: string, protocol: { id: string }) { calls.push(`create:${name}:${protocol.id}`); return '000777' },
     async recordWorkspace(dandisetId: string, workspaceId: number, protocol: { id: string }) { calls.push(`record:${dandisetId}:${workspaceId}:${protocol.id}`) },
+    async publish(dandisetId: string) { calls.push(`publish:${dandisetId}`); return { version: 'v1', doi: `doi/${dandisetId}` } },
   }
   const store = (emberToken: string | null = 'ember-token') => createEmberObjectStore(
     { getToken: async () => 'osb-token' }, { getToken: () => emberToken }, direct, osb, dandisets, `${ORIGIN}/`,
@@ -113,4 +117,11 @@ test('without an EMBER-DANDI sign-in nothing starts and the user is asked to sig
     (err: unknown) => err instanceof UserFacingError && err.message === EMBER_SIGN_IN,
   )
   assert.deepEqual(calls, [])
+})
+
+test('the stored upload publishes the dandiset it went into, for its DOI', async () => {
+  const { calls, store } = fakes()
+  const stored = await store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123' } })
+  assert.deepEqual(await stored.publish?.(() => false), { doi: 'doi/000123', url: undefined })
+  assert.equal(calls.at(-1), 'publish:000123')
 })

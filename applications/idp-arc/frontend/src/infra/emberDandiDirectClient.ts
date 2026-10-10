@@ -2,8 +2,10 @@ import type { DandisetMetadata } from '../core/dandisetLinks'
 import type {
   DirectFinalizeInput,
   DirectInitResult,
+  DraftStatus,
   IDandiDirectApi,
   OwnDandiset,
+  PublishedVersion,
   RegisteredAsset,
 } from '../core/ports/IDandiDirectApi'
 
@@ -94,6 +96,45 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
       body: JSON.stringify({ name: metadata.name, metadata }),
     })
     if (!res.ok) await this.fail(res, 'draft metadata update')
+  }
+
+  async getDraftStatus(token: string, dandisetId: string): Promise<DraftStatus> {
+    const res = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/versions/draft/info/`, {
+      headers: this.headers(token),
+    })
+    if (!res.ok) await this.fail(res, 'draft status read')
+    type Problem = { field?: string; path?: string; message: string }
+    const body = (await res.json()) as {
+      status: string
+      version_validation_errors?: Problem[]
+      asset_validation_errors?: Problem[]
+    }
+    const errors = [...(body.version_validation_errors ?? []), ...(body.asset_validation_errors ?? [])]
+      .map((e) => [e.path || e.field, e.message].filter(Boolean).join(': '))
+    return { status: body.status, errors }
+  }
+
+  async publishDraft(token: string, dandisetId: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/versions/draft/publish/`, {
+      method: 'POST',
+      headers: this.headers(token),
+    })
+    if (!res.ok) await this.fail(res, 'publish')
+  }
+
+  async getLatestPublished(token: string, dandisetId: string): Promise<PublishedVersion | null> {
+    const res = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/`, { headers: this.headers(token) })
+    if (!res.ok) await this.fail(res, 'dandiset read')
+    const latest = (await res.json()) as { most_recent_published_version?: { version?: string } | null }
+    const version = latest.most_recent_published_version?.version
+    if (!version) return null
+    // The DOI is in the version's own metadata.
+    const info = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/versions/${version}/info/`, {
+      headers: this.headers(token),
+    })
+    if (!info.ok) await this.fail(info, 'published version read')
+    const metadata = ((await info.json()) as { metadata?: { doi?: string; url?: string } }).metadata ?? {}
+    return { version, doi: metadata.doi, url: metadata.url }
   }
 
   /** `POST /blobs/digest/`: the existing blob for this content, or null. */

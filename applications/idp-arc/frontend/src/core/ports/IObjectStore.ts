@@ -30,6 +30,8 @@ export interface StoredObject {
   dandisetId?: string
   /** EMBER-DANDI: records the run's workspace in the dandiset's metadata. */
   recordWorkspace?: (workspaceId: number) => Promise<void>
+  /** EMBER-DANDI: publishes the dandiset as a new version and returns its DOI; null if `stopped`. */
+  publish?: (stopped: () => boolean) => Promise<{ doi: string; url?: string } | null>
 }
 
 export interface IObjectStore {

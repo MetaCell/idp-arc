@@ -49,6 +49,31 @@ export interface OwnDandiset {
   name: string
 }
 
+/** The draft statuses IDP acts on. EMBER reports others (`Pending`, `Validating`) while it checks. */
+export const DRAFT_STATUS = {
+  valid: 'Valid',
+  invalid: 'Invalid',
+  /** Nothing changed since the last published version. */
+  published: 'Published',
+} as const
+
+/** A draft's validation, as EMBER reports it after every change. */
+export interface DraftStatus {
+  /** One of DRAFT_STATUS once EMBER has checked it. */
+  status: string
+  /** Why it is invalid, one line per problem. */
+  errors: string[]
+}
+
+/** A published (frozen) version of a dandiset. */
+export interface PublishedVersion {
+  version: string
+  /** Its DOI, e.g. `10.60533/ember-dandi.000542/0.260924.1156`. */
+  doi?: string
+  /** Its page on EMBER-DANDI. */
+  url?: string
+}
+
 export interface IDandiDirectApi {
   /** `GET /dandisets/?user=me` — every dandiset this account owns, empty ones included. */
   listOwnDandisets(token: string): Promise<OwnDandiset[]>
@@ -63,6 +88,16 @@ export interface IDandiDirectApi {
   /** `PUT /dandisets/{id}/versions/draft/` — replaces the draft metadata. Only the draft is
    *  writable; a published version is a frozen snapshot of it. */
   updateDraftMetadata(token: string, dandisetId: string, metadata: DandisetMetadata): Promise<void>
+
+  /** `GET /dandisets/{id}/versions/draft/info/` — whether the draft can be published. */
+  getDraftStatus(token: string, dandisetId: string): Promise<DraftStatus>
+
+  /** `POST /dandisets/{id}/versions/draft/publish/` — starts publishing the draft as a new
+   *  version. EMBER finishes it in the background. */
+  publishDraft(token: string, dandisetId: string): Promise<void>
+
+  /** The most recent published version, with its DOI; null when there is none yet. */
+  getLatestPublished(token: string, dandisetId: string): Promise<PublishedVersion | null>
 
   /** `POST /uploads/initialize/`. A 409 (content already present) comes back as
    *  `{ parts: [], blobId }` rather than an error. */
