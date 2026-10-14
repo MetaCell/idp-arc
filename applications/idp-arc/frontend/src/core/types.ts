@@ -28,8 +28,6 @@ export type RunPhase =
   | 'workspace'
   | 'importing'
   | 'running'
-  /** Publishing the dandiset for its DOI. */
-  | 'publishing'
   /** Still running in the workspace past the watch limit: no longer followed here. */
   | 'stillRunning'
   | 'succeeded'
@@ -68,8 +66,6 @@ export interface RunState {
   dandisetId?: string
   /** This run's results folder, relative to the workspace root. */
   outputsDir?: string
-  /** The DOI of the version published at the end of the run. */
-  doi?: { doi: string; url?: string }
   error?: string
   /** What the run has done so far; given back on a retry, it carries on from there. */
   checkpoint?: RunCheckpoint
@@ -97,6 +93,4 @@ export interface RunCheckpoint {
   runFolderAt?: string
   repoImported?: boolean
   dataImported?: boolean
-  /** The notebooks ran and passed, in this folder: a retry goes straight to the DOI. */
-  ranIn?: string
 }

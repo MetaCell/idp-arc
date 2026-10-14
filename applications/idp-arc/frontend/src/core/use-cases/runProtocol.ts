@@ -96,8 +96,10 @@ const STEPS = [
   { id: RUN_STEP.data, label: 'Import your data' },
   { id: RUN_STEP.imports, label: 'Wait for the imports to finish' },
   { id: RUN_STEP.run, label: 'Run the notebooks' },
-  { id: RUN_STEP.doi, label: 'Publish your data with a DOI' },
 ]
+
+/** Not part of the run: the dialog adds it once the researcher publishes the dandiset. */
+export const PUBLISH_STEP = { id: RUN_STEP.doi, label: 'Publish your dandiset' }
 
 /**
  * Runs a protocol on the researcher's data. Before anything moves, the protocol and the file are
@@ -121,8 +123,6 @@ const STEPS = [
  *      the run task removes the code once it has copied it (discard_repo). It is followed, like the
  *      imports, through `GET /workspace/{id}`'s placeholder: that shows when it ends. Whether it
  *      succeeded is in which folder its executed notebooks are then listed.
- *   7. Publish the researcher's dandiset as a new version (EMBER-DANDI only): its DOI cites this
- *      data. Skipped by the bucket, and without a file.
  *
  * No lab server is started: the imports and the run are OSB's own Argo workflows, and their
  * affinity to the workspace is met by their own pods (verified 5 Oct on a never-opened workspace).
@@ -165,7 +165,6 @@ export function createRunProtocolUseCase(
       if (!file) {
         progress.skip(RUN_STEP.upload)
         progress.skip(RUN_STEP.data)
-        progress.skip(RUN_STEP.doi)
       }
       progress.emit('Starting…')
 
@@ -193,23 +192,7 @@ export function createRunProtocolUseCase(
       })
       if (stopped()) return
 
-      // 3–6 already done: the notebooks ran and passed, so only the DOI is left.
-      if (checkpoint.ranIn) {
-        for (const id of [RUN_STEP.repo, RUN_STEP.data, RUN_STEP.imports, RUN_STEP.run]) {
-          if (id !== RUN_STEP.data || file) doneEarlier(id)
-        }
-        progress.outputsDir = checkpoint.ranIn
-      } else {
-        const ran = await importAndRun(workspaceId, stored, repo, layout)
-        if (!ran) return
-        save({ ranIn: layout.run })
-      }
-
-      // 7. Publish the dandiset, for a DOI.
-      if (stored?.publish) {
-        const publish = stored.publish
-        if (!(await inStep(RUN_STEP.doi, () => publishForDoi(publish)))) return
-      } else progress.skip(RUN_STEP.doi)
+      if (!(await importAndRun(workspaceId, stored, repo, layout))) return
       progress.finish('The analysis has finished')
     } catch (err) {
       progress.fail(err)
@@ -414,16 +397,6 @@ export function createRunProtocolUseCase(
       if (listed === 'timeout') throw new Error(`The run ended with no executed notebooks in ${layout.notebooks}/ or ${failedDir}; see ${layout.log}`)
       progress.done(RUN_STEP.run, `Results in ${layout.run}/`)
       return true
-    }
-
-    /** Step 7. The published version's DOI; null if the dialog was closed meanwhile. */
-    async function publishForDoi(publish: NonNullable<StoredObject['publish']>) {
-      progress.start(RUN_STEP.doi, 'publishing', 'Publishing your data…', 'Waiting for EMBER-DANDI to check it')
-      const published = await publish(stopped)
-      if (!published) return null
-      progress.doi = published
-      progress.done(RUN_STEP.doi)
-      return published
     }
   }
 }

@@ -21,15 +21,15 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
-import { emberAuth, getWorkspaceUrl, listProtocolDandisets, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
-import { EMBER_SIGN_IN } from '../core/userMessages'
+import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
+import { EMBER_SIGN_IN, userMessage } from '../core/userMessages'
 import { useAppContext } from '../AppContext'
-import type { RunCheckpoint, RunStep } from '../core/types'
+import { RUN_STEP, type RunCheckpoint, type RunStep } from '../core/types'
 import RunChecklist from './RunChecklist'
 import { createSessionStore, useSessionStore } from './sessionStore'
 import DoiField from './DoiField'
 import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
-import { canResume } from '../core/use-cases/runProtocol'
+import { canResume, PUBLISH_STEP } from '../core/use-cases/runProtocol'
 import { formatBytes } from '../core/formatBytes'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
@@ -58,8 +58,10 @@ step: DialogStep
   spawnedWorkspaceId: number | undefined
   /** Where the last run's results are, relative to the workspace root. */
   outputsDir: string
-  /** The DOI the run's data was published with. */
-  doi?: { doi: string; url?: string }
+  /** The DOI of the version published with "Publish dandiset". */
+  doi?: { doi: string }
+  /** That publish is under way, or failed (it can be retried). */
+  publishing?: 'running' | 'failed'
   /** The run's checklist (upload, imports, run), as last reported by the use-case. */
   runSteps: RunStep[]
   /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
@@ -98,7 +100,7 @@ let currentWatch: { current: boolean } | null = null
 export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
   const [form] = useSessionStore(session)
-  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi, checkpoint } = form
+  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi, publishing, checkpoint } = form
   // EMBER-DANDI: the upload goes to the researcher's own account. Choosing a protocol lists their
   // dandisets for it, each with the workspace it runs in, so choosing one chooses both.
   const usesEmber = UPLOAD_BACKEND === 'ember'
@@ -132,11 +134,18 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     if (!open) return
     const current = session.get()
     const unstarted = current.step === 'select' || (current.step === 'upload' && !current.checkpoint)
-    if (unstarted || current.resultSeen) freshForm()
+    if ((unstarted || current.resultSeen) && current.publishing !== 'running') freshForm()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
   // A finished run's result counts as seen once it is on screen.
   const finished = step === 'success' || step === 'stillRunning'
+  // Publishing joins the run's checklist once the researcher starts it.
+  const publishStep: RunStep | null =
+    publishing === 'running' ? { ...PUBLISH_STEP, state: 'running' }
+      : publishing === 'failed' ? { ...PUBLISH_STEP, state: 'failed', detail: userMessage(undefined, RUN_STEP.doi) }
+        : doi ? { ...PUBLISH_STEP, state: 'succeeded' }
+          : null
+  const checklist = publishStep ? [...runSteps, publishStep] : runSteps
   useEffect(() => {
     if (open && finished) setForm((prev) => (prev.resultSeen ? prev : { ...prev, resultSeen: true }))
   }, [open, finished])
@@ -193,7 +202,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
   const handleUpload = async () => {
     if (!file || fileProblem || !selectedProtocol) return
-    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [], doi: undefined }))
+    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [], doi: undefined, publishing: undefined }))
     if (currentWatch) currentWatch.current = true
     const watch = { current: false }
     currentWatch = watch
@@ -237,7 +246,6 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           dandisetId: state.dandisetId ?? prev.dandisetId,
           uploadMessage: state.phase === 'failed' ? `${state.message}: ${state.error}` : state.message,
           outputsDir: state.outputsDir ?? prev.outputsDir,
-          doi: state.doi ?? prev.doi,
           runSteps: state.steps,
           checkpoint: state.checkpoint ?? prev.checkpoint,
           ...(state.phase === 'succeeded' ? { step: 'success' } : {}),
@@ -247,6 +255,19 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
       },
       watch,
     )
+  }
+
+  /** "Publish dandiset": the researcher's dandiset as a new, permanent version. Optional. */
+  const publish = async () => {
+    if (!dandisetId) return
+    setForm((prev) => ({ ...prev, publishing: 'running' }))
+    try {
+      const published = await publishDandiset(dandisetId)
+      setForm((prev) => ({ ...prev, publishing: published ? undefined : 'failed', doi: published ?? prev.doi }))
+    } catch (err) {
+      console.error('Publishing the dandiset failed', err)
+      setForm((prev) => ({ ...prev, publishing: 'failed' }))
+    }
   }
 
   // "Retry" only when an earlier attempt can be carried on (same protocol, file, dandiset and
@@ -563,11 +584,15 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                 </Button>
               )}
             </Stack>
-            {runSteps.length > 0 && <RunChecklist steps={runSteps} />}
-            {/* Under the checklist, after its last row, "Publish your data with a DOI". */}
-            {step === 'success' && doi && (
+            {checklist.length > 0 && <RunChecklist steps={checklist} />}
+            {/* Optional, after the run: publishing is the researcher's choice (they can also do it on EMBER). */}
+            {finished && usesEmber && dandisetId && publishing !== 'running' && (
               <Box sx={{ display: 'flex', justifyContent: 'center', maxWidth: '100%', overflowX: 'auto', mt: 3 }}>
-                <DoiField doi={doi.doi} />
+                {doi ? <DoiField doi={doi.doi} /> : (
+                  <Button variant="outlined" onClick={publish}>
+                    {publishing === 'failed' ? 'Try again' : 'Publish dandiset'}
+                  </Button>
+                )}
               </Box>
             )}
           </Stack>

@@ -107,6 +107,12 @@ export async function listProtocolDandisets(protocolId: string): Promise<Protoco
 }
 export type { ProtocolDandiset }
 
+/** Publishes the researcher's dandiset as a new version, for its DOI; only when they ask for it. */
+export async function publishDandiset(dandisetId: string): Promise<{ doi: string } | null> {
+  const version = await protocolDandisets.publish(dandisetId)
+  return version?.doi ? { doi: version.doi } : null
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** The researcher's workspaces on OSB ("My workspaces"). */

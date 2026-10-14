@@ -27,7 +27,6 @@ export class RunProgress {
   workspaceId?: number
   dandisetId?: string
   outputsDir?: string
-  doi?: { doi: string; url?: string }
   /** Reported with every state, so the last one the dialog sees is up to date. */
   checkpoint?: RunCheckpoint
 
@@ -99,7 +98,7 @@ export class RunProgress {
     const { phase, steps, workspaceId, dandisetId, outputsDir, checkpoint } = this
     this.report({
       phase, message, steps, workspaceId, outputsDir,
-      ...(dandisetId ? { dandisetId } : {}), ...(this.doi ? { doi: this.doi } : {}), ...(error ? { error } : {}), ...(checkpoint ? { checkpoint: { ...checkpoint } } : {}),
+      ...(dandisetId ? { dandisetId } : {}), ...(error ? { error } : {}), ...(checkpoint ? { checkpoint: { ...checkpoint } } : {}),
     })
   }
 

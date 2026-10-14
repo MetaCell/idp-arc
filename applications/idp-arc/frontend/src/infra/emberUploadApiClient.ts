@@ -14,11 +14,15 @@ import type {
  * `keyUsername`: the Keycloak user whose key (attribute `DANDI_API_KEY`) OSB signs with.
  */
 export class EmberUploadApiClient implements IEmberUploadApi {
-  constructor(
-    private readonly baseApiUrl: string,
-    private readonly instance: string,
-    private readonly keyUsername: string,
-  ) {}
+  private readonly baseApiUrl: string
+  private readonly instance: string
+  private readonly keyUsername: string
+
+  constructor(baseApiUrl: string, instance: string, keyUsername: string) {
+    this.baseApiUrl = baseApiUrl
+    this.instance = instance
+    this.keyUsername = keyUsername
+  }
 
   private async post<T>(token: string, path: string, body: unknown, what: string): Promise<T> {
     const res = await fetch(`${this.baseApiUrl}${path}`, {

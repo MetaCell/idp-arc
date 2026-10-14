@@ -48,7 +48,6 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
   const dandisets = {
     async createForProtocol(name: string, protocol: { id: string }) { calls.push(`create:${name}:${protocol.id}`); return '000777' },
     async recordWorkspace(dandisetId: string, workspaceId: number, protocol: { id: string }) { calls.push(`record:${dandisetId}:${workspaceId}:${protocol.id}`) },
-    async publish(dandisetId: string) { calls.push(`publish:${dandisetId}`); return { version: 'v1', doi: `doi/${dandisetId}` } },
   }
   const store = (emberToken: string | null = 'ember-token') => createEmberObjectStore(
     { getToken: async () => 'osb-token' }, { getToken: () => emberToken }, direct, osb, dandisets, `${ORIGIN}/`,
@@ -174,9 +173,3 @@ test('a retry with everything done makes no copy at all', async () => {
   assert.equal(stored.url, `${ORIGIN}/api/assets/asset-1/download/`)
 })
 
-test('the stored upload publishes the dandiset it went into, for its DOI', async () => {
-  const { calls, store } = fakes()
-  const stored = await store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123' } })
-  assert.deepEqual(await stored.publish?.(() => false), { doi: 'doi/000123', url: undefined })
-  assert.equal(calls.at(-1), 'publish:000123')
-})

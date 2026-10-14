@@ -27,7 +27,11 @@ export const ALLOW_EMBARGOED = false
  * EMBER_FETCH_BASE in container.ts.
  */
 export class EmberDandiDirectClient implements IDandiDirectApi {
-  constructor(private readonly baseUrl: string) {}
+  private readonly baseUrl: string
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl
+  }
 
   private headers(token: string, json = false): HeadersInit {
     return {
