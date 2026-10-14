@@ -18,7 +18,6 @@
 
 import { KeycloakAuthClient } from '../infra/keycloakAuthClient'
 import { WorkspaceApiClient } from '../infra/workspaceApiClient'
-import { DandiApiClient } from '../infra/dandiApiClient'
 import { PublicBucketObjectStore } from '../infra/publicBucketObjectStore'
 import { EmberOAuthClient, EMBER_CALLBACK_PATH } from '../infra/emberOAuthClient'
 import { EmberDandiDirectClient } from '../infra/emberDandiDirectClient'
@@ -28,7 +27,6 @@ import type { IObjectStore } from '../core/ports/IObjectStore'
 import { createEmberObjectStore } from '../core/use-cases/emberObjectStore'
 import { createProtocolDandisetsUseCases, type ProtocolDandiset } from '../core/use-cases/protocolDandisets'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
-import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
 import { createCreateWorkspaceUseCase } from '../core/use-cases/createWorkspace'
 import { createRunProtocolUseCase } from '../core/use-cases/runProtocol'
 
@@ -46,9 +44,10 @@ const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
 /** Where uploads go: `ember` (EMBER-DANDI) or `bucket` (the public bucket named by
  *  VITE_UPLOAD_BUCKET_URL). Change it here to switch. */
 export const UPLOAD_BACKEND = 'ember' as 'bucket' | 'ember'
-/** The OSB (Keycloak) user whose EMBER-DANDI key (user attribute `EMBER_API_KEY`) signs the copy
- *  into the protocol's MAABCD dandiset. */
+/** The OSB (Keycloak) user whose key (user attribute `DANDI_API_KEY`) signs the copy into the
+ *  protocol's MAABCD dandiset, and the DANDI deployment it goes to (dandi-cli's name). */
 const MAABCD_EMBER_USERNAME = 'maabcd-consortium'
+const MAABCD_DANDI_INSTANCE = 'ember-dandi'
 /** EMBER-DANDI's API origin: where the OAuth login goes, and what OSB downloads assets from. */
 const EMBER_ORIGIN = (import.meta.env.VITE_EMBER_ORIGIN ?? EMBER_API_ORIGIN_DEFAULT).replace(/\/+$/, '')
 /** Same-origin path for the browser's own EMBER calls (Vite proxy in dev, nginx deployed): EMBER's
@@ -66,7 +65,6 @@ export const authClient = new KeycloakAuthClient({
 const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
 // DANDI upload endpoints live in OSB's `workspaces` app (the admin key has to sit wherever
 // they run) — same API base as every other workspace call.
-const dandiApi     = new DandiApiClient(WORKSPACES_API)
 
 /** Signs the researcher in to EMBER-DANDI (OAuth in a popup, a full-page redirect if it is blocked);
  *  their token stays in the browser. */
@@ -86,7 +84,7 @@ const protocolDandisets = createProtocolDandisetsUseCases({
 
 /** Where uploads go before OSB imports them (UPLOAD_BACKEND): EMBER-DANDI, or the public bucket. */
 export const objectStore: IObjectStore = UPLOAD_BACKEND === 'ember'
-  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_ORIGIN)
+  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_DANDI_INSTANCE, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_ORIGIN)
   : new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────
@@ -100,10 +98,6 @@ export const createWorkspace = createCreateWorkspaceUseCase(authClient, workspac
 /** Uploads the researcher's file, imports it and the protocol's repository into the workspace
  * through OSB, and runs the notebooks in OSB's Argo task. */
 export const runProtocol = createRunProtocolUseCase(authClient, workspaceApi, objectStore)
-
-/** The earlier DANDI-backed upload; `finalize` also runs the selected protocol's script on OSB
- * (jupyter_kernel_client.py in OSBv2's workspaces app). */
-export const createAndUploadToDandi = createCreateAndUploadToDandiUseCase(authClient, dandiApi)
 
 /** The researcher's EMBER-DANDI dandisets for a protocol, each with the workspace it runs in when
  *  they still have it: what the upload dialog offers once a protocol is chosen. */

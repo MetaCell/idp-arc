@@ -111,9 +111,11 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
   }
 
   async publishDraft(token: string, dandisetId: string): Promise<void> {
+    // Newer DANDI releases require a body (it may carry release notes); EMBER ignores it.
     const res = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/versions/draft/publish/`, {
       method: 'POST',
-      headers: this.headers(token),
+      headers: this.headers(token, true),
+      body: '{}',
     })
     if (!res.ok) await this.fail(res, 'publish')
   }

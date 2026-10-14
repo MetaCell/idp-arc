@@ -7,13 +7,18 @@ import type {
 } from '../core/ports/IEmberUploadApi'
 
 /**
- * EmberUploadApiClient: OSB's `/ember/get_upload_urls` and `/ember/validate_upload`, on the same
+ * EmberUploadApiClient: OSB's `/dandi/get_upload_urls` and `/dandi/validate_upload`, on the same
  * workspaces API as every other OSB call, with the OSB (Keycloak) token. OSB answers in snake_case.
  *
- * `keyUsername`: the Keycloak user whose EMBER-DANDI key (attribute `EMBER_API_KEY`) OSB signs with.
+ * `instance`: the DANDI deployment, by its dandi-cli name (`ember-dandi`).
+ * `keyUsername`: the Keycloak user whose key (attribute `DANDI_API_KEY`) OSB signs with.
  */
 export class EmberUploadApiClient implements IEmberUploadApi {
-  constructor(private readonly baseApiUrl: string, private readonly keyUsername: string) {}
+  constructor(
+    private readonly baseApiUrl: string,
+    private readonly instance: string,
+    private readonly keyUsername: string,
+  ) {}
 
   private async post<T>(token: string, path: string, body: unknown, what: string): Promise<T> {
     const res = await fetch(`${this.baseApiUrl}${path}`, {
@@ -35,7 +40,8 @@ export class EmberUploadApiClient implements IEmberUploadApi {
       upload_id?: string | null
       parts?: { part_number: number; url: string }[]
       blob_id?: string | null
-    }>(token, '/ember/get_upload_urls', {
+    }>(token, '/dandi/get_upload_urls', {
+      instance: this.instance,
       username: this.keyUsername,
       dandiset_id: input.dandisetId,
       filename: input.filename,
@@ -53,7 +59,8 @@ export class EmberUploadApiClient implements IEmberUploadApi {
 
   async validateUpload(token: string, input: BrokeredValidateInput): Promise<BrokeredAsset> {
     const body = await this.post<{ asset_id: string; asset_path: string; download_url: string }>(
-      token, '/ember/validate_upload', {
+      token, '/dandi/validate_upload', {
+        instance: this.instance,
         username: this.keyUsername,
         dandiset_id: input.dandisetId,
         path: input.path,

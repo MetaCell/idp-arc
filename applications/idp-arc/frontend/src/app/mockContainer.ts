@@ -10,19 +10,16 @@
 
 import { MockAuthClient } from '../infra/mocks/mockAuthClient'
 import { MockWorkspaceApiClient } from '../infra/mocks/mockWorkspaceApiClient'
-import { MockDandiApiClient } from '../infra/mocks/mockDandiApiClient'
 import { MockObjectStore } from '../infra/mocks/mockObjectStore'
 import { createRunProtocolUseCase } from '../core/use-cases/runProtocol'
 import type { IObjectStore } from '../core/ports/IObjectStore'
 import { createLoadWorkspacesUseCase } from '../core/use-cases/loadWorkspaces'
-import { createCreateAndUploadToDandiUseCase } from '../core/use-cases/createAndUploadToDandi'
 
 // ─── Mock infrastructure singletons ──────────────────────────────────────────
 
 export const authClient = new MockAuthClient()
 
 const workspaceApi = new MockWorkspaceApiClient()
-const dandiApi     = new MockDandiApiClient()
 
 export const objectStore: IObjectStore = new MockObjectStore()
 
@@ -30,7 +27,6 @@ export const objectStore: IObjectStore = new MockObjectStore()
 
 export const loadWorkspaces = createLoadWorkspacesUseCase(authClient, workspaceApi)
 export const runProtocol = createRunProtocolUseCase(authClient, workspaceApi, objectStore)
-export const createAndUploadToDandi = createCreateAndUploadToDandiUseCase(authClient, dandiApi)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

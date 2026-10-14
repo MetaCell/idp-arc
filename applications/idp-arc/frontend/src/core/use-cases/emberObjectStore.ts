@@ -16,8 +16,8 @@ export { EMBER_SIGN_IN }
  *      copy OSB imports into their workspace; `recordWorkspace` then writes that workspace into
  *      the dandiset's metadata, so the next upload for the protocol finds both;
  *   2. into the protocol's MAABCD dandiset (protocols.json `maabcdDandisetId`), through OSB's
- *      `/ember` endpoints, which sign with the MAABCD account's key. Skipped when the protocol has
- *      none, or the researcher chose not to share.
+ *      `/dandi` endpoints (instance `ember-dandi`), which sign with the MAABCD account's key.
+ *      Skipped when the protocol has none, or the researcher chose not to share.
  *
  * The browser sends the bytes both times. The second transfer is usually empty: EMBER stores each
  * content once, and answers with the existing blob instead of parts.
