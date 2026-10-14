@@ -21,6 +21,10 @@ export interface IAuthClient {
   /** Logs the user out and clears the session. */
   logout(): void
 
+  /** Calls `listener` when the session turns out to be over (its token can no longer be had), so
+   *  the app stops showing the user as signed in. */
+  onSessionEnded(listener: () => void): void
+
   /** Parsed payload of the current token, or null when unauthenticated. */
   readonly tokenParsed: Record<string, unknown> | null
 }

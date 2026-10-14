@@ -1,8 +1,8 @@
 import type { IObjectStore, ObjectUploadInput, StoredObject } from '../core/ports/IObjectStore'
 
 /**
- * Scenario 1: PUTs straight from the browser to a bucket open for anonymous writes (`gs://maabcd`,
- * `https://storage.googleapis.com/maabcd`). No Authorization header; the object is readable at the
+ * PUTs straight from the browser to a bucket open for anonymous writes (VITE_UPLOAD_BUCKET_URL).
+ * No Authorization header; the object is readable at the
  * same URL afterwards, which is what OSB's import fetches. The bucket's CORS must allow PUT from
  * MAABCD's origin.
  *
@@ -14,7 +14,7 @@ import type { IObjectStore, ObjectUploadInput, StoredObject } from '../core/port
 export class PublicBucketObjectStore implements IObjectStore {
   private readonly baseUrl: string
 
-  /** `baseUrl`: e.g. `https://storage.googleapis.com/maabcd` (VITE_UPLOAD_BUCKET_URL). */
+  /** `baseUrl`: the bucket's public URL (VITE_UPLOAD_BUCKET_URL). */
   constructor(baseUrl: string | undefined) {
     this.baseUrl = (baseUrl ?? '').replace(/\/+$/, '')
   }
