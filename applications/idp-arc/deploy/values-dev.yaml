@@ -1,5 +1,5 @@
 harness:
-  subdomain: idp-arc
+  subdomain: www
   secured: false
 
   service:

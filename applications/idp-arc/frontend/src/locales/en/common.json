@@ -1,0 +1,48 @@
+{
+    "app": {
+    "title": "MAABCD"
+  },
+  "auth": {
+    "initialising": "Initialising authentication…",
+    "notLoggedIn": "You are not logged in.",
+    "signIn": "Sign in with OSB",
+    "signOut": "Sign out",
+    "signedInAs": "Signed in as"
+  },
+  "errors": {
+    "authFailed": "Failed to initialise authentication. See console for details.",
+    "workspacesLoad": "Error: {{message}}"
+  },
+  "workspaces": {
+    "title": "OSB Workspaces",
+    "loading": "Loading workspaces…",
+    "empty": "No workspaces found.",
+    "newButton": "+ New workspace",
+    "table": {
+      "id": "ID",
+      "name": "Name",
+      "description": "Description",
+      "created": "Created",
+      "noDescription": "—",
+      "noDate": "—"
+    }
+  },
+  "modal": {
+    "title": "New workspace",
+    "workspaceNameLabel": "Workspace name",
+    "workspaceNamePlaceholder": "My new workspace",
+    "cancel": "Cancel",
+    "create": "Create",
+    "creationFailed": "Failed to create workspace: {{message}}"
+  },
+    "collaborators": {
+    "sectionTitle": "Collaborators",
+    "body": "ARC Platform is built by Adversity and Resilience Consortium, a consortium consisting of 4 different institutions.",
+    "items": [
+      { "alt": "UC Berkeley", "src": "/UCBerkeley.png" },
+      { "alt": "Emory University", "src": "/Emory.png" },
+      { "alt": "UC Santa Cruz", "src": "/UCSantaCruz.png" },
+      { "alt": "UCL", "src": "/UCL.png" }
+    ]
+  }
+}

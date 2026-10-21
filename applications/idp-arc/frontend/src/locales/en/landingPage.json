@@ -1,0 +1,64 @@
+{
+  "banner": {
+    "title": "Modeling Adolescent Adversity Brain and Cognitive Development Platform (MAABCD)",
+    "ctaProtocols": "Protocols",
+    "ctaDataUpload": "Data upload"
+  },
+  "features": [
+    {
+      "title": "Download protocols and templates",
+      "desc": "Download the standardized protocol and analysis code required to perform experiments according to MAABCD standards. These protocols considered not only likelihood of success, but also ethological relevance, and ease of access to both low and high budget research labs.",
+      "cta": "Protocols",
+      "ctaPath": "/protocols"
+    },
+    {
+      "title": "Upload data in EMBER-DANDI",
+      "desc": "Share your experimental results with the research community. Sign in to upload dandisets to the Ember-Dandi platform.",
+      "cta": "Data upload",
+      "ctaPath": "/workspaces"
+    },
+    {
+      "title": "Use your data in Open Source Brain",
+      "desc": "Explore and analyze community data and your uploaded data with our integration with Open Source Brain (OSB). OSB lets you use interactive visualizations and powerful analysis tools with Jupyterlab, NetPyNE and NWB Explorer.",
+      "cta": "Go to Open Source Brain",
+      "ctaPath": "https://www.opensourcebrain.org/"
+    }
+  ],
+  "protocols": {
+    "sectionTitle": "Protocols",
+    "downloadZip": "Download .zip",
+    "items": [
+      { "name": "Four-Choice Reversal Digging Task", "desc": "Measures odor discrimination and reversal learning." },
+      { "name": "Attentional Set Shifting Task (ASST)", "desc": "Measures attentional set formation and shifting, and cognitive flexibility." },
+      { "name": "Two-Armed Bandit Task (2ABT)", "desc": "Measures reward-guided choice and flexibility." }
+    ]
+  },
+  "about": {
+    "sectionTitle": "About MAABCD Platform",
+    "body1": "Welcome to our site. MAABCD stands for Model Adolescent Adversity Brain and Cognitive Development. Many researchers are working hard to learn more and more about how experience of adversity can alter brain and behavioral development. One challenge of this work comes from the fact that it is hard to compare data between studies. This prevents us from learning which experiences have common or separable effects. Null results may also not often reach publication and can be lost to the community. To gain a more complete picture of the impacts of adversity, we sought to build a tool that could help our research community harmonize data collection across sites so that we can begin to compare the effects of different treatments on behavioral outcomes. We were inspired by the goals of the human ABCD projects to study adolescent development and the success of the International Brain lab, which harmonized a behavioral data collection from mice across 7 global sites.",
+    "body2": "In the long term we are interested in understanding a) if there are different dimensions of adversity which have separable effects on brain and behavior and b) if there are sensitive periods for exposure. We hope to disseminate these protocols so many labs can similarly harmonize their data collection enabling comparisons of a wide variety of treatments on the same behavioral outcome metrics. Our project is supported by the BBQS R34.",
+    "learnMore": "Learn more"
+  },
+  "nav": {
+    "logoTitle": "MAABCD Platform",
+    "protocols": "Protocols",
+    "about": "About",
+    "myWorkspaces": "My workspaces",
+    "login": "Login",
+    "logout": "Logout",
+    "dataUpload": "Data upload",
+    "loggedInAs": "OSB logged in as",
+    "signingIn": "Signing in",
+    "completeSignIn": "Complete sign in in the popup window.",
+    "cancel": "Cancel"
+  },
+  "footer": {
+    "copyright": "Copyright © 2026 MAABCD Platform by MetaCell",
+    "links": {
+      "legal": "Legal",
+      "docs": "Docs",
+      "about": "About",
+      "contact": "Contact"
+    }
+  }
+}

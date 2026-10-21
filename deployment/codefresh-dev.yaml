@@ -142,6 +142,7 @@ steps:
         build_arguments:
         - NOCACHE=${{CF_BUILD_ID}}
         - CLOUDHARNESS_FRONTEND_BUILD=${{REGISTRY}}/cloud-harness/cloudharness-frontend-build:${{CLOUDHARNESS_FRONTEND_BUILD_TAG}}
+        - VITE_UPLOAD_BUCKET_URL=${{VITE_UPLOAD_BUCKET_URL}}
         image_name: cloud-harness/idp-arc
         title: Idp arc
         working_directory: ./applications/idp-arc

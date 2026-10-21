@@ -1,0 +1,39 @@
+name: UI Tests (Playwright)
+
+on:
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'yarn'
+        cache-dependency-path: applications/idp-arc/frontend/yarn.lock
+
+    - name: Install dependencies
+      working-directory: applications/idp-arc/frontend
+      run: yarn install --frozen-lockfile
+
+    - name: Install Playwright browsers
+      working-directory: applications/idp-arc/frontend
+      run: npx playwright install --with-deps chromium
+
+    - name: Run Playwright tests
+      working-directory: applications/idp-arc/frontend
+      run: yarn test:e2e
+
+    - name: Upload Playwright report
+      uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report
+        path: applications/idp-arc/frontend/playwright-report/
+        retention-days: 14

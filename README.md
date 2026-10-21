@@ -64,6 +64,16 @@ Preview production build locally:
 yarn preview
 ```
 
+Unit tests (no browser, no backend):
+
+```bash
+yarn test:unit
+```
+
+Uploads (Scenario 1 of the MAABCD–OSB integration) go from the browser straight to a public bucket
+open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL` (e.g. `https://storage.googleapis.com/maabcd`),
+as `uploads/<protocolId>/<userSub>/<uploadId>/<filename>`. The bucket's CORS must allow PUT from this app's origin.
+
 ---
 
 ## Docker (Local Build + Run)
