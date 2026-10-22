@@ -71,3 +71,26 @@ test('publishing sends a JSON body, which newer DANDI releases require', async (
   assert.equal(requests[0].headers['Content-Type'], 'application/json')
   assert.deepEqual(requests[0].body, {})
 })
+
+test('publish readiness separates files EMBER is still checking from real problems', async () => {
+  const requests = recordFetch(() => ({
+    json: {
+      status: 'Valid',
+      version_validation_errors: [{ field: 'assetsSummary', message: 'A Dandiset containing no files or zero bytes is not publishable' }],
+      asset_validation_errors: [
+        { field: '', message: 'asset is currently being validated, please wait.', path: 'p/u/a.xlsx' },
+        { field: 'contentSize', message: 'is required', path: 'p/u/b.xlsx' },
+      ],
+    },
+  }))
+  const ember = new EmberDandiDirectClient('/ember-proxy')
+
+  const readiness = await ember.getPublishReadiness('ember-token', '000777')
+
+  assert.equal(requests[0].url, '/ember-proxy/api/dandisets/000777/versions/draft/info/')
+  assert.deepEqual(readiness, {
+    status: 'Valid',
+    errors: ['assetsSummary: A Dandiset containing no files or zero bytes is not publishable', 'p/u/b.xlsx: is required'],
+    filesBeingChecked: 1,
+  })
+})

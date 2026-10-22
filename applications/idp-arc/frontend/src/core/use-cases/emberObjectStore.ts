@@ -90,22 +90,29 @@ export function createEmberObjectStore(
         save({ own: { assetId: asset.assetId, assetPath: asset.assetPath } })
       }
 
-      // 2. The MAABCD copy, through OSB.
+      // 2. The MAABCD copy, through OSB. It doesn't hold up the researcher's run: a failure here
+      // (OSB's key or configuration, EMBER) is ours to fix, so it is logged and the run goes on.
       if (needsMaabcd) {
-        const osbToken = await osbAuth.getToken()
-        const brokered = await osb.getUploadUrls(osbToken, {
-          dandisetId: maabcdAggregateDandisetId, filename: file.name, size: file.size, dandiEtag: etag,
-        })
-        const brokeredParts = await putParts(brokered.parts, plan, file, progress)
-        if (!brokered.parts.length) skipTransfer(); else done += file.size
-        await osb.validateUpload(osbToken, {
-          dandisetId: brokered.dandisetId,
-          path: brokered.path,
-          uploadId: brokered.uploadId,
-          parts: brokered.blobId ? undefined : brokeredParts,
-          blobId: brokered.blobId,
-        })
-        save({ maabcdDone: true })
+        try {
+          const osbToken = await osbAuth.getToken()
+          const brokered = await osb.getUploadUrls(osbToken, {
+            dandisetId: maabcdAggregateDandisetId, filename: file.name, size: file.size, dandiEtag: etag,
+          })
+          const brokeredParts = await putParts(brokered.parts, plan, file, progress)
+          if (!brokered.parts.length) skipTransfer(); else done += file.size
+          await osb.validateUpload(osbToken, {
+            dandisetId: brokered.dandisetId,
+            path: brokered.path,
+            uploadId: brokered.uploadId,
+            parts: brokered.blobId ? undefined : brokeredParts,
+            blobId: brokered.blobId,
+          })
+          save({ maabcdDone: true })
+        } catch (err) {
+          // TODO: report to Sentry once the frontend has it, so a failed copy is noticed.
+          console.error(`Not shared with MAABCD dandiset ${maabcdAggregateDandisetId}`, err)
+          skipTransfer()
+        }
       }
       progress(0)
 

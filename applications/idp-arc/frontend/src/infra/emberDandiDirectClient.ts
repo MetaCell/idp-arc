@@ -109,9 +109,13 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
       version_validation_errors?: Problem[]
       asset_validation_errors?: Problem[]
     }
-    const errors = [...(body.version_validation_errors ?? []), ...(body.asset_validation_errors ?? [])]
+    // EMBER lists files it hasn't checked yet among the file errors, with this message
+    // (dandi-archive, Version.asset_validation_errors).
+    const beingChecked = (e: Problem) => /currently being validated/i.test(e.message)
+    const assetProblems = body.asset_validation_errors ?? []
+    const errors = [...(body.version_validation_errors ?? []), ...assetProblems.filter((e) => !beingChecked(e))]
       .map((e) => [e.path || e.field, e.message].filter(Boolean).join(': '))
-    return { status: body.status, errors }
+    return { status: body.status, errors, filesBeingChecked: assetProblems.filter(beingChecked).length }
   }
 
   async publishDraft(token: string, dandisetId: string): Promise<void> {

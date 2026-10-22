@@ -18,7 +18,7 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
     async createDandiset() { throw new Error('created through the protocol use case') },
     async getDraftMetadata() { return {} },
     async updateDraftMetadata() {},
-    async getPublishReadiness() { return { status: 'Valid', errors: [] } },
+    async getPublishReadiness() { return { status: 'Valid', errors: [], filesBeingChecked: 0 } },
     async publishDraft() {},
     async getLatestPublished() { return null },
     async initUpload(token, dandisetId) {
@@ -104,13 +104,15 @@ test('deduplicated content moves no bytes and registers against the existing blo
   assert.ok(calls.includes('osb-validate:000533:blob-1'))
 })
 
-test('a part list that does not cover the file is refused before anything is uploaded', async () => {
+test('a part list that does not cover the file is refused before any of it is uploaded', async () => {
   const { calls, store } = fakes({ shortParts: true })
-  await assert.rejects(
-    store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' } }),
-    /2 part URLs for a file of 1 parts/,
-  )
+  const checkpoints: Record<string, unknown>[] = []
+  await store().put({
+    file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' },
+    onCheckpoint: (c) => checkpoints.push(c as Record<string, unknown>),
+  })
   assert.ok(!calls.includes('put:https://s3/a'))
+  assert.ok(!checkpoints.at(-1)?.maabcdDone, 'the MAABCD copy is not counted as made')
 })
 
 test('without an EMBER-DANDI sign-in nothing starts and the user is asked to sign in', async () => {
@@ -124,14 +126,16 @@ test('without an EMBER-DANDI sign-in nothing starts and the user is asked to sig
 
 // ── Retry: carrying on from the checkpoint ───────────────────────────────────────────────────
 
-test('a retry after the MAABCD copy failed makes only that copy', async () => {
+test('a failed MAABCD copy lets the run go on, and a later retry makes only that copy', async () => {
   const { calls, store } = fakes({ failOsbOnce: true })
   const checkpoints: unknown[] = []
   const input = {
     file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' },
     onCheckpoint: (c: unknown) => checkpoints.push(c),
   }
-  await assert.rejects(store().put(input), /HTTP 503/)
+  // The failed copy doesn't stop the upload: the researcher's copy is returned for the run.
+  const first = await store().put(input)
+  assert.equal(first.url, `${ORIGIN}/api/assets/asset-1/download/`)
   const resume = checkpoints.at(-1) as Record<string, unknown>
   assert.deepEqual(resume, { userDandisetId: '000123', own: { assetId: 'asset-1', assetPath: (resume.own as { assetPath: string }).assetPath } })
   calls.length = 0

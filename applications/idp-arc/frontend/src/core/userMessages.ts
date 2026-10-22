@@ -28,6 +28,9 @@ const STEP_FAILED: Record<RunStepId, string> = {
  *  which sends the user to the OSB (Keycloak) login instead. */
 export const EMBER_SIGN_IN = 'Please sign in with EMBER-DANDI and try again.'
 
+/** EMBER refuses to publish the dandiset as it is (its metadata or a file); EMBER's editor says what to fix. */
+export const DANDISET_NOT_PUBLISHABLE = "This dandiset can't be published yet. Check on EMBER-DANDI on specific errors."
+
 /** Says the session has ended; the dialog sends the user to sign in when the text contains it. */
 export const SIGN_IN_AGAIN = 'sign in again'
 

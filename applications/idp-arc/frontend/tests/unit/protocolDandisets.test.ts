@@ -7,6 +7,7 @@ import {
 } from '../../src/core/dandisetLinks'
 import { createProtocolDandisetsUseCases, DANDISET_LICENSE } from '../../src/core/use-cases/protocolDandisets'
 import { RUN_SETTINGS } from '../../src/core/runSettings'
+import { DANDISET_NOT_PUBLISHABLE, UserFacingError } from '../../src/core/userMessages'
 import type { IDandiDirectApi } from '../../src/core/ports/IDandiDirectApi'
 
 const DEV = 'v2dev.opensourcebrain.org'
@@ -41,7 +42,7 @@ test('a workspace link only counts in its own OSB environment', () => {
 /** `statuses`: what each draft-status read returns, in turn (the last one repeats). `versions`:
  *  what each latest-version read returns, in turn. */
 function fakeEmber(metadata: Record<string, DandisetMetadata>, publishing: {
-  statuses?: { status: string; errors?: string[] }[]
+  statuses?: { status: string; errors?: string[]; filesBeingChecked?: number }[]
   versions?: ({ version: string; doi?: string; url?: string } | null)[]
 } = {}) {
   const calls: string[] = []
@@ -58,7 +59,7 @@ function fakeEmber(metadata: Record<string, DandisetMetadata>, publishing: {
       const all = publishing.statuses ?? [{ status: 'Valid' }]
       const s = all[Math.min(statusReads++, all.length - 1)]
       calls.push(`status:${s.status}`)
-      return { status: s.status, errors: s.errors ?? [] }
+      return { status: s.status, errors: s.errors ?? [], filesBeingChecked: s.filesBeingChecked ?? 0 }
     },
     async publishDraft(_t, id) { calls.push(`publish:${id}`) },
     async getLatestPublished() {
@@ -147,11 +148,50 @@ test('a dandiset without a license gets one before publishing', async () => {
   assert.deepEqual(writes, [{ id: '000777', metadata: { name: 'Mine', license: DANDISET_LICENSE } }])
 })
 
-test('an invalid draft is not published, and says why', async () => {
+test('an invalid draft is not published; EMBER\'s reason goes to the console', async () => {
   fastPolls()
-  const { uc, calls } = fakeEmber({ '000777': { license: ['x'] } }, { statuses: [{ status: 'Invalid', errors: ["contributor: is required"] }] })
-  await assert.rejects(uc.publish('000777'), /could not be published: contributor: is required/)
+  const { uc, calls } = fakeEmber({ '000777': { license: ['x'] } }, {
+    statuses: [{ status: 'Invalid', errors: ['assetsSummary: A Dandiset containing no files or zero bytes is not publishable'] }],
+  })
+  await assert.rejects(uc.publish('000777'), (err: Error) => {
+    assert.ok(err instanceof UserFacingError)
+    assert.equal(err.message, DANDISET_NOT_PUBLISHABLE)
+    assert.match((err as UserFacingError).details ?? '', /assetsSummary: A Dandiset containing no files/)
+    return true
+  })
   assert.ok(!calls.some((c) => c.startsWith('publish:')))
+})
+
+test('a valid draft waits until EMBER has checked every file', async () => {
+  fastPolls()
+  const { uc, calls } = fakeEmber({ '000777': { license: ['x'] } }, {
+    statuses: [{ status: 'Valid', filesBeingChecked: 2 }, { status: 'Valid', filesBeingChecked: 1 }, { status: 'Valid' }],
+    versions: [null, { version: '0.261010.1200', doi: 'd' }],
+  })
+  await uc.publish('000777')
+  assert.deepEqual(calls, ['status:Valid', 'status:Valid', 'status:Valid', 'publish:000777'])
+})
+
+test('a valid draft with an invalid file is not published; the console names the file', async () => {
+  fastPolls()
+  const { uc, calls } = fakeEmber({ '000777': { license: ['x'] } }, {
+    statuses: [{ status: 'Valid', errors: ['protocol/u/f.xlsx: contentSize: is required'] }],
+  })
+  await assert.rejects(uc.publish('000777'), (err: Error) =>
+    err instanceof UserFacingError && err.message === DANDISET_NOT_PUBLISHABLE && /protocol\/u\/f\.xlsx: contentSize/.test(err.details ?? ''))
+  assert.ok(!calls.some((c) => c.startsWith('publish:')))
+})
+
+test('a check that never finishes says so, so the user can try later', async () => {
+  fastPolls()
+  const timeout = RUN_SETTINGS.publishDraftValidationTimeoutMs
+  RUN_SETTINGS.publishDraftValidationTimeoutMs = 20
+  try {
+    const { uc } = fakeEmber({ '000777': { license: ['x'] } }, { statuses: [{ status: 'Validating' }] })
+    await assert.rejects(uc.publish('000777'), (err: Error) => err instanceof UserFacingError && /still checking your dandiset/.test(err.message))
+  } finally {
+    RUN_SETTINGS.publishDraftValidationTimeoutMs = timeout
+  }
 })
 
 test('a draft unchanged since its last version returns that version instead of publishing again', async () => {

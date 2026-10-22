@@ -100,6 +100,8 @@ const STEPS = [
 
 /** Not part of the run: the dialog adds it once the researcher publishes the dandiset. */
 export const PUBLISH_STEP = { id: RUN_STEP.doi, label: 'Publish your dandiset' }
+/** PUBLISH_STEP's label while it runs. */
+export const PUBLISHING_LABEL = 'Publishing your dandiset'
 
 /**
  * Runs a protocol on the researcher's data. Before anything moves, the protocol and the file are

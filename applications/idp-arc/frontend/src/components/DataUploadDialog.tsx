@@ -22,14 +22,14 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
 import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
-import { EMBER_SIGN_IN, userMessage } from '../core/userMessages'
+import { EMBER_SIGN_IN, UserFacingError, userMessage } from '../core/userMessages'
 import { useAppContext } from '../AppContext'
 import { RUN_STEP, type RunCheckpoint, type RunStep } from '../core/types'
 import RunChecklist from './RunChecklist'
 import { createSessionStore, useSessionStore } from './sessionStore'
 import DoiField from './DoiField'
 import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
-import { canResume, PUBLISH_STEP } from '../core/use-cases/runProtocol'
+import { canResume, PUBLISH_STEP, PUBLISHING_LABEL } from '../core/use-cases/runProtocol'
 import { formatBytes } from '../core/formatBytes'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
@@ -62,6 +62,8 @@ step: DialogStep
   doi?: { doi: string }
   /** That publish is under way, or failed (it can be retried). */
   publishing?: 'running' | 'failed'
+  /** Why the publish failed, for the user. */
+  publishError?: string
   /** The run's checklist (upload, imports, run), as last reported by the use-case. */
   runSteps: RunStep[]
   /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
@@ -100,7 +102,7 @@ let currentWatch: { current: boolean } | null = null
 export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
   const [form] = useSessionStore(session)
-  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi, publishing, checkpoint } = form
+  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi, publishing, publishError, checkpoint } = form
   // EMBER-DANDI: the upload goes to the researcher's own account. Choosing a protocol lists their
   // dandisets for it, each with the workspace it runs in, so choosing one chooses both.
   const usesEmber = UPLOAD_BACKEND === 'ember'
@@ -141,8 +143,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const finished = step === 'success' || step === 'stillRunning'
   // Publishing joins the run's checklist once the researcher starts it.
   const publishStep: RunStep | null =
-    publishing === 'running' ? { ...PUBLISH_STEP, state: 'running' }
-      : publishing === 'failed' ? { ...PUBLISH_STEP, state: 'failed', detail: userMessage(undefined, RUN_STEP.doi) }
+    publishing === 'running' ? { ...PUBLISH_STEP, label: PUBLISHING_LABEL, state: 'running' }
+      : publishing === 'failed' ? { ...PUBLISH_STEP, state: 'failed', detail: publishError ?? userMessage(undefined, RUN_STEP.doi) }
         : doi ? { ...PUBLISH_STEP, state: 'succeeded' }
           : null
   const checklist = publishStep ? [...runSteps, publishStep] : runSteps
@@ -260,13 +262,13 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   /** "Publish dandiset": the researcher's dandiset as a new, permanent version. Optional. */
   const publish = async () => {
     if (!dandisetId) return
-    setForm((prev) => ({ ...prev, publishing: 'running' }))
+    setForm((prev) => ({ ...prev, publishing: 'running', publishError: undefined }))
     try {
       const published = await publishDandiset(dandisetId)
       setForm((prev) => ({ ...prev, publishing: published ? undefined : 'failed', doi: published ?? prev.doi }))
     } catch (err) {
-      console.error('Publishing the dandiset failed', err)
-      setForm((prev) => ({ ...prev, publishing: 'failed' }))
+      console.error('Publishing the dandiset failed', err instanceof UserFacingError && err.details ? err.details : err)
+      setForm((prev) => ({ ...prev, publishing: 'failed', publishError: userMessage(err, RUN_STEP.doi) }))
     }
   }
 

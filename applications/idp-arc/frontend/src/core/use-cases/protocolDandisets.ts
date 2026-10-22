@@ -2,7 +2,7 @@ import { VERSION_STATUS, type IDandiDirectApi, type PublishedVersion } from '../
 import type { IEmberAuth } from '../ports/IEmberAuth'
 import { readProtocolLink, readWorkspaceLink, withProtocolLink, withWorkspaceLink, type DandisetMetadata } from '../dandisetLinks'
 import { RUN_SETTINGS } from '../runSettings'
-import { EMBER_SIGN_IN, UserFacingError } from '../userMessages'
+import { DANDISET_NOT_PUBLISHABLE, EMBER_SIGN_IN, UserFacingError } from '../userMessages'
 import { pollUntil } from './runProgress'
 
 /** The license of the dandisets IDP creates. EMBER publishes no dandiset without one. */
@@ -112,17 +112,31 @@ export function createProtocolDandisetsUseCases(deps: {
     if (!metadata.license) await direct.updateDraftMetadata(t, dandisetId, { ...metadata, license: DANDISET_LICENSE })
   }
 
-  /** Waits for EMBER to finish checking the draft; its status, or null if `stopped`. */
+  /**
+   * Waits for EMBER to finish checking the draft and every file in it; the draft's status, or null
+   * if `stopped`. Stops at once, with EMBER's reasons for the user, when it can't be published.
+   */
   async function waitUntilPublishable(t: string, dandisetId: string, stopped: () => boolean): Promise<string | null> {
     let status = ''
     const ended = await pollUntil(async () => {
       const readiness = await direct.getPublishReadiness(t, dandisetId)
-      if (readiness.status === VERSION_STATUS.invalid) throw new PublishError(dandisetId, readiness.errors.join('; '))
       status = readiness.status
-      return PUBLISHABLE.includes(status)
+      // Invalid, or Valid with an invalid file: EMBER would refuse the publish.
+      if (status === VERSION_STATUS.invalid || (status === VERSION_STATUS.valid && readiness.errors.length)) {
+        throw notPublishable(readiness.errors)
+      }
+      return PUBLISHABLE.includes(status) && readiness.filesBeingChecked === 0
     }, { everyMs: RUN_SETTINGS.publishStatusPollMs, timeoutMs: RUN_SETTINGS.publishDraftValidationTimeoutMs, stopped })
-    if (ended === 'timeout') throw new PublishError(dandisetId, `EMBER is still checking it (${status})`)
+    if (ended === 'timeout') {
+      throw new UserFacingError('EMBER-DANDI is still checking your dandiset. Please try again in a few minutes.',
+        `Dandiset ${dandisetId}: still ${status} after the wait`)
+    }
     return ended === 'done' ? status : null
+  }
+
+  /** The user is told it can't be published; EMBER's reasons go to the console (its editor shows them too). */
+  function notPublishable(errors: string[]): UserFacingError {
+    return new UserFacingError(DANDISET_NOT_PUBLISHABLE, errors.join('\n'))
   }
 
   /** Publishes the draft, then waits for the new version and its DOI. */

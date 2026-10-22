@@ -72,8 +72,10 @@ export const VERSION_STATUS = {
 export interface PublishReadiness {
   /** The draft's VERSION_STATUS, or a status EMBER reports while it is still checking. */
   status: string
-  /** Why it can't be published, one line per problem; empty unless `Invalid`. */
+  /** Why it can't be published, one line per problem: the dandiset's metadata, or a file's. */
   errors: string[]
+  /** Files EMBER hasn't checked yet. Publishing needs every file checked, even on a `Valid` draft. */
+  filesBeingChecked: number
 }
 
 /** A published (frozen) version of a dandiset. */
