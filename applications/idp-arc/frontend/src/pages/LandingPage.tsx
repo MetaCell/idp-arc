@@ -34,7 +34,7 @@ export default function LandingPage() {
       <Button variant="outlined" onClick={() => navigate('/protocols')}>
         {t('banner.ctaProtocols')}
       </Button>
-      <Button variant="contained" endIcon={<ArrowIcon />} onClick={openUpload}>
+      <Button variant="contained" endIcon={<ArrowIcon />} onClick={() => openUpload()}>
         {t('banner.ctaDataUpload')}
       </Button>
     </Stack>

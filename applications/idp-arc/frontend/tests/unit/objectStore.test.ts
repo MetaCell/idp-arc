@@ -1,4 +1,4 @@
-// The Scenario 1 object store (infra/publicBucketObjectStore.ts). Run: yarn test:unit
+// The public-bucket object store (infra/publicBucketObjectStore.ts). Run: yarn test:unit
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { objectKey } from '../../src/infra/publicBucketObjectStore'

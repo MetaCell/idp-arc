@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import PageLayout from '../components/PageLayout'
+import { openUpload } from '../components/UploadContext'
 import protocols from '../data/protocols.json'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 
@@ -126,6 +127,7 @@ export default function ProtocolsPage() {
                 <Button
                   variant="contained"
                   endIcon={<ArrowIcon />}
+                  onClick={() => openUpload(active.name)}
                 >
                   Data upload
                 </Button>

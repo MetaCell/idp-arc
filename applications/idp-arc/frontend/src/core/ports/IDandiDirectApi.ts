@@ -1,0 +1,125 @@
+import type { DandisetMetadata } from '../dandisetLinks'
+
+/**
+ * IDandiDirectApi: EMBER-DANDI operations performed straight from the browser, authenticated with
+ * the researcher's own OAuth token (IEmberAuth). Used for the researcher's own copy of an upload;
+ * the MAABCD copy goes through OSB instead (IEmberUploadApi), since only OSB holds that key.
+ */
+
+/** One part of a multipart upload, as EMBER hands it back from `initialize`. */
+export interface DirectUploadPart {
+  partNumber: number
+  size: number
+  url: string
+}
+
+export interface DirectInitResult {
+  /** Absent when EMBER already holds this content: nothing to upload. */
+  uploadId?: string
+  /** Empty when deduplicated; the caller then skips S3 entirely. */
+  parts: DirectUploadPart[]
+  /** Set only on the deduplicated path: the existing blob to attach an asset to. */
+  blobId?: string
+}
+
+export interface DirectUploadedPart {
+  partNumber: number
+  size: number
+  etag: string
+}
+
+export interface DirectFinalizeInput {
+  /** Absent on the deduplicated path: there is no upload session to complete. */
+  uploadId?: string
+  dandisetId: string
+  path: string
+  parts: DirectUploadedPart[]
+  blobId?: string
+}
+
+/** An asset as registered in a dandiset's draft. */
+export interface RegisteredAsset {
+  assetPath: string
+  assetId: string
+}
+
+/** A dandiset the connected EMBER account owns, as listed for the upload dialog's picker. */
+export interface OwnDandiset {
+  id: string
+  name: string
+}
+
+/**
+ * DANDI's status of a dandiset version (its `status` field), as read for the draft before
+ * publishing. Only the values IDP acts on; while EMBER is still checking the draft it reports
+ * others (`Pending`, `Validating`), and `Publishing` while a publish is under way.
+ * A version status, not a draft status: in DANDI the draft is itself a version (`"draft"`), and
+ * its status can be `Published` (identical to the last published version).
+ */
+export const VERSION_STATUS = {
+  /** EMBER has checked the draft and it can be published. */
+  valid: 'Valid',
+  /** It can't be published; `errors` says why. */
+  invalid: 'Invalid',
+  /** Nothing changed since the last published version: nothing new to publish. */
+  published: 'Published',
+} as const
+
+/**
+ * Whether the draft can be published yet. EMBER re-checks the draft in the background after every
+ * change (an upload, a metadata edit) and accepts a publish only once it is `Valid`.
+ */
+export interface PublishReadiness {
+  /** The draft's VERSION_STATUS, or a status EMBER reports while it is still checking. */
+  status: string
+  /** Why it can't be published, one line per problem: the dandiset's metadata, or a file's. */
+  errors: string[]
+  /** Files EMBER hasn't checked yet. Publishing needs every file checked, even on a `Valid` draft. */
+  filesBeingChecked: number
+}
+
+/** A published (frozen) version of a dandiset. */
+export interface PublishedVersion {
+  version: string
+  /** Its DOI, e.g. `10.60533/ember-dandi.000542/0.260924.1156`. */
+  doi?: string
+  /** Its page on EMBER-DANDI. */
+  url?: string
+}
+
+export interface IDandiDirectApi {
+  /** `GET /dandisets/?user=me`: every dandiset this account owns, empty ones included. */
+  listOwnDandisets(token: string): Promise<OwnDandiset[]>
+
+  /** `POST /dandisets/`: creates a public dandiset and returns its identifier. `metadata` is
+   *  merged into the default (a description). */
+  createDandiset(token: string, name: string, metadata?: DandisetMetadata): Promise<string>
+
+  /** `GET /dandisets/{id}/versions/draft/`: the full draft metadata. */
+  getDraftMetadata(token: string, dandisetId: string): Promise<DandisetMetadata>
+
+  /** `PUT /dandisets/{id}/versions/draft/`: replaces the draft metadata. Only the draft is
+   *  writable; a published version is a frozen snapshot of it. */
+  updateDraftMetadata(token: string, dandisetId: string, metadata: DandisetMetadata): Promise<void>
+
+  /** `GET /dandisets/{id}/versions/draft/info/`: whether the draft can be published yet. */
+  getPublishReadiness(token: string, dandisetId: string): Promise<PublishReadiness>
+
+  /** `POST /dandisets/{id}/versions/draft/publish/`: starts publishing the draft as a new
+   *  version. EMBER finishes it in the background. */
+  publishDraft(token: string, dandisetId: string): Promise<void>
+
+  /** The most recent published version, with its DOI; null when there is none yet. */
+  getLatestPublished(token: string, dandisetId: string): Promise<PublishedVersion | null>
+
+  /** `POST /uploads/initialize/`. A 409 (content already present) comes back as
+   *  `{ parts: [], blobId }` rather than an error. */
+  initUpload(token: string, dandisetId: string, size: number, dandiEtag: string): Promise<DirectInitResult>
+
+  /** PUTs one part straight to S3 via its presigned URL, returning S3's ETag for that part.
+   *  Presigned URLs carry no EMBER credential, so this also serves the uploads OSB signs. */
+  putPart(url: string, blob: Blob): Promise<string>
+
+  /** complete → validate → register the asset, all direct to EMBER. */
+  finalizeUpload(token: string, input: DirectFinalizeInput): Promise<RegisteredAsset>
+}
