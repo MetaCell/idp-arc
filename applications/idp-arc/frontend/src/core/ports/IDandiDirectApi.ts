@@ -49,19 +49,30 @@ export interface OwnDandiset {
   name: string
 }
 
-/** The draft statuses IDP acts on. EMBER reports others (`Pending`, `Validating`) while it checks. */
-export const DRAFT_STATUS = {
+/**
+ * DANDI's status of a dandiset version (its `status` field), as read for the draft before
+ * publishing. Only the values IDP acts on; while EMBER is still checking the draft it reports
+ * others (`Pending`, `Validating`), and `Publishing` while a publish is under way.
+ * A version status, not a draft status: in DANDI the draft is itself a version (`"draft"`), and
+ * its status can be `Published` (identical to the last published version).
+ */
+export const VERSION_STATUS = {
+  /** EMBER has checked the draft and it can be published. */
   valid: 'Valid',
+  /** It can't be published; `errors` says why. */
   invalid: 'Invalid',
-  /** Nothing changed since the last published version. */
+  /** Nothing changed since the last published version: nothing new to publish. */
   published: 'Published',
 } as const
 
-/** A draft's validation, as EMBER reports it after every change. */
-export interface DraftStatus {
-  /** One of DRAFT_STATUS once EMBER has checked it. */
+/**
+ * Whether the draft can be published yet. EMBER re-checks the draft in the background after every
+ * change (an upload, a metadata edit) and accepts a publish only once it is `Valid`.
+ */
+export interface PublishReadiness {
+  /** The draft's VERSION_STATUS, or a status EMBER reports while it is still checking. */
   status: string
-  /** Why it is invalid, one line per problem. */
+  /** Why it can't be published, one line per problem; empty unless `Invalid`. */
   errors: string[]
 }
 
@@ -89,8 +100,8 @@ export interface IDandiDirectApi {
    *  writable; a published version is a frozen snapshot of it. */
   updateDraftMetadata(token: string, dandisetId: string, metadata: DandisetMetadata): Promise<void>
 
-  /** `GET /dandisets/{id}/versions/draft/info/`: whether the draft can be published. */
-  getDraftStatus(token: string, dandisetId: string): Promise<DraftStatus>
+  /** `GET /dandisets/{id}/versions/draft/info/`: whether the draft can be published yet. */
+  getPublishReadiness(token: string, dandisetId: string): Promise<PublishReadiness>
 
   /** `POST /dandisets/{id}/versions/draft/publish/`: starts publishing the draft as a new
    *  version. EMBER finishes it in the background. */

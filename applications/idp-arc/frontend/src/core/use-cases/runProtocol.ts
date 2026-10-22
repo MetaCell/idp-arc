@@ -31,7 +31,7 @@ export interface RunProtocolDefinition {
   image?: string
   /** The protocol's MAABCD dandiset on EMBER-DANDI, which each upload is also copied into
    *  (through OSB). Empty or absent: no MAABCD copy. */
-  maabcdDandisetId?: string
+  maabcdAggregateDandisetId?: string
 }
 
 export interface RunProtocolInput {
@@ -260,7 +260,7 @@ export function createRunProtocolUseCase(
           user: input.dandisetId,
           newName: `${protocol.name} (IDP)`,
           protocol: { id: protocol.id, name: protocol.name, url: repoPage(protocol.repoZipUrl) },
-          maabcd: input.shareWithMaabcd === false ? undefined : protocol.maabcdDandisetId,
+          maabcd: input.shareWithMaabcd === false ? undefined : protocol.maabcdAggregateDandisetId,
         },
       }, (sent, total) => {
         if (Date.now() - lastReport < RUN_SETTINGS.uploadProgressMs && sent < total) return

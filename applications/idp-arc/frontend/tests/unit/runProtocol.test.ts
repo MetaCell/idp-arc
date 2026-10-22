@@ -313,7 +313,7 @@ test('an EMBER-DANDI upload gets the run\'s workspace recorded in its dandiset, 
   }
   const states: RunState[] = []
   await createRunProtocolUseCase(auth, f.api, store)(
-    { protocol: { ...FOUR_CHOICE, maabcdDandisetId: '000533' }, file: file(), workspaceName: 'Four-choice', dandisetId: '000123' },
+    { protocol: { ...FOUR_CHOICE, maabcdAggregateDandisetId: '000533' }, file: file(), workspaceName: 'Four-choice', dandisetId: '000123' },
     (s) => states.push(s))
   const last = states[states.length - 1]
 
@@ -339,7 +339,7 @@ test('with "Share with MAABCD" unticked, nothing goes to the protocol\'s MAABCD 
   }
   const states: RunState[] = []
   await createRunProtocolUseCase(auth, f.api, store)(
-    { protocol: { ...FOUR_CHOICE, maabcdDandisetId: '000533' }, file: file(), workspaceName: 'Four-choice', shareWithMaabcd: false },
+    { protocol: { ...FOUR_CHOICE, maabcdAggregateDandisetId: '000533' }, file: file(), workspaceName: 'Four-choice', shareWithMaabcd: false },
     (s) => states.push(s))
 
   assert.equal(states[states.length - 1].phase, 'succeeded')

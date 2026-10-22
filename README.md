@@ -75,7 +75,7 @@ way, uploading needs both logins (EMBER-DANDI and OSB), and OSB imports the file
 researcher's workspace from there.
 
 - **`ember`** (default): EMBER-DANDI, into the researcher's own dandiset and the protocol's
-  MAABCD dandiset (`maabcdDandisetId` in `src/data/protocols.json`). Needs `VITE_EMBER_CLIENT_ID`,
+  MAABCD dandiset (`maabcdAggregateDandisetId` in `src/data/protocols.json`). Needs `VITE_EMBER_CLIENT_ID`,
   an EMBER-DANDI OAuth application (public client, PKCE) with `<this app's origin>/ember-callback`
   as a redirect URI, and, for the MAABCD copy, the
   `DANDI_API_KEY` attribute on the OSB user named by `MAABCD_EMBER_USERNAME` (`container.ts`).

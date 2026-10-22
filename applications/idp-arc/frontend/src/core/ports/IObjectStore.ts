@@ -20,7 +20,7 @@ export interface ObjectUploadInput {
     newName?: string
     /** Recorded in the dandiset's metadata, with the workspace the run uses. */
     protocol?: { id: string; name: string; url?: string }
-    /** The protocol's MAABCD dandiset (protocols.json `maabcdDandisetId`), uploaded to through OSB. */
+    /** The protocol's MAABCD dandiset (protocols.json `maabcdAggregateDandisetId`), uploaded to through OSB. */
     maabcd?: string
   }
   /** From an earlier, interrupted put of the same file: what it already did is not done again. */

@@ -438,7 +438,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                   )}
                 </Box>
               )}
-              {usesEmber && selectedProtocol?.maabcdDandisetId && (
+              {usesEmber && selectedProtocol?.maabcdAggregateDandisetId && (
                 <FormControlLabel
                   control={
                     <Checkbox

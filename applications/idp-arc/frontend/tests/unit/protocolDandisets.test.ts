@@ -54,7 +54,7 @@ function fakeEmber(metadata: Record<string, DandisetMetadata>, publishing: {
     async createDandiset(_t, name, m) { created.push({ name, metadata: m }); return '000900' },
     async getDraftMetadata(_t, id) { return metadata[id] ?? {} },
     async updateDraftMetadata(_t, id, m) { writes.push({ id, metadata: m }) },
-    async getDraftStatus() {
+    async getPublishReadiness() {
       const all = publishing.statuses ?? [{ status: 'Valid' }]
       const s = all[Math.min(statusReads++, all.length - 1)]
       calls.push(`status:${s.status}`)

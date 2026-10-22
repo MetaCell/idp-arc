@@ -15,7 +15,7 @@ export { EMBER_SIGN_IN }
  *   1. into the researcher's own dandiset, from the browser with their EMBER token. This is the
  *      copy OSB imports into their workspace; `recordWorkspace` then writes that workspace into
  *      the dandiset's metadata, so the next upload for the protocol finds both;
- *   2. into the protocol's MAABCD dandiset (protocols.json `maabcdDandisetId`), through OSB's
+ *   2. into the protocol's MAABCD dandiset (protocols.json `maabcdAggregateDandisetId`), through OSB's
  *      `/dandi` endpoints (instance `ember-dandi`), which sign with the MAABCD account's key.
  *      Skipped when the protocol has none, or the researcher chose not to share.
  *
@@ -54,7 +54,7 @@ export function createEmberObjectStore(
       const { file } = input
       const token = emberAuth.getToken()
       if (!token) throw new UserFacingError(EMBER_SIGN_IN, 'No EMBER-DANDI token (not signed in, or it expired)')
-      const maabcdDandisetId = input.dandisets?.maabcd || undefined
+      const maabcdAggregateDandisetId = input.dandisets?.maabcd || undefined
       const saved: EmberUploadCheckpoint = { ...(input.resume as EmberUploadCheckpoint | undefined) }
       const save = (patch: EmberUploadCheckpoint) => {
         Object.assign(saved, patch)
@@ -63,14 +63,14 @@ export function createEmberObjectStore(
 
       // Bytes counted across both transfers, so the progress bar runs once from 0 to 100%; a copy
       // made by an earlier attempt counts as sent.
-      const transfers = maabcdDandisetId ? 2 : 1
+      const transfers = maabcdAggregateDandisetId ? 2 : 1
       const total = file.size * transfers
-      let done = (saved.own ? file.size : 0) + (maabcdDandisetId && saved.maabcdDone ? file.size : 0)
+      let done = (saved.own ? file.size : 0) + (maabcdAggregateDandisetId && saved.maabcdDone ? file.size : 0)
       const progress = (sentInTransfer: number) => onProgress?.(Math.min(done + sentInTransfer, total), total)
       const skipTransfer = () => { done += file.size; progress(0) }
       progress(0)
 
-      const needsMaabcd = !!maabcdDandisetId && !saved.maabcdDone
+      const needsMaabcd = !!maabcdAggregateDandisetId && !saved.maabcdDone
       const { etag, parts: plan } = !saved.own || needsMaabcd ? await computeDandiEtag(file) : { etag: '', parts: [] }
 
       // 1. The researcher's own copy.
@@ -94,7 +94,7 @@ export function createEmberObjectStore(
       if (needsMaabcd) {
         const osbToken = await osbAuth.getToken()
         const brokered = await osb.getUploadUrls(osbToken, {
-          dandisetId: maabcdDandisetId, filename: file.name, size: file.size, dandiEtag: etag,
+          dandisetId: maabcdAggregateDandisetId, filename: file.name, size: file.size, dandiEtag: etag,
         })
         const brokeredParts = await putParts(brokered.parts, plan, file, progress)
         if (!brokered.parts.length) skipTransfer(); else done += file.size

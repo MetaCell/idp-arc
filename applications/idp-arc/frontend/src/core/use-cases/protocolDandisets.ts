@@ -1,4 +1,4 @@
-import { DRAFT_STATUS, type IDandiDirectApi, type PublishedVersion } from '../ports/IDandiDirectApi'
+import { VERSION_STATUS, type IDandiDirectApi, type PublishedVersion } from '../ports/IDandiDirectApi'
 import type { IEmberAuth } from '../ports/IEmberAuth'
 import { readProtocolLink, readWorkspaceLink, withProtocolLink, withWorkspaceLink, type DandisetMetadata } from '../dandisetLinks'
 import { RUN_SETTINGS } from '../runSettings'
@@ -9,7 +9,7 @@ import { pollUntil } from './runProgress'
 export const DANDISET_LICENSE = ['spdx:CC-BY-4.0']
 
 /** Statuses a draft can be published from (or, when Published, already was). */
-const PUBLISHABLE: string[] = [DRAFT_STATUS.valid, DRAFT_STATUS.published]
+const PUBLISHABLE: string[] = [VERSION_STATUS.valid, VERSION_STATUS.published]
 
 /** Why a dandiset could not be published, for the console; the user reads the DOI step's message. */
 class PublishError extends Error {
@@ -102,7 +102,7 @@ export function createProtocolDandisetsUseCases(deps: {
     const status = await waitUntilPublishable(t, dandisetId, stopped)
     if (!status) return null
     // Unchanged since the last version: that version already holds this data.
-    if (status === DRAFT_STATUS.published) return latestVersion(t, dandisetId)
+    if (status === VERSION_STATUS.published) return latestVersion(t, dandisetId)
     return publishNewVersion(t, dandisetId, stopped)
   }
 
@@ -116,9 +116,9 @@ export function createProtocolDandisetsUseCases(deps: {
   async function waitUntilPublishable(t: string, dandisetId: string, stopped: () => boolean): Promise<string | null> {
     let status = ''
     const ended = await pollUntil(async () => {
-      const draft = await direct.getDraftStatus(t, dandisetId)
-      if (draft.status === DRAFT_STATUS.invalid) throw new PublishError(dandisetId, draft.errors.join('; '))
-      status = draft.status
+      const readiness = await direct.getPublishReadiness(t, dandisetId)
+      if (readiness.status === VERSION_STATUS.invalid) throw new PublishError(dandisetId, readiness.errors.join('; '))
+      status = readiness.status
       return PUBLISHABLE.includes(status)
     }, { everyMs: RUN_SETTINGS.publishStatusPollMs, timeoutMs: RUN_SETTINGS.publishDraftValidationTimeoutMs, stopped })
     if (ended === 'timeout') throw new PublishError(dandisetId, `EMBER is still checking it (${status})`)

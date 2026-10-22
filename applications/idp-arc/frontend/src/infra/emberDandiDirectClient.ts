@@ -2,7 +2,7 @@ import type { DandisetMetadata } from '../core/dandisetLinks'
 import type {
   DirectFinalizeInput,
   DirectInitResult,
-  DraftStatus,
+  PublishReadiness,
   IDandiDirectApi,
   OwnDandiset,
   PublishedVersion,
@@ -98,11 +98,11 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
     if (!res.ok) await this.fail(res, 'draft metadata update')
   }
 
-  async getDraftStatus(token: string, dandisetId: string): Promise<DraftStatus> {
+  async getPublishReadiness(token: string, dandisetId: string): Promise<PublishReadiness> {
     const res = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/versions/draft/info/`, {
       headers: this.headers(token),
     })
-    if (!res.ok) await this.fail(res, 'draft status read')
+    if (!res.ok) await this.fail(res, 'publish readiness read')
     type Problem = { field?: string; path?: string; message: string }
     const body = (await res.json()) as {
       status: string
