@@ -38,6 +38,8 @@ export interface StoredObject {
   dandisetId?: string
   /** EMBER-DANDI: records the run's workspace in the dandiset's metadata. */
   recordWorkspace?: (workspaceId: number) => Promise<void>
+  /** EMBER-DANDI, when a MAABCD copy was asked for: makes that copy. Safe to call again (Retry). */
+  shareWithMaabcd?: () => Promise<void>
 }
 
 export interface IObjectStore {

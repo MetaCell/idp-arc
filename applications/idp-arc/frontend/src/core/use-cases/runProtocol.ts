@@ -6,7 +6,7 @@ import { formatBytes } from '../formatBytes'
 import { inputFileProblem } from '../inputFormats'
 import { parseRepoZipUrl, repoPage } from '../protocolRepo'
 import { RUN_SETTINGS } from '../runSettings'
-import { UserFacingError } from '../userMessages'
+import { UserFacingError, userMessage } from '../userMessages'
 import { workspaceLayout } from '../workspaceLayout'
 import { inStep, pollUntil, RunProgress, type OnRunState } from './runProgress'
 
@@ -91,6 +91,7 @@ const NEW_RUN_FOLDER: Partial<RunCheckpoint> = { runFolderAt: undefined, repoImp
 
 const STEPS = [
   { id: RUN_STEP.upload, label: 'Upload your file' },
+  { id: RUN_STEP.maabcd, label: 'Share with the MAABCD consortium' },
   { id: RUN_STEP.workspace, label: 'Get the workspace ready' },
   { id: RUN_STEP.repo, label: 'Import the analysis code' },
   { id: RUN_STEP.data, label: 'Import your data' },
@@ -168,6 +169,8 @@ export function createRunProtocolUseCase(
         progress.skip(RUN_STEP.upload)
         progress.skip(RUN_STEP.data)
       }
+      const sharesCopy = !!file && input.shareWithMaabcd !== false && !!protocol.maabcdAggregateDandisetId
+      if (!sharesCopy) progress.skip(RUN_STEP.maabcd)
       progress.emit('Starting…')
 
       // 1. Upload the file straight to the bucket. Nothing else starts until it has landed.
@@ -179,6 +182,8 @@ export function createRunProtocolUseCase(
         stored = await inStep(RUN_STEP.upload, () => uploadFile(file, userId))
         save({ stored })
       }
+      // The MAABCD copy: its own step, which never stops the run.
+      if (sharesCopy) await shareWithMaabcd(stored)
       if (stopped()) return
 
       // 2. Get the workspace: the selected one, or a new one, recorded in the dandiset's metadata so
@@ -274,6 +279,22 @@ export function createRunProtocolUseCase(
       if (stored.dandisetId) progress.dandisetId = stored.dandisetId
       progress.done(RUN_STEP.upload, undefined, 'Upload finished')
       return stored
+    }
+
+    /** The MAABCD copy's step; a failure is left for its Retry. */
+    async function shareWithMaabcd(stored: StoredObject | null) {
+      if (!stored?.shareWithMaabcd) return
+      if (checkpoint.maabcdShared) return doneEarlier(RUN_STEP.maabcd)
+      progress.start(RUN_STEP.maabcd, 'uploading', 'Sharing with the MAABCD consortium…')
+      try {
+        await stored.shareWithMaabcd()
+        save({ maabcdShared: true })
+        progress.done(RUN_STEP.maabcd)
+      } catch (err) {
+        // TODO: report to Sentry once the frontend has it.
+        console.error('Not shared with the MAABCD consortium', err)
+        progress.failStep(RUN_STEP.maabcd, userMessage(err, RUN_STEP.maabcd))
+      }
     }
 
     /** Step 2. */
@@ -401,4 +422,10 @@ export function createRunProtocolUseCase(
       return true
     }
   }
+}
+
+/** The MAABCD step's Retry: tries only the copy again. Rejects if it fails again. */
+export async function retryMaabcdCopy(checkpoint: RunCheckpoint): Promise<RunCheckpoint> {
+  await checkpoint.stored?.shareWithMaabcd?.()
+  return { ...checkpoint, maabcdShared: true }
 }

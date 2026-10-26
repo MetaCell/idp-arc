@@ -24,12 +24,12 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
 import { EMBER_SIGN_IN, UserFacingError, userMessage } from '../core/userMessages'
 import { useAppContext } from '../AppContext'
-import { RUN_STEP, type RunCheckpoint, type RunStep } from '../core/types'
+import { RUN_STEP, type RunCheckpoint, type RunStep, type RunStepId } from '../core/types'
 import RunChecklist from './RunChecklist'
 import { createSessionStore, useSessionStore } from './sessionStore'
 import DoiField from './DoiField'
 import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
-import { canResume, PUBLISH_STEP, PUBLISHING_LABEL } from '../core/use-cases/runProtocol'
+import { canResume, PUBLISH_STEP, PUBLISHING_LABEL, retryMaabcdCopy } from '../core/use-cases/runProtocol'
 import { formatBytes } from '../core/formatBytes'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
@@ -99,6 +99,11 @@ const setForm = session.set
 /** The run being watched; each run gets its own token, so stopping one never revives another. */
 let currentWatch: { current: boolean } | null = null
 
+/** `steps`, with one step changed. */
+function withStep(steps: RunStep[], id: RunStepId, change: Partial<RunStep>): RunStep[] {
+  return steps.map((s) => (s.id === id ? { ...s, ...change } : s))
+}
+
 export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
   const [form] = useSessionStore(session)
@@ -148,6 +153,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
         : doi ? { ...PUBLISH_STEP, state: 'succeeded' }
           : null
   const checklist = publishStep ? [...runSteps, publishStep] : runSteps
+  // Once the run has ended, so its reports can't overwrite what the Retry shows.
+  const canRetryShare = step !== 'uploading' && runSteps.some((s) => s.id === RUN_STEP.maabcd && s.state === 'failed')
   useEffect(() => {
     if (open && finished) setForm((prev) => (prev.resultSeen ? prev : { ...prev, resultSeen: true }))
   }, [open, finished])
@@ -269,6 +276,20 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     } catch (err) {
       console.error('Publishing the dandiset failed', err instanceof UserFacingError && err.details ? err.details : err)
       setForm((prev) => ({ ...prev, publishing: 'failed', publishError: userMessage(err, RUN_STEP.doi) }))
+    }
+  }
+
+  /** The MAABCD step's Retry: only the copy is tried again. */
+  const retryShare = async () => {
+    if (!checkpoint) return
+    const share = (change: Partial<RunStep>) => (prev: FormState) => ({ ...prev, runSteps: withStep(prev.runSteps, RUN_STEP.maabcd, change) })
+    setForm(share({ state: 'running', detail: undefined }))
+    try {
+      const next = await retryMaabcdCopy(checkpoint)
+      setForm((prev) => ({ ...share({ state: 'succeeded' })(prev), checkpoint: next }))
+    } catch (err) {
+      console.error('Not shared with the MAABCD consortium', err)
+      setForm(share({ state: 'failed', detail: userMessage(err, RUN_STEP.maabcd) }))
     }
   }
 
@@ -586,7 +607,12 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                 </Button>
               )}
             </Stack>
-            {checklist.length > 0 && <RunChecklist steps={checklist} />}
+            {checklist.length > 0 && (
+              <RunChecklist
+                steps={checklist}
+                actions={canRetryShare ? { [RUN_STEP.maabcd]: <Button size="small" onClick={retryShare}>Retry</Button> } : {}}
+              />
+            )}
             {/* Optional, after the run: publishing is the researcher's choice (they can also do it on EMBER). */}
             {finished && usesEmber && dandisetId && publishing !== 'running' && (
               <Box sx={{ display: 'flex', justifyContent: 'center', maxWidth: '100%', overflowX: 'auto', mt: 3 }}>

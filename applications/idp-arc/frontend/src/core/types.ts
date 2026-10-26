@@ -36,6 +36,7 @@ export type RunPhase =
 /** The run's steps, in order: their ids in the checklist (runProtocol's STEPS). */
 export const RUN_STEP = {
   upload: 'upload',
+  maabcd: 'maabcd',
   workspace: 'workspace',
   repo: 'repo',
   data: 'data',
@@ -93,4 +94,6 @@ export interface RunCheckpoint {
   runFolderAt?: string
   repoImported?: boolean
   dataImported?: boolean
+  /** The copy for the MAABCD consortium is made. */
+  maabcdShared?: boolean
 }

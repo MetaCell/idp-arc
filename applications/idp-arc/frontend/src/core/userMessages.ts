@@ -16,6 +16,7 @@ export class UserFacingError extends Error {
 
 const STEP_FAILED: Record<RunStepId, string> = {
   [RUN_STEP.upload]: 'Your file could not be uploaded. Check your connection and try again.',
+  [RUN_STEP.maabcd]: 'Not shared with the MAABCD consortium. Retry to try again.',
   [RUN_STEP.workspace]: 'The workspace could not be prepared. Please try again.',
   [RUN_STEP.repo]: 'The analysis code could not be added to the workspace. Please try again.',
   [RUN_STEP.data]: 'Your file could not be added to the workspace. Please try again.',

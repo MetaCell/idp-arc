@@ -10,20 +10,12 @@ import type { ProtocolDandisets } from './protocolDandisets'
 export { EMBER_SIGN_IN }
 
 /**
- * The EMBER-DANDI object store. Each file is uploaded twice:
+ * The EMBER-DANDI object store. `put` uploads into the researcher's own dandiset (the copy OSB
+ * imports); `recordWorkspace` then records the workspace in its metadata. `shareWithMaabcd` makes a
+ * second copy, into the protocol's MAABCD dandiset, through OSB's `/dandi` endpoints.
  *
- *   1. into the researcher's own dandiset, from the browser with their EMBER token. This is the
- *      copy OSB imports into their workspace; `recordWorkspace` then writes that workspace into
- *      the dandiset's metadata, so the next upload for the protocol finds both;
- *   2. into the protocol's MAABCD dandiset (protocols.json `maabcdAggregateDandisetId`), through OSB's
- *      `/dandi` endpoints (instance `ember-dandi`), which sign with the MAABCD account's key.
- *      Skipped when the protocol has none, or the researcher chose not to share.
- *
- * The browser sends the bytes both times. The second transfer is usually empty: EMBER stores each
- * content once, and answers with the existing blob instead of parts.
- *
- * Each finished part is reported as a checkpoint (EmberUploadCheckpoint): given back on a retry,
- * the dandiset is not created again and a copy already made is not made again.
+ * Each finished part of `put` is reported as a checkpoint (EmberUploadCheckpoint): given back on a
+ * retry, the dandiset is not created again and a copy already made is not made again.
  *
  * No wait for "valid" before returning: the blob is checked against the etag when the upload is
  * validated (synchronously, before the asset exists), so its download link works at once.
@@ -35,8 +27,6 @@ export interface EmberUploadCheckpoint {
   userDandisetId?: string
   /** Their own copy, once registered. */
   own?: { assetId: string; assetPath: string }
-  /** The MAABCD copy is registered. */
-  maabcdDone?: boolean
 }
 
 export function createEmberObjectStore(
@@ -61,45 +51,42 @@ export function createEmberObjectStore(
         input.onCheckpoint?.({ ...saved })
       }
 
-      // Bytes counted across both transfers, so the progress bar runs once from 0 to 100%; a copy
-      // made by an earlier attempt counts as sent.
-      const transfers = maabcdAggregateDandisetId ? 2 : 1
-      const total = file.size * transfers
-      let done = (saved.own ? file.size : 0) + (maabcdAggregateDandisetId && saved.maabcdDone ? file.size : 0)
-      const progress = (sentInTransfer: number) => onProgress?.(Math.min(done + sentInTransfer, total), total)
-      const skipTransfer = () => { done += file.size; progress(0) }
-      progress(0)
+      const progress = (sent: number) => onProgress?.(Math.min(sent, file.size), file.size)
+      progress(saved.own ? file.size : 0)
+      // The file's DANDI etag and part plan, computed once for both copies.
+      let hashed: Promise<{ etag: string; parts: PartPlan[] }> | undefined
+      const hash = () => (hashed ??= computeDandiEtag(file))
 
-      const needsMaabcd = !!maabcdAggregateDandisetId && !saved.maabcdDone
-      const { etag, parts: plan } = !saved.own || needsMaabcd ? await computeDandiEtag(file) : { etag: '', parts: [] }
-
-      // 1. The researcher's own copy.
+      // The researcher's own copy.
       const protocol = input.dandisets?.protocol ?? { id: input.protocolId, name: input.protocolId }
       const userDandisetId = saved.userDandisetId || input.dandisets?.user
         || await dandisets.createForProtocol(input.dandisets?.newName || `IDP upload: ${protocol.name}`, protocol)
       if (saved.userDandisetId !== userDandisetId) save({ userDandisetId })
       let asset = saved.own
       if (!asset) {
+        const { etag, parts: plan } = await hash()
         const path = `${pathSafe(input.protocolId)}/${crypto.randomUUID()}/${pathSafe(file.name)}`
         const init = await direct.initUpload(token, userDandisetId, file.size, etag)
         const uploaded = await putParts(init.parts, plan, file, progress)
-        if (!init.parts.length) skipTransfer(); else done += file.size
         asset = await direct.finalizeUpload(token, {
           uploadId: init.uploadId, dandisetId: userDandisetId, path, parts: uploaded, blobId: init.blobId,
         })
         save({ own: { assetId: asset.assetId, assetPath: asset.assetPath } })
       }
+      progress(file.size)
 
-      // 2. The MAABCD copy, through OSB. It doesn't hold up the researcher's run: a failure here
-      // (OSB's key or configuration, EMBER) is ours to fix, so it is logged and the run goes on.
-      if (needsMaabcd) {
-        try {
+      // The MAABCD copy, through OSB: one attempt at a time, and not again once made.
+      let shared = false
+      let sharing: Promise<void> | undefined
+      const shareWithMaabcd = () => {
+        if (shared) return Promise.resolve()
+        sharing ??= (async () => {
+          const { etag, parts: plan } = await hash()
           const osbToken = await osbAuth.getToken()
           const brokered = await osb.getUploadUrls(osbToken, {
-            dandisetId: maabcdAggregateDandisetId, filename: file.name, size: file.size, dandiEtag: etag,
+            dandisetId: maabcdAggregateDandisetId!, filename: file.name, size: file.size, dandiEtag: etag,
           })
-          const brokeredParts = await putParts(brokered.parts, plan, file, progress)
-          if (!brokered.parts.length) skipTransfer(); else done += file.size
+          const brokeredParts = await putParts(brokered.parts, plan, file, () => {})
           await osb.validateUpload(osbToken, {
             dandisetId: brokered.dandisetId,
             path: brokered.path,
@@ -107,20 +94,17 @@ export function createEmberObjectStore(
             parts: brokered.blobId ? undefined : brokeredParts,
             blobId: brokered.blobId,
           })
-          save({ maabcdDone: true })
-        } catch (err) {
-          // TODO: report to Sentry once the frontend has it, so a failed copy is noticed.
-          console.error(`Not shared with MAABCD dandiset ${maabcdAggregateDandisetId}`, err)
-          skipTransfer()
-        }
+          shared = true
+        })().finally(() => { sharing = undefined })
+        return sharing
       }
-      progress(0)
 
       return {
         url: `${emberApiOrigin.replace(/\/+$/, '')}/api/assets/${asset.assetId}/download/`,
         key: asset.assetPath,
         dandisetId: userDandisetId,
         recordWorkspace: (workspaceId: number) => dandisets.recordWorkspace(userDandisetId, workspaceId, protocol),
+        ...(maabcdAggregateDandisetId ? { shareWithMaabcd } : {}),
       }
 
       async function putParts(parts: { partNumber: number; url: string }[], plan: PartPlan[], file: File,

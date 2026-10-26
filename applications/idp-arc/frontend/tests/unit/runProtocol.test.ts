@@ -1,7 +1,7 @@
 // The run (core/use-cases/runProtocol.ts) against in-memory ports. Run: yarn test:unit
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { canResume, createRunProtocolUseCase } from '../../src/core/use-cases/runProtocol'
+import { canResume, createRunProtocolUseCase, retryMaabcdCopy } from '../../src/core/use-cases/runProtocol'
 import { RUN_SETTINGS } from '../../src/core/runSettings'
 import type { IWorkspaceApi, ImportResourceInput, StartRunInput, WorkspaceResourceState } from '../../src/core/ports/IWorkspaceApi'
 import type { IObjectStore } from '../../src/core/ports/IObjectStore'
@@ -88,7 +88,8 @@ test('uploads, imports both into the run folder, waits, runs, and reports the ru
 
   assert.equal(last.phase, 'succeeded', last.error)
   assert.equal(last.workspaceId, 42)
-  assert.deepEqual(last.steps.map((s) => s.state), Array(6).fill('succeeded'))
+  // No MAABCD dandiset for this protocol: that step is skipped.
+  assert.deepEqual(last.steps.map((s) => s.state), ['succeeded', 'skipped', ...Array(5).fill('succeeded')])
   assert.ok(f.calls.includes('create:Four-choice:maabcd:four-choice-reversal'))
 
   // <protocol>/run-<protocol>-<UTC time>/: the code and the upload, imported into the run's folder.
@@ -162,7 +163,7 @@ test('without a file: no upload, no data import, the notebooks run on the exampl
   assert.equal(last.phase, 'succeeded')
   assert.deepEqual(f.imports.map((i) => i.resourceType), ['g'])
   assert.equal(f.runInput()?.inputDir, undefined)
-  assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'data'])
+  assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'maabcd', 'data'])
 })
 
 test('a failed upload marks only the upload step failed', async () => {
@@ -345,6 +346,76 @@ test('with "Share with MAABCD" unticked, nothing goes to the protocol\'s MAABCD 
 
   assert.equal(states[states.length - 1].phase, 'succeeded')
   assert.equal(seen.dandisets?.maabcd, undefined)
+})
+
+/** A store whose MAABCD copy fails the first `fails` times. */
+function sharingStore(fails = 0) {
+  let attempts = 0
+  const store: IObjectStore = {
+    async put() {
+      return {
+        url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777',
+        shareWithMaabcd: async () => {
+          attempts += 1
+          if (attempts <= fails) throw new Error('OSB get_upload_urls failed (HTTP 503)')
+        },
+      }
+    },
+  }
+  return { store, attempts: () => attempts }
+}
+/** A run whose upload is also copied to MAABCD; the same file each time, as the dialog keeps it. */
+const shared = () => ({ protocol: { ...FOUR_CHOICE, maabcdAggregateDandisetId: '000533' }, file: data, workspaceName: 'Four-choice' })
+const maabcdStep = (s?: RunState) => s?.steps.find((x) => x.id === 'maabcd')
+
+test('a failed MAABCD copy fails only its own step; its Retry makes only the copy', async () => {
+  const f = fakes()
+  const { store, attempts } = sharingStore(1)
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, store)(shared(), (s) => states.push(s))
+  const last = states.at(-1)!
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(maabcdStep(last)?.state, 'failed')
+  assert.match(maabcdStep(last)?.detail ?? '', /Not shared with the MAABCD consortium/)
+
+  const runs = count(f.calls, 'run')
+  const next = await retryMaabcdCopy(last.checkpoint!)
+  assert.equal(next.maabcdShared, true)
+  assert.equal(attempts(), 2)
+  assert.equal(count(f.calls, 'run'), runs, 'nothing else runs again')
+})
+
+test('the MAABCD copy is made before the workspace is prepared', async () => {
+  const f = fakes()
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, sharingStore().store)(shared(), (s) => states.push(s))
+  const preparing = states.find((s) => s.steps.find((x) => x.id === 'workspace')?.state === 'running')
+  assert.equal(maabcdStep(preparing)?.state, 'succeeded')
+  assert.equal(states.at(-1)?.phase, 'succeeded')
+  assert.equal(states.at(-1)?.checkpoint?.maabcdShared, true)
+})
+
+test('a failure elsewhere leaves the MAABCD step alone, and a run Retry shows it done earlier', async () => {
+  const f = fakes({ runFails: 'notebook' })
+  const { store, attempts } = sharingStore()
+  const states: RunState[] = []
+  const runProtocol = createRunProtocolUseCase(auth, f.api, store)
+  await runProtocol(shared(), (s) => states.push(s))
+  const first = states.at(-1)!
+  assert.equal(first.phase, 'failed')
+  assert.equal(maabcdStep(first)?.state, 'succeeded')
+
+  await runProtocol({ ...shared(), workspaceId: first.workspaceId, resume: first.checkpoint }, (s) => states.push(s))
+  assert.equal(maabcdStep(states.at(-1))?.detail, 'Done earlier')
+  assert.equal(attempts(), 1)
+})
+
+test('without a MAABCD dandiset, or with sharing unticked, the step is skipped', async () => {
+  for (const input of [{ ...shared(), protocol: FOUR_CHOICE }, { ...shared(), shareWithMaabcd: false }]) {
+    const states: RunState[] = []
+    await createRunProtocolUseCase(auth, fakes().api, sharingStore().store)(input, (s) => states.push(s))
+    assert.equal(maabcdStep(states.at(-1))?.state, 'skipped')
+  }
 })
 
 // ── Retry: carrying on from the checkpoint ───────────────────────────────────────────────────

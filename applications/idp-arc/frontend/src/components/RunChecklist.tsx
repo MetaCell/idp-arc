@@ -4,7 +4,8 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutlineOutlined'
 
-import type { RunStep, StepState } from '../core/types'
+import type { ReactNode } from 'react'
+import type { RunStep, RunStepId, StepState } from '../core/types'
 
 const STEP_ICON_SX = { fontSize: 20, flexShrink: 0, mt: '1px' }
 
@@ -24,7 +25,7 @@ function StepIcon({ state }: { state: StepState }) {
 }
 
 /** One line per stage of the run: workspace, storage, server, then the run's own stages and notebooks. */
-export default function RunChecklist({ steps }: { steps: RunStep[] }) {
+export default function RunChecklist({ steps, actions = {} }: { steps: RunStep[]; actions?: Partial<Record<RunStepId, ReactNode>> }) {
   return (
     <Stack component="ol" sx={{ listStyle: 'none', m: 0, p: 0, gap: 1.25, alignSelf: 'stretch', maxWidth: 720, mx: 'auto', width: '100%' }}>
       {steps.map((s) => (
@@ -39,6 +40,7 @@ export default function RunChecklist({ steps }: { steps: RunStep[] }) {
                 {s.detail}
               </Typography>
             )}
+            {actions[s.id]}
           </Box>
         </Stack>
       ))}

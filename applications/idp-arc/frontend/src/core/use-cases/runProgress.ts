@@ -61,6 +61,12 @@ export class RunProgress {
     this.set(id, 'skipped', detail)
   }
 
+  /** A step fails without stopping the run. */
+  failStep(id: RunStepId, detail?: string) {
+    if (this.ended) return
+    this.set(id, 'failed', detail)
+  }
+
   /** The run ends well. */
   finish(message: string) {
     if (this.ended) return
