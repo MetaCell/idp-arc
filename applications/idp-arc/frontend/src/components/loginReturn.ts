@@ -29,3 +29,10 @@ export function takeLoginDialogReturn(): boolean {
     return false
   }
 }
+
+/**
+ * The window name PageLayout opens OSB's login popup with. It stays the window's name while the
+ * popup goes to Keycloak and back, so App.tsx can tell it is that popup; `window.opener` can't
+ * tell, since any tab opened by script without `noopener` (from an OSB page, say) has one too.
+ */
+export const OSB_LOGIN_POPUP_NAME = 'kc-login'

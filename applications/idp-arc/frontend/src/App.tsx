@@ -16,14 +16,15 @@ import Workspaces from './pages/Workspaces'
 import ProtocolsPage from './pages/ProtocolsPage'
 import AboutPage from './pages/AboutPage'
 import EmberCallback from './pages/EmberCallback'
+import { OSB_LOGIN_POPUP_NAME } from './components/loginReturn'
 
 /**
  * This window is OSB's (Keycloak) login popup, sent back here once the user has signed in. It only
  * finishes the sign-in, hands it to the main tab and closes; it never shows the app (it would
  * otherwise reopen the Login dialog: a popup starts with a copy of its opener's sessionStorage).
- * EMBER-DANDI's popup has no `window.opener` (COOP) and is handled on its callback route.
+ * Told by its window name (OSB_LOGIN_POPUP_NAME). EMBER-DANDI's popup is handled on its callback route.
  */
-const IN_OSB_LOGIN_POPUP = typeof window !== 'undefined' && !!window.opener
+const IN_OSB_LOGIN_POPUP = typeof window !== 'undefined' && window.name === OSB_LOGIN_POPUP_NAME
   && window.location.pathname !== EMBER_CALLBACK_PATH
 
 /** What the OSB login popup shows while it finishes the sign-in and closes itself. */
@@ -84,7 +85,7 @@ function App() {
         .init()
         .then((authenticated: boolean) => {
           // If running inside the login popup, signal the parent and close.
-          if (authenticated && window.opener) {
+          if (authenticated && IN_OSB_LOGIN_POPUP && window.opener) {
             window.opener.postMessage({ type: 'keycloak-login-complete' }, window.location.origin)
             window.close()
             return

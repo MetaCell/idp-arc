@@ -20,13 +20,13 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { authClient, emberAuth, MY_DANDISETS_URL, OSB_WORKSPACES_URL } from '../app/container'
+import { authClient, emberAuth, MY_DANDISETS_URL, OSB_WORKSPACES_URL, UPLOAD_BACKEND } from '../app/container'
 import { useAppContext } from '../AppContext'
 import { Logo } from '../Icons'
 import DataUploadDialog from './DataUploadDialog'
 import { registerUploadOpener } from './UploadContext'
 import LoginDialog from './LoginDialog'
-import { takeLoginDialogReturn } from './loginReturn'
+import { OSB_LOGIN_POPUP_NAME, takeLoginDialogReturn } from './loginReturn'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
 
@@ -83,7 +83,7 @@ export default function PageLayout({
     const w = 480, h = 600
     const left = Math.round((screen.width - w) / 2)
     const top = Math.round((screen.height - h) / 2)
-    const popup = window.open(loginUrl, 'kc-login', `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`)
+    const popup = window.open(loginUrl, OSB_LOGIN_POPUP_NAME, `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`)
     if (!popup) {
       authClient.login()
       return null
@@ -107,9 +107,11 @@ export default function PageLayout({
   // replaced, as a dev hot reload does) without authState hearing of it.
   const osbSignedIn = isAuthenticated && authClient.tokenParsed !== null
   // Uploading needs both logins: EMBER-DANDI (where the data goes) and OSB (where it is analysed).
+  // When uploads go to the bucket instead (UPLOAD_BACKEND), OSB's alone.
   // EMBER's popup sign-in doesn't reload the page, so it updates this state.
+  const needsEmber = UPLOAD_BACKEND === 'ember'
   const [emberSignedIn, setEmberSignedIn] = useState(() => emberAuth.isConnected())
-  const loginsDone = osbSignedIn && emberSignedIn && emberAuth.isConnected()
+  const loginsDone = osbSignedIn && (!needsEmber || (emberSignedIn && emberAuth.isConnected()))
   /**
    * Whether each login still holds, checked now rather than as of the page load: an EMBER token
    * expires, and an OSB session can end without the page knowing until a token is asked for (the
@@ -119,13 +121,13 @@ export default function PageLayout({
     const ember = emberAuth.isConnected()
     setEmberSignedIn(ember)
     const osb = osbSignedIn && await authClient.getToken().then(() => true, () => false)
-    return ember && osb
+    return (!needsEmber || ember) && osb
   }
   const openLoginDialog = () => {
     void checkLogins()
     setLoginDialogOpen(true)
   }
-  /** Every "Data upload" button: the upload dialog when both logins hold, else the Login dialog. */
+  /** Every "Data upload" button: the upload dialog when the logins it needs hold, else the Login dialog. */
   const openUploadOrLogin = async (protocolName?: string) => {
     if (!(await checkLogins())) return setLoginDialogOpen(true)
     setUploadProtocol(protocolName)

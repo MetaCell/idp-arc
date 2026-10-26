@@ -66,7 +66,8 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-proxy/, ''),
       },
-      '/ember-proxy': {
+      // Only what the app calls, as in the deployed nginx (deploy/resources/default.conf).
+      '^/ember-proxy/(oauth/token/|api/)': {
         target: EMBER_ORIGIN,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ember-proxy/, ''),
