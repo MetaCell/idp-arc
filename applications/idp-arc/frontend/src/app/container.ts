@@ -102,8 +102,10 @@ export const runProtocol = createRunProtocolUseCase(authClient, workspaceApi, ob
 /** The researcher's EMBER-DANDI dandisets for a protocol, each with the workspace it runs in when
  *  they still have it: what the upload dialog offers once a protocol is chosen. */
 export async function listProtocolDandisets(protocolId: string): Promise<ProtocolDandiset[]> {
-  const ownWorkspaceIds = (await loadWorkspaces()).map((w) => Number(w.id))
-  return protocolDandisets.listForProtocol(protocolId, ownWorkspaceIds)
+  const token = await authClient.getToken()
+  const me = authClient.tokenParsed?.sub
+  return protocolDandisets.listForProtocol(protocolId,
+    async (workspaceId) => !!me && (await workspaceApi.getWorkspaceOwner(token, workspaceId)) === me)
 }
 export type { ProtocolDandiset }
 

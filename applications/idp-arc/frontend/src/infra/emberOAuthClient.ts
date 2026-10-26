@@ -185,11 +185,10 @@ export class EmberOAuthClient implements IEmberAuth {
    *
    * EMBER's /oauth/authorize/ sends `Cross-Origin-Opener-Policy: same-origin`, which cuts the
    * popup off from this window both ways: `window.opener` is null in it, and `popup.closed` reads
-   * true here even while it is open. So nothing here relies on that link
-   * (.vscode/knowledge-base/ember-oauth-popup-and-coop.md). EMBER sends the popup back to
-   * EMBER_CALLBACK_PATH on this origin; that page sees the popup `state` and hands the code over a
-   * BroadcastChannel (relayPopupCallback). This tab, which holds the PKCE verifier, swaps it for the
-   * token. It can't see the popup being closed, so `cancel()` and a timeout end the wait.
+   * true here even while it is open. So nothing here relies on that link. EMBER sends the popup
+   * back to EMBER_CALLBACK_PATH on this origin; that page sees the popup `state` and hands the code
+   * over a BroadcastChannel (relayPopupCallback). This tab, which holds the PKCE verifier, swaps it
+   * for the token. It can't see the popup being closed, so `cancel()` and a timeout end the wait.
    *
    * The popup is opened synchronously, inside the click, so browsers don't block it; EMBER's URL
    * is set once the PKCE challenge is ready. Throws EmberPopupBlocked when it can't be opened.

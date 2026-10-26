@@ -60,6 +60,11 @@ export interface IWorkspaceApi {
    */
   createWorkspace(token: string, name: string, tags?: string[]): Promise<number>
 
+  /** Who owns the workspace (their Keycloak `sub`, `GET /workspace/{id}`); null when it is gone or
+   *  the user may not see it. OSB also shows public workspaces to anyone, so seeing one doesn't make
+   *  it the user's. */
+  getWorkspaceOwner(token: string, workspaceId: number): Promise<string | null>
+
   /** The workspace's resources (`GET /workspace/{id}`). */
   getWorkspaceResources(token: string, workspaceId: number): Promise<WorkspaceResourceState[]>
 

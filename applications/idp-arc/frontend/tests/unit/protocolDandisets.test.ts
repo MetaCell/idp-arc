@@ -84,12 +84,27 @@ test('lists only the dandisets recorded for the protocol, with the workspaces th
     '000004': {}, // not an IDP dandiset
   })
 
-  const list = await uc.listForProtocol('four-choice-reversal', [42, 7])
+  const asked: number[] = []
+  const list = await uc.listForProtocol('four-choice-reversal', async (id) => { asked.push(id); return id === 42 })
 
   assert.deepEqual(list, [
     { id: '000001', name: 'set 000001', workspaceId: 42 },
     { id: '000002', name: 'set 000002' },
   ])
+  // Only the protocol's recorded workspaces are checked, not every workspace the user has.
+  assert.deepEqual(asked.sort(), [42, 99])
+})
+
+test('a workspace recorded in several dandisets is checked once', async () => {
+  const { uc } = fakeEmber({
+    '000001': withWorkspaceLink(withProtocolLink({}, FOUR), DEV, 42, 'u'),
+    '000002': withWorkspaceLink(withProtocolLink({}, FOUR), DEV, 42, 'u'),
+  })
+  const asked: number[] = []
+  const list = await uc.listForProtocol('four-choice-reversal', async (id) => { asked.push(id); return true })
+
+  assert.deepEqual(list.map((d) => d.workspaceId), [42, 42])
+  assert.deepEqual(asked, [42])
 })
 
 test('a new dandiset is created already recorded for its protocol', async () => {

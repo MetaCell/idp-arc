@@ -39,6 +39,7 @@ function fakes(opts: { runPolls?: number; importPolls?: number; failUpload?: boo
   let runPollsLeft = 0
   const api: IWorkspaceApi = {
     async listWorkspaces() { return [] },
+    async getWorkspaceOwner() { return null },
     async createWorkspace(_t, name, tags) { calls.push(`create:${name}:${tags?.join(',')}`); return 42 },
     async getWorkspaceResources() {
       if (runPollsLeft > 0) { runPollsLeft -= 1; return [{ id: -1, name: 'Refreshing resources' }] }

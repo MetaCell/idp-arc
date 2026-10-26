@@ -55,10 +55,12 @@ export function createProtocolDandisetsUseCases(deps: {
 
   /**
    * The researcher's dandisets recorded for `protocolId`, each with its workspace. One metadata
-   * read per dandiset they own (EMBER's list carries no metadata). A workspace link is dropped
-   * when it isn't among `ownWorkspaceIds` (deleted, or someone else's): a new one is made then.
+   * read per dandiset they own (EMBER's list carries no metadata). A workspace link is kept only
+   * when `ownsWorkspace` says the workspace is still the researcher's (not deleted, not someone
+   * else's); otherwise a new one is made. It is asked once per recorded workspace, so how many
+   * workspaces they have doesn't matter.
    */
-  async function listForProtocol(protocolId: string, ownWorkspaceIds: number[]): Promise<ProtocolDandiset[]> {
+  async function listForProtocol(protocolId: string, ownsWorkspace: (workspaceId: number) => Promise<boolean>): Promise<ProtocolDandiset[]> {
     const t = token()
     const own = await direct.listOwnDandisets(t)
     const read = await Promise.all(own.map(async (d) => {
@@ -69,12 +71,15 @@ export function createProtocolDandisetsUseCases(deps: {
         return null
       }
     }))
-    return read
+    const forProtocol = read
       .filter((r): r is { d: (typeof own)[number]; metadata: DandisetMetadata } => !!r && readProtocolLink(r.metadata) === protocolId)
-      .map(({ d, metadata }) => {
-        const linked = readWorkspaceLink(metadata, osbDomain)
-        return { id: d.id, name: d.name, ...(linked && ownWorkspaceIds.includes(linked) ? { workspaceId: linked } : {}) }
-      })
+      .map(({ d, metadata }) => ({ d, linked: readWorkspaceLink(metadata, osbDomain) }))
+    // Several dandisets can record the same workspace: each is checked once.
+    const owned = new Map<number, Promise<boolean>>()
+    for (const { linked } of forProtocol) if (linked && !owned.has(linked)) owned.set(linked, ownsWorkspace(linked))
+    return Promise.all(forProtocol.map(async ({ d, linked }) => ({
+      id: d.id, name: d.name, ...(linked && await owned.get(linked) ? { workspaceId: linked } : {}),
+    })))
   }
 
   /** A new dandiset in the researcher's account, recorded for `protocol`. */

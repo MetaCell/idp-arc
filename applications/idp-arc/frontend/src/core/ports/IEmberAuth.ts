@@ -12,7 +12,7 @@
  *
  * connectInPopup() is the usual flow; connect() is a full-page redirect for when the popup is
  * blocked, so callers with UI state to preserve persist it first (components/loginReturn.ts).
- * Why the popup works the way it does: .vscode/knowledge-base/ember-oauth-popup-and-coop.md.
+ * Why the popup works the way it does: EmberOAuthClient.connectInPopup().
  */
 export interface IEmberAuth {
   /** True when a usable (non-expired) access token is held. */

@@ -81,6 +81,17 @@ export class WorkspaceApiClient implements IWorkspaceApi {
     throw lastError
   }
 
+  async getWorkspaceOwner(token: string, workspaceId: number): Promise<string | null> {
+    const res = await fetch(`${this.baseApiUrl}/workspace/${workspaceId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    // Deleted, or private to someone else (OSB answers 403 for that).
+    if (res.status === 404 || res.status === 403) return null
+    if (!res.ok) throw new Error(`Reading workspace ${workspaceId} failed: ${res.status} ${res.statusText}`)
+    const ws = (await res.json()) as { user_id?: string }
+    return ws.user_id ?? null
+  }
+
   async getWorkspaceResources(token: string, workspaceId: number): Promise<WorkspaceResourceState[]> {
     const res = await fetch(`${this.baseApiUrl}/workspace/${workspaceId}`, {
       headers: { Authorization: `Bearer ${token}` },
