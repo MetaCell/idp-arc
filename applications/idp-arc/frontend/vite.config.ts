@@ -4,6 +4,7 @@ import path from 'path'
 import fs from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
+import { EMBER_API_ORIGIN } from './src/infra/emberUrls'
 
 // Must use loadEnv(), not process.env — Vite doesn't load .env into process.env for this
 // file, so process.env here silently falls back to the production domain.
@@ -29,10 +30,6 @@ function loadDevHttpsCerts(): { key: Buffer; cert: Buffer } | undefined {
   return { key: fs.readFileSync(`${certDir}/key.pem`), cert: fs.readFileSync(`${certDir}/cert.pem`) }
 }
 const devHttps = loadDevHttpsCerts()
-
-// EMBER-DANDI's API: the browser's own EMBER calls go through /ember-proxy, because EMBER's
-// OAuth token response carries no CORS headers. Deployed, nginx does the same (default.conf).
-const EMBER_ORIGIN = env.VITE_EMBER_ORIGIN || 'https://api-dandi.emberarchive.org'
 
 // eslint-disable-next-line no-console
 console.log(`[vite] proxying OSB -> ${OSB_WEB_ORIGIN}`)
@@ -66,9 +63,9 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api-proxy/, ''),
       },
-      // Only what the app calls, as in the deployed nginx (deploy/resources/default.conf).
+      // EMBER's token reply has no CORS headers. Only what the app calls, as nginx (default.conf).
       '^/ember-proxy/(oauth/token/|api/)': {
-        target: EMBER_ORIGIN,
+        target: EMBER_API_ORIGIN,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ember-proxy/, ''),
       },

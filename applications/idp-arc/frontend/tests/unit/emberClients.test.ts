@@ -94,3 +94,34 @@ test('publish readiness separates files EMBER is still checking from real proble
     filesBeingChecked: 1,
   })
 })
+
+test('the dandiset list reads as many pages as EMBER\'s count says, through the proxy', async () => {
+  const page = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ identifier: String(from + i).padStart(6, '0') }))
+  const requests = recordFetch((url) => (url.endsWith('&page=1')
+    ? { json: { count: 150, results: [{ identifier: '000000', draft_version: { name: 'First' } }, ...page(1, 99)] } }
+    : { json: { count: 150, results: page(100, 50) } }))
+  const list = await new EmberDandiDirectClient('/ember-proxy').listOwnDandisets('ember-token')
+
+  assert.equal(list.length, 150)
+  assert.deepEqual(list[0], { id: '000000', name: 'First' })
+  assert.deepEqual(list.at(-1), { id: '000149', name: '000149' })
+  assert.equal(requests.length, 2)
+  assert.ok(requests.every((r) => r.url.startsWith('/ember-proxy/api/dandisets/?user=me')))
+  assert.match(requests[1].url, /page_size=100&page=2$/)
+})
+
+test('one page when the count fits in it, none more for an empty account', async () => {
+  let requests = recordFetch(() => ({ json: { count: 1, results: [{ identifier: '000001' }] } }))
+  await new EmberDandiDirectClient('/ember-proxy').listOwnDandisets('ember-token')
+  assert.equal(requests.length, 1)
+
+  requests = recordFetch(() => ({ json: { count: 0, results: [] } }))
+  assert.deepEqual(await new EmberDandiDirectClient('/ember-proxy').listOwnDandisets('ember-token'), [])
+  assert.equal(requests.length, 1)
+})
+
+test('an empty page ends the list early', async () => {
+  const requests = recordFetch(() => ({ json: { count: 5000, results: [] } }))
+  await new EmberDandiDirectClient('/ember-proxy').listOwnDandisets('ember-token')
+  assert.equal(requests.length, 1)
+})

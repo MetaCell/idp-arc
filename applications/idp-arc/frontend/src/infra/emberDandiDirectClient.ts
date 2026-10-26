@@ -16,6 +16,9 @@ import type {
  */
 export const ALLOW_EMBARGOED = false
 
+/** Dandisets per page of the researcher's list. */
+const DANDISET_PAGE_SIZE = 100
+
 /**
  * Talks to EMBER-DANDI's REST API directly from the browser, with the researcher's OAuth token.
  *
@@ -49,18 +52,22 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
     // `empty=true` keeps a dandiset that has no assets yet in the list; embargoed ones need
     // `embargoed=true` (see ALLOW_EMBARGOED).
     const embargoed = ALLOW_EMBARGOED ? '&embargoed=true' : ''
-    const res = await fetch(
-      `${this.baseUrl}/api/dandisets/?user=me${embargoed}&empty=true&page_size=100`,
-      { headers: this.headers(token) },
-    )
-    if (!res.ok) await this.fail(res, 'dandiset list')
-    const body = await res.json()
-    return (body.results ?? []).map(
-      (d: { identifier: string; draft_version?: { name?: string } }) => ({
-        id: d.identifier,
-        name: d.draft_version?.name ?? d.identifier,
-      }),
-    )
+    const dandisets: OwnDandiset[] = []
+    // Page by page until we have as many as EMBER's `count` says.
+    let total = Infinity
+    for (let page = 1; dandisets.length < total; page++) {
+      const res = await fetch(
+        `${this.baseUrl}/api/dandisets/?user=me${embargoed}&empty=true&page_size=${DANDISET_PAGE_SIZE}&page=${page}`,
+        { headers: this.headers(token) },
+      )
+      if (!res.ok) await this.fail(res, 'dandiset list')
+      const body = await res.json()
+      const results: { identifier: string; draft_version?: { name?: string } }[] = body.results ?? []
+      dandisets.push(...results.map((d) => ({ id: d.identifier, name: d.draft_version?.name ?? d.identifier })))
+      total = Number(body.count) || 0
+      if (!results.length) break
+    }
+    return dandisets
   }
 
   async createDandiset(token: string, name: string, metadata: DandisetMetadata = {}): Promise<string> {

@@ -1,3 +1,3 @@
-/** EMBER-DANDI's two public origins: its API (`api-dandi…`) and the web UI people browse (`dandi…`). */
-export const EMBER_API_ORIGIN_DEFAULT = 'https://api-dandi.emberarchive.org'
+/** EMBER-DANDI's API and web UI. Production only: the proxies and OSB's MAABCD copy use it too. */
+export const EMBER_API_ORIGIN = 'https://api-dandi.emberarchive.org'
 export const EMBER_WEB_ORIGIN = 'https://dandi.emberarchive.org'

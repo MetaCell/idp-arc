@@ -22,7 +22,7 @@ import { PublicBucketObjectStore } from '../infra/publicBucketObjectStore'
 import { EmberOAuthClient, EMBER_CALLBACK_PATH } from '../infra/emberOAuthClient'
 import { EmberDandiDirectClient } from '../infra/emberDandiDirectClient'
 import { EmberUploadApiClient } from '../infra/emberUploadApiClient'
-import { EMBER_API_ORIGIN_DEFAULT, EMBER_WEB_ORIGIN } from '../infra/emberUrls'
+import { EMBER_API_ORIGIN, EMBER_WEB_ORIGIN } from '../infra/emberUrls'
 import type { IObjectStore } from '../core/ports/IObjectStore'
 import { createEmberObjectStore } from '../core/use-cases/emberObjectStore'
 import { createProtocolDandisetsUseCases, type ProtocolDandiset } from '../core/use-cases/protocolDandisets'
@@ -48,8 +48,6 @@ export const UPLOAD_BACKEND = 'ember' as 'bucket' | 'ember'
  *  protocol's MAABCD dandiset, and the DANDI deployment it goes to (dandi-cli's name). */
 const MAABCD_EMBER_USERNAME = 'maabcd-consortium'
 const MAABCD_DANDI_INSTANCE = 'ember-dandi'
-/** EMBER-DANDI's API origin: where the OAuth login goes, and what OSB downloads assets from. */
-const EMBER_ORIGIN = (import.meta.env.VITE_EMBER_ORIGIN ?? EMBER_API_ORIGIN_DEFAULT).replace(/\/+$/, '')
 /** Same-origin path for the browser's own EMBER calls (Vite proxy in dev, nginx deployed): EMBER's
  *  token response carries no CORS headers. */
 const EMBER_FETCH_BASE = '/ember-proxy'
@@ -69,7 +67,7 @@ const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
 /** Signs the researcher in to EMBER-DANDI (OAuth in a popup, a full-page redirect if it is blocked);
  *  their token stays in the browser. */
 export const emberAuth = new EmberOAuthClient({
-  authOrigin: EMBER_ORIGIN,
+  authOrigin: EMBER_API_ORIGIN,
   apiBase: EMBER_FETCH_BASE,
   clientId: import.meta.env.VITE_EMBER_CLIENT_ID ?? '',
   redirectUri: `${window.location.origin}${EMBER_CALLBACK_PATH}`,
@@ -84,7 +82,7 @@ const protocolDandisets = createProtocolDandisetsUseCases({
 
 /** Where uploads go before OSB imports them (UPLOAD_BACKEND): EMBER-DANDI, or the public bucket. */
 export const objectStore: IObjectStore = UPLOAD_BACKEND === 'ember'
-  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_DANDI_INSTANCE, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_ORIGIN)
+  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_DANDI_INSTANCE, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_API_ORIGIN)
   : new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────
