@@ -44,7 +44,10 @@ export default function LoginDialog({ open, onClose, onOsbLogin, osbSignedIn, on
     try {
       attempt = emberAuth.connectInPopup()
     } catch (err) {
-      if (!(err instanceof EmberPopupBlocked)) throw err
+      if (!(err instanceof EmberPopupBlocked)) {
+        console.error('EMBER-DANDI sign-in could not start', err)
+        return setEmberError(err instanceof Error ? err.message : String(err))
+      }
       // Popups blocked: the full-page redirect, back to this dialog afterwards.
       markLoginDialogReturn()
       void emberAuth.connect(window.location.pathname)

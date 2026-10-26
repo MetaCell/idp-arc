@@ -70,8 +70,12 @@ Unit tests (no browser, no backend):
 yarn test:unit
 ```
 
-Uploads go to one of two places, chosen at build time by `VITE_UPLOAD_BACKEND` (`ember` unless
-it is `bucket`). Either way, OSB imports the file into the researcher's workspace from there.
+Uploads go to one of two places, chosen at build time by `VITE_UPLOAD_BACKEND`: `bucket`, or
+EMBER-DANDI for any other value, including when it isn't set (the default). If the chosen backend
+lacks what it needs (`VITE_EMBER_CLIENT_ID` for EMBER-DANDI, `VITE_UPLOAD_BUCKET_URL` for the
+bucket), the rest of the site works, and signing in to EMBER-DANDI or uploading says uploads aren't
+set up; the console names the missing variable. Either way, OSB imports the file into the
+researcher's workspace from there.
 
 - **`ember`** (default): EMBER-DANDI, into the researcher's own dandiset and the protocol's
   MAABCD dandiset (`maabcdAggregateDandisetId` in `src/data/protocols.json`). Needs both logins

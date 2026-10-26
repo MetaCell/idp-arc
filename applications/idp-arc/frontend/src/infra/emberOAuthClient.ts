@@ -1,4 +1,5 @@
 import type { IEmberAuth } from '../core/ports/IEmberAuth'
+import { EMBER_LOGIN_NOT_SET_UP, UserFacingError } from '../core/userMessages'
 
 /**
  * EMBER-DANDI OAuth via authorization-code + PKCE, run entirely in the browser.
@@ -139,15 +140,18 @@ export class EmberOAuthClient implements IEmberAuth {
     return this.token
   }
 
+  /** No OAuth client in this build (VITE_EMBER_CLIENT_ID): signing in can't work. */
+  private checkClientId(): void {
+    if (!this.config.clientId) throw new UserFacingError(EMBER_LOGIN_NOT_SET_UP, 'VITE_EMBER_CLIENT_ID is not set')
+  }
+
   /**
    * Builds the authorize URL and stashes the PKCE verifier and the `state` this tab expects back.
    * `state` also tells the callback page whether it is a popup: EMBER's COOP header nulls
    * `window.opener` there, so the page can't tell otherwise.
    */
   private async authorizeUrl(redirectUri: string, state: string): Promise<string> {
-    if (!this.config.clientId) {
-      throw new Error('VITE_EMBER_CLIENT_ID is not set; register a public OAuth client first.')
-    }
+    this.checkClientId()
     const verifier = base64url(crypto.getRandomValues(new Uint8Array(48)).buffer)
     write(VERIFIER_KEY, verifier)
     write(STATE_KEY, state)
@@ -194,6 +198,7 @@ export class EmberOAuthClient implements IEmberAuth {
    * is set once the PKCE challenge is ready. Throws EmberPopupBlocked when it can't be opened.
    */
   connectInPopup(): { done: Promise<void>; cancel: () => void } {
+    this.checkClientId() // before opening a popup that couldn't sign in
     const popup = window.open('', 'ember-login', popupFeatures(520, 720))
     if (!popup) throw new EmberPopupBlocked('The EMBER-DANDI sign-in window was blocked')
     const state = `${POPUP_STATE_PREFIX}${nonce()}`

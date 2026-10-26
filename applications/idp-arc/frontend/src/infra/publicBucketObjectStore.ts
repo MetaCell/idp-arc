@@ -1,4 +1,5 @@
 import type { IObjectStore, ObjectUploadInput, StoredObject } from '../core/ports/IObjectStore'
+import { UPLOADS_NOT_SET_UP, UserFacingError } from '../core/userMessages'
 
 /**
  * PUTs straight from the browser to a bucket open for anonymous writes (VITE_UPLOAD_BUCKET_URL).
@@ -20,7 +21,7 @@ export class PublicBucketObjectStore implements IObjectStore {
   }
 
   put(input: ObjectUploadInput, onProgress?: (sentBytes: number, totalBytes: number) => void): Promise<StoredObject> {
-    if (!this.baseUrl) return Promise.reject(new Error('No upload bucket is configured (VITE_UPLOAD_BUCKET_URL)'))
+    if (!this.baseUrl) return Promise.reject(new UserFacingError(UPLOADS_NOT_SET_UP, 'No upload bucket is configured (VITE_UPLOAD_BUCKET_URL)'))
     const key = objectKey(input.protocolId, input.userSub, crypto.randomUUID(), input.file.name)
     const url = `${this.baseUrl}/${key.split('/').map(encodeURIComponent).join('/')}`
     const { file } = input
