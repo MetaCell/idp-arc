@@ -70,17 +70,17 @@ Unit tests (no browser, no backend):
 yarn test:unit
 ```
 
-Uploads go to one of two places, chosen by `UPLOAD_BACKEND` in `src/app/container.ts`. Either
-way, uploading needs both logins (EMBER-DANDI and OSB), and OSB imports the file into the
-researcher's workspace from there.
+Uploads go to one of two places, chosen at build time by `VITE_UPLOAD_BACKEND` (`ember` unless
+it is `bucket`). Either way, OSB imports the file into the researcher's workspace from there.
 
 - **`ember`** (default): EMBER-DANDI, into the researcher's own dandiset and the protocol's
-  MAABCD dandiset (`maabcdAggregateDandisetId` in `src/data/protocols.json`). Needs `VITE_EMBER_CLIENT_ID`,
+  MAABCD dandiset (`maabcdAggregateDandisetId` in `src/data/protocols.json`). Needs both logins
+  (EMBER-DANDI and OSB), `VITE_EMBER_CLIENT_ID`,
   an EMBER-DANDI OAuth application (public client, PKCE) with `<this app's origin>/ember-callback`
   as a redirect URI, and, for the MAABCD copy, the
   `DANDI_API_KEY` attribute on the OSB user named by `MAABCD_EMBER_USERNAME` (`container.ts`).
 - **`bucket`**: a public bucket open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL`.
-  Its CORS must allow PUT from this app's origin.
+  Its CORS must allow PUT from this app's origin. Needs only the OSB login.
 
 ---
 

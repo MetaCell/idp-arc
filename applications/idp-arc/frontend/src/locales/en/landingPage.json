@@ -69,6 +69,7 @@
     "title": "Login",
     "subtitle": "Login or sign up to view or upload data.",
     "notice": "Login to both is required to upload & view your data.",
+    "noticeOsbOnly": "Login to Open Source Brain is required to upload & view your data.",
     "emberTitle": "EMBER-DANDI",
     "emberDescription": "Upload your data in EMBER-DANDI",
     "osbTitle": "Open Source Brain",

@@ -6,7 +6,10 @@ COPY frontend/package.json ./
 COPY frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile
 COPY frontend/ ./
-# Baked into the bundle by Vite at build time; the Codefresh pipeline passes it as a build argument.
+# Baked into the bundle by Vite at build time; the Codefresh pipeline passes them as build arguments.
+# `bucket` sends uploads to VITE_UPLOAD_BUCKET_URL instead of EMBER-DANDI (the default).
+ARG VITE_UPLOAD_BACKEND
+ENV VITE_UPLOAD_BACKEND=${VITE_UPLOAD_BACKEND}
 ARG VITE_UPLOAD_BUCKET_URL
 ENV VITE_UPLOAD_BUCKET_URL=${VITE_UPLOAD_BUCKET_URL}
 # EMBER-DANDI OAuth application (public client, PKCE) registered for this IDP origin.

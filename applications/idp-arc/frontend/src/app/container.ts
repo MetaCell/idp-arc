@@ -41,9 +41,11 @@ const WORKSPACES_LIST_URL =
   `${OSB_API_BASE}/proxy/workspaces/api/workspace?page=1&per_page=24&q=&tags=`
 const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
 
-/** Where uploads go: `ember` (EMBER-DANDI) or `bucket` (the public bucket named by
- *  VITE_UPLOAD_BUCKET_URL). Change it here to switch. */
-export const UPLOAD_BACKEND = 'ember' as 'bucket' | 'ember'
+/** Where uploads go: EMBER-DANDI, or the public bucket at VITE_UPLOAD_BUCKET_URL. */
+export type UploadBackend = 'ember' | 'bucket'
+/** VITE_UPLOAD_BACKEND; anything but `bucket` (unset included) is EMBER-DANDI. */
+const useBucket = import.meta.env.VITE_UPLOAD_BACKEND === 'bucket'
+export const UPLOAD_BACKEND: UploadBackend = useBucket ? 'bucket' : 'ember'
 /** The OSB (Keycloak) user whose key (user attribute `DANDI_API_KEY`) signs the copy into the
  *  protocol's MAABCD dandiset, and the DANDI deployment it goes to (dandi-cli's name). */
 const MAABCD_EMBER_USERNAME = 'maabcd-consortium'

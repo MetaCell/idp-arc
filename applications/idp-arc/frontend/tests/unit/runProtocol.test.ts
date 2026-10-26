@@ -88,8 +88,9 @@ test('uploads, imports both into the run folder, waits, runs, and reports the ru
 
   assert.equal(last.phase, 'succeeded', last.error)
   assert.equal(last.workspaceId, 42)
-  // No MAABCD dandiset for this protocol: that step is skipped.
-  assert.deepEqual(last.steps.map((s) => s.state), ['succeeded', 'skipped', ...Array(5).fill('succeeded')])
+  // A store that makes no MAABCD copy (the bucket): that step isn't in the checklist.
+  assert.deepEqual(last.steps.map((s) => s.id), ['upload', 'workspace', 'repo', 'data', 'imports', 'run'])
+  assert.deepEqual(last.steps.map((s) => s.state), Array(6).fill('succeeded'))
   assert.ok(f.calls.includes('create:Four-choice:maabcd:four-choice-reversal'))
 
   // <protocol>/run-<protocol>-<UTC time>/: the code and the upload, imported into the run's folder.
@@ -163,7 +164,7 @@ test('without a file: no upload, no data import, the notebooks run on the exampl
   assert.equal(last.phase, 'succeeded')
   assert.deepEqual(f.imports.map((i) => i.resourceType), ['g'])
   assert.equal(f.runInput()?.inputDir, undefined)
-  assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'maabcd', 'data'])
+  assert.deepEqual(last.steps.filter((s) => s.state === 'skipped').map((s) => s.id), ['upload', 'data'])
 })
 
 test('a failed upload marks only the upload step failed', async () => {

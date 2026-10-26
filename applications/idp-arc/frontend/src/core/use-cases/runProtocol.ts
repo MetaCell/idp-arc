@@ -151,10 +151,12 @@ export function createRunProtocolUseCase(
   objectStore: IObjectStore,
 ) {
   const token = (minValidity = 30) => auth.getToken(minValidity)
+  // The MAABCD copy is a step only where the store makes one: EMBER-DANDI, not the bucket.
+  const steps = STEPS.filter((s) => s.id !== RUN_STEP.maabcd || !!objectStore.shareWithMaabcd)
 
   return async function runProtocol(input: RunProtocolInput, report: OnRunState, abortRef?: { current: boolean }): Promise<void> {
     const { protocol, file, finishedRun } = input
-    const progress = new RunProgress(report, finishedRun ?? STEPS.map((s) => ({ ...s, state: 'pending' })), input.workspaceId)
+    const progress = new RunProgress(report, finishedRun ?? steps.map((s) => ({ ...s, state: 'pending' })), input.workspaceId)
     const stopped = () => !!abortRef?.current
     const checkpoint: RunCheckpoint = canResume(input.resume, input)
       ? { ...input.resume }

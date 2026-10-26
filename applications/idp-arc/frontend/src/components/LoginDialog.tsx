@@ -5,7 +5,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlin
 import CloseIcon from '@mui/icons-material/Close'
 import { useTranslation } from 'react-i18next'
 
-import { emberAuth, EmberPopupBlocked, EmberSignInCancelled } from '../app/container'
+import { emberAuth, EmberPopupBlocked, EmberSignInCancelled, UPLOAD_BACKEND } from '../app/container'
 import { markLoginDialogReturn } from './loginReturn'
 
 export interface LoginDialogProps {
@@ -62,24 +62,26 @@ export default function LoginDialog({ open, onClose, onOsbLogin, osbSignedIn, on
     )
   }
 
+  // EMBER-DANDI only when uploads go there (UPLOAD_BACKEND); the bucket needs OSB's login alone.
+  const usesEmber = UPLOAD_BACKEND === 'ember'
   const rows = [
-    {
-      n: '01', title: t('loginDialog.emberTitle'), description: t('loginDialog.emberDescription'),
+    ...(usesEmber ? [{
+      title: t('loginDialog.emberTitle'), description: t('loginDialog.emberDescription'),
       signedIn: emberAuth.isConnected(),
       login: loginToEmber,
       waiting: emberWait,
       waitingText: t('loginDialog.emberWaiting'),
       error: emberError,
-    },
+    }] : []),
     {
-      n: '02', title: t('loginDialog.osbTitle'), description: t('loginDialog.osbDescription'),
+      title: t('loginDialog.osbTitle'), description: t('loginDialog.osbDescription'),
       signedIn: osbSignedIn,
       login: () => void loginToOsb(),
       waiting: osbWait,
       waitingText: t('loginDialog.osbWaiting'),
       error: '',
     },
-  ]
+  ].map((row, i) => ({ ...row, n: String(i + 1).padStart(2, '0') }))
 
   const text = { fontFamily: 'Inter, sans-serif', fontSize: '12px', lineHeight: '16px' }
   const button = { ...text, textTransform: 'none', borderRadius: 0, px: 1.25, py: 0.5, minWidth: 0, flexShrink: 0, gap: 0.5 }
@@ -119,7 +121,7 @@ export default function LoginDialog({ open, onClose, onOsbLogin, osbSignedIn, on
       </Box>
 
       <Box sx={{ borderLeft: '1px solid #6B3F38', bgcolor: '#FFFFFF05', px: 1.25, py: 1.5 }}>
-        <Typography sx={{ ...text, color: '#FFFFFF' }}>{t('loginDialog.notice')}</Typography>
+        <Typography sx={{ ...text, color: '#FFFFFF' }}>{t(usesEmber ? 'loginDialog.notice' : 'loginDialog.noticeOsbOnly')}</Typography>
       </Box>
 
       <Stack divider={<Divider flexItem sx={{ borderColor: '#FFFFFF14' }} />}>
