@@ -36,7 +36,7 @@ export class PublicBucketObjectStore implements IObjectStore {
           reject(new Error(`Upload to the bucket failed: ${xhr.status} ${xhr.statusText}`.trim()))
         } else {
           onProgress?.(file.size, file.size)
-          resolve({ url, key })
+          resolve({ url, key, name: file.name })
         }
       }
       xhr.onerror = () => reject(new Error('Upload to the bucket failed: network error (check the bucket’s CORS)'))

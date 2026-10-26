@@ -96,4 +96,6 @@ export interface RunCheckpoint {
   dataImported?: boolean
   /** The copy for the MAABCD consortium is made. */
   maabcdShared?: boolean
+  /** The notebooks it submitted and hasn't seen end: a resumed run follows them, not resubmits. */
+  submitted?: string[]
 }

@@ -27,6 +27,7 @@ import DataUploadDialog from './DataUploadDialog'
 import { registerUploadOpener } from './UploadContext'
 import LoginDialog from './LoginDialog'
 import { OSB_LOGIN_POPUP_NAME, takeLoginDialogReturn } from './loginReturn'
+import { clearAllRuns, loadRun } from './runStorage'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
 
@@ -41,6 +42,8 @@ export interface PageLayoutProps {
 
 /** Read once per page load: a login started in the Login dialog left or reloaded the page. */
 let pendingLoginReturn = takeLoginDialogReturn()
+/** Once per page load: a run saved before the reload reopens the upload dialog. */
+let savedRunOffered = false
 
 export default function PageLayout({
   children,
@@ -136,6 +139,7 @@ export default function PageLayout({
   /** Logs out of both: IDP forgets its EMBER token (EMBER has no logout call), then OSB's
    *  Keycloak session ends, which reloads the page. */
   const logout = () => {
+    clearAllRuns()
     emberAuth.disconnect()
     setEmberSignedIn(false)
     if (isAuthenticated) authClient.logout()
@@ -144,6 +148,15 @@ export default function PageLayout({
 
   // Re-registered on every render, so buttons outside this component never call a stale copy.
   useEffect(() => { registerUploadOpener(openUploadOrLogin) })
+
+  // Back from a reload (an OSB re-login, a refresh) with a run under way: show it again.
+  const user = osbSignedIn ? authClient.tokenParsed?.sub : undefined
+  useEffect(() => {
+    if (savedRunOffered || typeof user !== 'string' || loginDialogOpen) return
+    savedRunOffered = true
+    if (loadRun(user)) void openUploadOrLogin()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loginDialogOpen])
 
   const navItems = [
     { label: t('nav.protocols'), path: '/protocols' },

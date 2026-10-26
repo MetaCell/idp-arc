@@ -12,7 +12,7 @@ export class MockObjectStore implements IObjectStore {
     }
     const key = objectKey(input.protocolId, input.userSub, `mock-${Date.now()}`, file.name)
     console.info(`[MockObjectStore] put(${key}, ${file.size}B)`)
-    return { url: `https://storage.googleapis.com/mock-bucket/${key}`, key }
+    return { url: `https://storage.googleapis.com/mock-bucket/${key}`, key, name: input.file.name }
   }
 }
 

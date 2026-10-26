@@ -30,9 +30,10 @@ export class RunProgress {
   /** Reported with every state, so the last one the dialog sees is up to date. */
   checkpoint?: RunCheckpoint
 
-  constructor(report: OnRunState, steps: { id: RunStepId; label: string }[], workspaceId?: number) {
+  /** `steps`: the checklist it starts on. */
+  constructor(report: OnRunState, steps: RunStep[], workspaceId?: number) {
     this.report = report
-    this.steps = steps.map((s) => ({ ...s, state: 'pending' }))
+    this.steps = steps
     this.workspaceId = workspaceId
   }
 

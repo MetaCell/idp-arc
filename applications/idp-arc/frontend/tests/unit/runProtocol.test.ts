@@ -1,7 +1,7 @@
 // The run (core/use-cases/runProtocol.ts) against in-memory ports. Run: yarn test:unit
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { canResume, createRunProtocolUseCase, retryMaabcdCopy } from '../../src/core/use-cases/runProtocol'
+import { canResume, createRunProtocolUseCase } from '../../src/core/use-cases/runProtocol'
 import { RUN_SETTINGS } from '../../src/core/runSettings'
 import type { IWorkspaceApi, ImportResourceInput, StartRunInput, WorkspaceResourceState } from '../../src/core/ports/IWorkspaceApi'
 import type { IObjectStore } from '../../src/core/ports/IObjectStore'
@@ -39,7 +39,7 @@ function fakes(opts: { runPolls?: number; importPolls?: number; failUpload?: boo
   let runPollsLeft = 0
   const api: IWorkspaceApi = {
     async listWorkspaces() { return [] },
-    async getWorkspaceOwner() { return null },
+    async getWorkspaceOwner() { return 'user-1' },
     async createWorkspace(_t, name, tags) { calls.push(`create:${name}:${tags?.join(',')}`); return 42 },
     async getWorkspaceResources() {
       if (runPollsLeft > 0) { runPollsLeft -= 1; return [{ id: -1, name: 'Refreshing resources' }] }
@@ -68,7 +68,7 @@ function fakes(opts: { runPolls?: number; importPolls?: number; failUpload?: boo
     async put(input) {
       calls.push('upload')
       if (opts.failUpload) throw new Error('403 Forbidden')
-      return { url: `https://storage.googleapis.com/maabcd/uploads/${input.protocolId}/${input.userSub}/u/${input.file.name}`, key: 'k' }
+      return { url: `https://storage.googleapis.com/maabcd/uploads/${input.protocolId}/${input.userSub}/u/${input.file.name}`, key: 'k', name: input.file.name }
     },
   }
   return { api, store, calls, imports, runInput: () => runInput }
@@ -307,11 +307,9 @@ test('an EMBER-DANDI upload gets the run\'s workspace recorded in its dandiset, 
     async put(input) {
       f.calls.push('upload')
       seen.dandisets = input.dandisets
-      return {
-        url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777',
-        recordWorkspace: async (id) => { f.calls.push(`record:${id}`) },
-      }
+      return { url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', name: 'animal_01.xlsx', dandisetId: '000777' }
     },
+    async recordWorkspace(_stored, id) { f.calls.push(`record:${id}`) },
   }
   const states: RunState[] = []
   await createRunProtocolUseCase(auth, f.api, store)(
@@ -336,7 +334,7 @@ test('with "Share with MAABCD" unticked, nothing goes to the protocol\'s MAABCD 
   const store: IObjectStore = {
     async put(input) {
       seen.dandisets = input.dandisets
-      return { url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777' }
+      return { url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', name: 'animal_01.xlsx', dandisetId: '000777' }
     },
   }
   const states: RunState[] = []
@@ -353,13 +351,11 @@ function sharingStore(fails = 0) {
   let attempts = 0
   const store: IObjectStore = {
     async put() {
-      return {
-        url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', dandisetId: '000777',
-        shareWithMaabcd: async () => {
-          attempts += 1
-          if (attempts <= fails) throw new Error('OSB get_upload_urls failed (HTTP 503)')
-        },
-      }
+      return { url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', name: 'animal_01.xlsx', dandisetId: '000777', etag: 'e' }
+    },
+    async shareWithMaabcd() {
+      attempts += 1
+      if (attempts <= fails) throw new Error('OSB get_upload_urls failed (HTTP 503)')
     },
   }
   return { store, attempts: () => attempts }
@@ -378,9 +374,15 @@ test('a failed MAABCD copy fails only its own step; its Retry makes only the cop
   assert.equal(maabcdStep(last)?.state, 'failed')
   assert.match(maabcdStep(last)?.detail ?? '', /Not shared with the MAABCD consortium/)
 
+  // Its row's Retry: the same use case, given the finished run's checklist.
   const runs = count(f.calls, 'run')
-  const next = await retryMaabcdCopy(last.checkpoint!)
-  assert.equal(next.maabcdShared, true)
+  const retried: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, store)(
+    { ...shared(), workspaceId: last.workspaceId, resume: last.checkpoint, finishedRun: last.steps }, (s) => retried.push(s))
+  assert.equal(maabcdStep(retried.at(-1))?.state, 'succeeded')
+  assert.equal(retried.at(-1)?.checkpoint?.maabcdShared, true)
+  assert.deepEqual(retried.at(-1)?.steps.filter((s) => s.id !== 'maabcd'), last.steps.filter((s) => s.id !== 'maabcd'),
+    'the other rows stay as they were')
   assert.equal(attempts(), 2)
   assert.equal(count(f.calls, 'run'), runs, 'nothing else runs again')
 })
@@ -520,3 +522,48 @@ test('another file, protocol or sharing choice starts over instead of carrying o
   assert.equal(count(f.calls, 'upload'), 2, 'the other file is uploaded')
 })
 
+
+// ── After a page reload: the checkpoint comes back from storage, the file doesn't ─────────────────
+
+/** The checkpoint as it comes back from localStorage. */
+const reloaded = (s: RunState) => JSON.parse(JSON.stringify(s.checkpoint)) as RunState['checkpoint']
+
+test('after a reload, a run whose upload was done carries on without the file', async () => {
+  const f = fakes()
+  failFirst(f, 'importResource', 1, (_t, input) => input.resourceType === 'e')
+  const first = (await run(f, { file: data })).at(-1)!
+
+  const last = (await run(f, { file: null, workspaceId: first.workspaceId, resume: reloaded(first) })).at(-1)!
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(count(f.calls, 'upload'), 1, 'not uploaded again')
+  assert.equal(last.steps.find((s) => s.id === 'upload')?.detail, 'Done earlier')
+  assert.equal(f.runInput()?.inputDir?.endsWith('/inputs'), true, 'the run still reads the upload, not example data')
+})
+
+test('notebooks already submitted when the page went are followed, not submitted again', async () => {
+  const f = fakes()
+  const stop = { current: false }
+  const startRun = f.api.startRun.bind(f.api)
+  f.api.startRun = async (...args) => { const r = await startRun(...args); stop.current = true; return r }
+  const states: RunState[] = []
+  await createRunProtocolUseCase(auth, f.api, f.store)(
+    { protocol: FOUR_CHOICE, file: data, workspaceName: 'Four-choice' }, (s) => states.push(s), stop)
+  const first = states.at(-1)!
+  assert.ok(first.checkpoint?.submitted?.length, 'saved as submitted')
+
+  const last = (await run(f, { file: null, workspaceId: first.workspaceId, resume: reloaded(first) })).at(-1)!
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(count(f.calls, 'run'), 1, 'submitted once')
+  assert.equal(count(f.calls, 'import:g'), 1, 'nothing imported again')
+})
+
+test('a run picked up again whose workspace was deleted says so', async () => {
+  const f = fakes()
+  failFirst(f, 'importResource', 1, (_t, input) => input.resourceType === 'e')
+  const first = (await run(f, { file: data })).at(-1)!
+  f.api.getWorkspaceOwner = async () => null
+
+  const last = (await run(f, { file: null, workspaceId: first.workspaceId, resume: reloaded(first) })).at(-1)!
+  assert.equal(last.phase, 'failed')
+  assert.match(last.error ?? '', /no longer exists/)
+})

@@ -32,6 +32,9 @@ export const EMBER_SIGN_IN = 'Please sign in with EMBER-DANDI and try again.'
 /** EMBER refuses to publish the dandiset as it is (its metadata or a file); EMBER's editor says what to fix. */
 export const DANDISET_NOT_PUBLISHABLE = "This dandiset can't be published yet. Check on EMBER-DANDI on specific errors."
 
+/** A run picked up after a reload whose upload hadn't finished: the browser no longer has the file. */
+export const finishUploadMessage = (fileName: string) => `Choose ${fileName} again to finish uploading it.`
+
 /** Says the session has ended; the dialog sends the user to sign in when the text contains it. */
 export const SIGN_IN_AGAIN = 'sign in again'
 

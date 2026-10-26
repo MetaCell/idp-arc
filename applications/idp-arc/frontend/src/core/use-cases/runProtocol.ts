@@ -1,6 +1,6 @@
 import type { IAuthClient } from '../ports/IAuthClient'
 import type { IObjectStore, StoredObject } from '../ports/IObjectStore'
-import { RUN_STEP, type RunCheckpoint, type RunStepId } from '../types'
+import { RUN_STEP, type RunCheckpoint, type RunStep, type RunStepId } from '../types'
 import type { IWorkspaceApi, WorkspaceResourceState } from '../ports/IWorkspaceApi'
 import { formatBytes } from '../formatBytes'
 import { inputFileProblem } from '../inputFormats'
@@ -49,11 +49,18 @@ export interface RunProtocolInput {
   shareWithMaabcd?: boolean
   /** From an earlier attempt that stopped: the run carries on from there when canResume allows. */
   resume?: RunCheckpoint
+  /** The checklist of a run that finished: only its failed non-blocking steps run again, on it. */
+  finishedRun?: RunStep[]
 }
 
 /** Names a file well enough to tell it is the same one again: name, size, last modified. */
 export function fileKey(file?: File | null): string | null {
   return file ? `${file.name}|${file.size}|${file.lastModified}` : null
+}
+
+/** The file name in a fileKey. */
+export function fileKeyName(key?: string | null): string {
+  return key?.split('|')[0] || 'your file'
 }
 
 /**
@@ -67,8 +74,10 @@ export function canResume(checkpoint: RunCheckpoint | undefined, input: RunProto
     || (!!input.dandisetId && input.dandisetId === checkpoint.stored?.dandisetId)
   const sameWorkspace = input.workspaceId === undefined || checkpoint.workspaceId === undefined
     || input.workspaceId === checkpoint.workspaceId
+  // After a reload there is no file; the upload is all it was needed for.
+  const sameFile = checkpoint.fileKey === fileKey(input.file) || (!input.file && !!checkpoint.stored)
   return checkpoint.protocolId === input.protocol.id
-    && checkpoint.fileKey === fileKey(input.file)
+    && sameFile
     && checkpoint.shareWithMaabcd === (input.shareWithMaabcd !== false)
     && sameDandiset && sameWorkspace
 }
@@ -87,7 +96,7 @@ const REPOSITORY_SETUP = {
 }
 
 /** Checkpoint fields that make the next attempt import into a new run folder. */
-const NEW_RUN_FOLDER: Partial<RunCheckpoint> = { runFolderAt: undefined, repoImported: false, dataImported: false }
+const NEW_RUN_FOLDER: Partial<RunCheckpoint> = { runFolderAt: undefined, repoImported: false, dataImported: false, submitted: undefined }
 
 const STEPS = [
   { id: RUN_STEP.upload, label: 'Upload your file' },
@@ -133,8 +142,8 @@ export const PUBLISHING_LABEL = 'Publishing your dandiset'
  * Every state reports a checkpoint of what is done. Given back on a retry (`resume`), the run
  * skips those steps: the upload (or the copies of it already made), the workspace, and the imports
  * into the same run folder. If waiting for the imports fails, the folder's contents are in doubt,
- * so the next attempt imports into a new one; and once the notebooks are submitted, a retry is a
- * new run of them, in a new folder.
+ * so the next attempt imports into a new one. Submitted notebooks are followed to their end, even
+ * after a reload; once that end is seen, a retry is a new run of them, in a new folder.
  */
 export function createRunProtocolUseCase(
   auth: Pick<IAuthClient, 'getToken' | 'tokenParsed'>,
@@ -144,12 +153,13 @@ export function createRunProtocolUseCase(
   const token = (minValidity = 30) => auth.getToken(minValidity)
 
   return async function runProtocol(input: RunProtocolInput, report: OnRunState, abortRef?: { current: boolean }): Promise<void> {
-    const { protocol, file } = input
-    const progress = new RunProgress(report, STEPS, input.workspaceId)
+    const { protocol, file, finishedRun } = input
+    const progress = new RunProgress(report, finishedRun ?? STEPS.map((s) => ({ ...s, state: 'pending' })), input.workspaceId)
     const stopped = () => !!abortRef?.current
     const checkpoint: RunCheckpoint = canResume(input.resume, input)
       ? { ...input.resume }
       : { protocolId: protocol.id, fileKey: fileKey(file), dandisetChoice: input.dandisetId, shareWithMaabcd: input.shareWithMaabcd !== false }
+    const hasData = !!file || !!checkpoint.stored
     const save = (patch: Partial<RunCheckpoint>) => {
       Object.assign(checkpoint, patch)
       progress.checkpoint = { ...checkpoint }
@@ -159,23 +169,25 @@ export function createRunProtocolUseCase(
     if (checkpoint.workspaceId !== undefined) progress.workspaceId = checkpoint.workspaceId
     const doneEarlier = (id: RunStepId) => progress.done(id, 'Done earlier')
 
+    if (finishedRun) return retryNonBlocking(finishedRun)
+
     try {
       // Before anything moves: the protocol and the file.
       const { repo, userId } = checkBeforeStarting(input)
       // This run's folder in the workspace (the repository's zip unpacks into it as <repo>-<ref>/).
       if (!checkpoint.runFolderAt) save({ runFolderAt: new Date().toISOString() })
       const layout = workspaceLayout(protocol.id, new Date(checkpoint.runFolderAt!))
-      if (!file) {
+      if (!hasData) {
         progress.skip(RUN_STEP.upload)
         progress.skip(RUN_STEP.data)
       }
-      const sharesCopy = !!file && input.shareWithMaabcd !== false && !!protocol.maabcdAggregateDandisetId
+      const sharesCopy = hasData && input.shareWithMaabcd !== false && !!protocol.maabcdAggregateDandisetId
       if (!sharesCopy) progress.skip(RUN_STEP.maabcd)
       progress.emit('Starting…')
 
       // 1. Upload the file straight to the bucket. Nothing else starts until it has landed.
       let stored: StoredObject | null = null
-      if (file && checkpoint.stored) {
+      if (checkpoint.stored) {
         stored = checkpoint.stored
         doneEarlier(RUN_STEP.upload)
       } else if (file) {
@@ -192,7 +204,7 @@ export function createRunProtocolUseCase(
         const id = await prepareWorkspace()
         save({ workspaceId: id })
         if (!checkpoint.workspaceRecorded) {
-          await stored?.recordWorkspace?.(id)
+          if (stored) await objectStore.recordWorkspace?.(stored, id, protocolRef())
           save({ workspaceRecorded: true })
         }
         return id
@@ -217,11 +229,18 @@ export function createRunProtocolUseCase(
       }
 
       // 4. Import the uploaded data.
-      if (stored && file && checkpoint.dataImported) doneEarlier(RUN_STEP.data)
-      else if (stored && file) {
+      if (stored && checkpoint.dataImported) doneEarlier(RUN_STEP.data)
+      else if (stored) {
         const upload = stored
-        await inStep(RUN_STEP.data, () => importData(workspaceId, file, upload, layout.inputs))
+        await inStep(RUN_STEP.data, () => importData(workspaceId, upload, layout.inputs))
         save({ dataImported: true })
+      }
+
+      // Already submitted (the page was reloaded while they ran): follow them, don't resubmit.
+      if (checkpoint.submitted) {
+        doneEarlier(RUN_STEP.imports)
+        const submitted = checkpoint.submitted
+        return inStep(RUN_STEP.run, () => watchRun(workspaceId, submitted, layout))
       }
 
       // 5. Wait for the imports, and find the notebooks to run. If this fails, the folder may hold
@@ -236,6 +255,12 @@ export function createRunProtocolUseCase(
 
       // 6. Run the notebooks.
       return inStep(RUN_STEP.run, () => runNotebooks(workspaceId, repoDir, notebooks, layout, !!stored))
+    }
+
+    /** A finished run's Retry: its failed non-blocking steps (only the MAABCD copy) run again. */
+    async function retryNonBlocking(steps: RunStep[]) {
+      if (steps.some((s) => s.id === RUN_STEP.maabcd && s.state === 'failed')) await shareWithMaabcd(checkpoint.stored ?? null)
+      progress.emit('Retried') // the step's own outcome is only reported with the next step's
     }
 
     // ── The steps ────────────────────────────────────────────────────────────────────────
@@ -266,7 +291,7 @@ export function createRunProtocolUseCase(
         dandisets: {
           user: input.dandisetId,
           newName: `${protocol.name} (IDP)`,
-          protocol: { id: protocol.id, name: protocol.name, url: repoPage(protocol.repoZipUrl) },
+          protocol: protocolRef(),
           maabcd: input.shareWithMaabcd === false ? undefined : protocol.maabcdAggregateDandisetId,
         },
       }, (sent, total) => {
@@ -281,13 +306,17 @@ export function createRunProtocolUseCase(
       return stored
     }
 
+    function protocolRef() {
+      return { id: protocol.id, name: protocol.name, url: repoPage(protocol.repoZipUrl) }
+    }
+
     /** The MAABCD copy's step; a failure is left for its Retry. */
     async function shareWithMaabcd(stored: StoredObject | null) {
-      if (!stored?.shareWithMaabcd) return
+      if (!stored || !objectStore.shareWithMaabcd) return progress.skip(RUN_STEP.maabcd)
       if (checkpoint.maabcdShared) return doneEarlier(RUN_STEP.maabcd)
       progress.start(RUN_STEP.maabcd, 'uploading', 'Sharing with the MAABCD consortium…')
       try {
-        await stored.shareWithMaabcd()
+        await objectStore.shareWithMaabcd(stored, protocol.maabcdAggregateDandisetId!, file)
         save({ maabcdShared: true })
         progress.done(RUN_STEP.maabcd)
       } catch (err) {
@@ -301,6 +330,11 @@ export function createRunProtocolUseCase(
     async function prepareWorkspace(): Promise<number> {
       progress.start(RUN_STEP.workspace, 'workspace', 'Getting the workspace ready…')
       const existing = checkpoint.workspaceId ?? input.workspaceId
+      // A run picked up again (perhaps days later): its workspace may have been deleted since.
+      if (checkpoint.workspaceId !== undefined
+        && !(await workspaceApi.getWorkspaceOwner(await token(), checkpoint.workspaceId))) {
+        throw new UserFacingError('The workspace for this run no longer exists. Please start a new upload.')
+      }
       if (existing !== undefined) {
         progress.done(RUN_STEP.workspace, undefined, 'Workspace ready')
         return existing
@@ -321,10 +355,10 @@ export function createRunProtocolUseCase(
     }
 
     /** Step 4. */
-    async function importData(workspaceId: number, file: File, stored: StoredObject, folder: string) {
+    async function importData(workspaceId: number, stored: StoredObject, folder: string) {
       progress.start(RUN_STEP.data, 'importing', 'Importing your data…')
       await workspaceApi.importResource(await token(), {
-        workspaceId, name: file.name, url: stored.url, folder, resourceType: 'e',
+        workspaceId, name: stored.name, url: stored.url, folder, resourceType: 'e',
       })
       progress.done(RUN_STEP.data)
     }
@@ -363,7 +397,6 @@ export function createRunProtocolUseCase(
       return notebooks
     }
 
-    /** Step 6. */
     /** Step 6. True once the notebooks have all run; false if it stopped watching first. */
     async function runNotebooks(workspaceId: number, repoDir: string, notebooks: string[],
       layout: ReturnType<typeof workspaceLayout>, hasData: boolean): Promise<boolean> {
@@ -384,8 +417,14 @@ export function createRunProtocolUseCase(
         results: { notebooks: layout.notebooks, log: layout.log },
         ...(protocol.image ? { image: protocol.image } : {}),
       })
-      // Submitted: the code is consumed (discard), and this folder now holds this run's results.
-      save(NEW_RUN_FOLDER)
+      // Submitted: the code is consumed (discard), so from here on a retry follows this run.
+      save({ submitted: notebooks })
+      return watchRun(workspaceId, notebooks, layout)
+    }
+
+    /** Follows submitted notebooks to their end. Once it has seen the end, a retry is a new run. */
+    async function watchRun(workspaceId: number, notebooks: string[], layout: ReturnType<typeof workspaceLayout>): Promise<boolean> {
+      progress.start(RUN_STEP.run, 'running', 'Running the notebooks…', 'Running the notebooks')
       progress.outputsDir = layout.run
       // Followed through `GET /workspace/{id}`, as the imports are: while a workflow for the
       // workspace runs, OSB lists a placeholder resource (id -1). Seen, then gone: the run is over.
@@ -414,6 +453,7 @@ export function createRunProtocolUseCase(
         return !!failedAt || executed.every((path) => paths.includes(path))
       }, { everyMs: RUN_SETTINGS.runPollMs, timeoutMs: RUN_SETTINGS.runResultTimeoutMs, stopped })
       if (listed === 'stopped') return false
+      save(NEW_RUN_FOLDER)
       // The user reads the run step's plain sentence; which notebook failed goes to the console.
       if (failedAt) throw new Error(`${failedAt} failed; see ${layout.log}`)
       // Neither: it stopped before any notebook ran (e.g. installing the requirements).
@@ -422,10 +462,4 @@ export function createRunProtocolUseCase(
       return true
     }
   }
-}
-
-/** The MAABCD step's Retry: tries only the copy again. Rejects if it fails again. */
-export async function retryMaabcdCopy(checkpoint: RunCheckpoint): Promise<RunCheckpoint> {
-  await checkpoint.stored?.shareWithMaabcd?.()
-  return { ...checkpoint, maabcdShared: true }
 }

@@ -8,6 +8,7 @@ import { UserFacingError } from '../../src/core/userMessages'
 
 const ORIGIN = 'https://api-dandi.example.org'
 const file = () => new File(['animal data'], 'animal 01.xlsx')
+const finalizedPaths: string[] = []
 
 function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: boolean; failOsbOnce?: boolean; failDirectOnce?: boolean } = {}) {
   const calls: string[] = []
@@ -28,6 +29,7 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
     },
     async putPart(url) { calls.push(`put:${url}`); return `etag-${url.split('/').pop()}` },
     async finalizeUpload(token, input) {
+      finalizedPaths.push(input.path)
       calls.push(`direct-finalize:${input.dandisetId}:${input.uploadId ?? 'dedup'}:${input.parts.map((p) => p.etag).join(',')}`)
       return { assetId: 'asset-1', assetPath: input.path }
     },
@@ -64,7 +66,9 @@ test('uploads to the picked dandiset directly; the MAABCD copy is a separate cal
   }, (sent, total) => progress.push(sent / total))
 
   assert.deepEqual(calls, ['direct-init:ember-token:000123', 'put:https://s3/direct', 'direct-finalize:000123:up-1:etag-direct'])
-  await stored.shareWithMaabcd?.()
+  // Plain data, so it can be saved across a reload: the copy needs the etag, not the file.
+  assert.deepEqual(JSON.parse(JSON.stringify(stored)), stored)
+  await store().shareWithMaabcd!(stored, '000533', file())
   assert.deepEqual(calls.slice(3), ['osb-urls:osb-token:000533:animal 01.xlsx:true', 'put:https://s3/osb', 'osb-validate:000533:etag-osb'])
   // The run imports the researcher's own copy, from EMBER's public origin (not the browser's proxy).
   assert.equal(stored.url, `${ORIGIN}/api/assets/asset-1/download/`)
@@ -84,17 +88,16 @@ test('creates the dandiset for the protocol when none was picked, and skips OSB 
   assert.equal(calls[0], 'create:ASST (IDP):asst')
   assert.equal(calls[1], 'direct-init:ember-token:000777')
   assert.ok(!calls.some((c) => c.startsWith('osb-')))
-  assert.equal(stored.shareWithMaabcd, undefined, 'no MAABCD copy to make')
   // The run records its workspace in the dandiset it uploaded into.
   assert.equal(stored.dandisetId, '000777')
-  await stored.recordWorkspace?.(42)
+  await store().recordWorkspace!(stored, 42, { id: 'asst', name: 'ASST' })
   assert.equal(calls.at(-1), 'record:000777:42:asst')
 })
 
 test('deduplicated content moves no bytes and registers against the existing blob', async () => {
   const { calls, store } = fakes({ dedupDirect: true, dedupOsb: true })
   const stored = await store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' } })
-  await stored.shareWithMaabcd?.()
+  await store().shareWithMaabcd!(stored, '000533')
 
   assert.ok(!calls.some((c) => c.startsWith('put:')))
   assert.ok(calls.includes('direct-finalize:000123:dedup:'))
@@ -104,7 +107,7 @@ test('deduplicated content moves no bytes and registers against the existing blo
 test('a part list that does not cover the file is refused before any of it is uploaded', async () => {
   const { calls, store } = fakes({ shortParts: true })
   const stored = await store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' } })
-  await assert.rejects(stored.shareWithMaabcd!(), /part URLs/)
+  await assert.rejects(store().shareWithMaabcd!(stored, '000533', file()), /part URLs/)
   assert.ok(!calls.includes('put:https://s3/a'))
 })
 
@@ -122,21 +125,30 @@ test('without an EMBER-DANDI sign-in nothing starts and the user is asked to sig
 test('a failed MAABCD copy rejects on its own; calling it again makes only that copy', async () => {
   const { calls, store } = fakes({ failOsbOnce: true })
   const stored = await store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' } })
-  await assert.rejects(stored.shareWithMaabcd!(), /503/)
+  await assert.rejects(store().shareWithMaabcd!(stored, '000533', file()), /503/)
   calls.length = 0
 
-  await stored.shareWithMaabcd!()
+  await store().shareWithMaabcd!(stored, '000533', file())
   assert.deepEqual(calls, ['osb-urls:osb-token:000533:animal 01.xlsx:true', 'put:https://s3/osb', 'osb-validate:000533:etag-osb'])
-  calls.length = 0
-  await stored.shareWithMaabcd!()
-  assert.deepEqual(calls, [], 'not made twice')
 })
 
-test('two calls at once make one copy', async () => {
+test('without the file, the MAABCD copy works when EMBER already holds the bytes, and fails when it would need the bytes', async () => {
+  const dedup = fakes({ dedupOsb: true })
+  const stored = await dedup.store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' } })
+  await dedup.store().shareWithMaabcd!(stored, '000533', null)
+  assert.ok(dedup.calls.includes('osb-validate:000533:blob-1'))
+
+  const parts = fakes()
+  const first = await parts.store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' } })
+  await assert.rejects(parts.store().shareWithMaabcd!(first, '000533', null), /needs the file/)
+})
+
+test('a resumed upload registers the same path, so it finds the asset rather than add one', async () => {
   const { calls, store } = fakes()
-  const stored = await store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123', maabcd: '000533' } })
-  await Promise.all([stored.shareWithMaabcd!(), stored.shareWithMaabcd!()])
-  assert.equal(calls.filter((c) => c.startsWith('osb-validate')).length, 1)
+  const resume = { userDandisetId: '000123', etag: 'e', path: 'p/fixed-uuid/f.xlsx' }
+  await store().put({ file: file(), protocolId: 'p', userSub: 'u', dandisets: { user: '000123' }, resume })
+  assert.ok(calls.includes('direct-finalize:000123:up-1:etag-direct'))
+  assert.equal(finalizedPaths.at(-1), 'p/fixed-uuid/f.xlsx')
 })
 
 test('a retry after the own copy failed reuses the dandiset it created', async () => {
@@ -148,7 +160,7 @@ test('a retry after the own copy failed reuses the dandiset it created', async (
     onCheckpoint: (c: unknown) => checkpoints.push(c),
   }
   await assert.rejects(store().put(input), /initialize failed/)
-  assert.deepEqual(checkpoints.at(-1), { userDandisetId: '000777' })
+  assert.equal((checkpoints.at(-1) as { userDandisetId?: string }).userDandisetId, '000777')
 
   const stored = await store().put({ ...input, resume: checkpoints.at(-1) as Record<string, unknown> })
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Box,
   Button,
@@ -22,14 +22,16 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
 import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
-import { EMBER_SIGN_IN, UserFacingError, userMessage } from '../core/userMessages'
+import { EMBER_SIGN_IN, finishUploadMessage, UserFacingError, userMessage } from '../core/userMessages'
+import { withRunLock } from './runStorage'
+import { INITIAL_FORM, restoreSession, session } from './uploadSession'
 import { useAppContext } from '../AppContext'
-import { RUN_STEP, type RunCheckpoint, type RunStep, type RunStepId } from '../core/types'
+import { RUN_STEP, type RunStep, type RunStepId } from '../core/types'
 import RunChecklist from './RunChecklist'
-import { createSessionStore, useSessionStore } from './sessionStore'
+import { useSessionStore } from './sessionStore'
 import DoiField from './DoiField'
 import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
-import { canResume, PUBLISH_STEP, PUBLISHING_LABEL, retryMaabcdCopy } from '../core/use-cases/runProtocol'
+import { canResume, fileKeyName, PUBLISH_STEP, PUBLISHING_LABEL, type RunProtocolInput } from '../core/use-cases/runProtocol'
 import { formatBytes } from '../core/formatBytes'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
@@ -37,8 +39,7 @@ import protocols from '../data/protocols.json'
 
 /** Only protocols with an analysis repository can be run, so only those are offered. */
 const runnableProtocols = protocols.filter((p) => 'repoZipUrl' in p && p.repoZipUrl)
-
-type DialogStep = 'select' | 'upload' | 'uploading' | 'success' | 'stillRunning' | 'failed'
+type RunnableProtocol = (typeof runnableProtocols)[number]
 
 export interface DataUploadDialogProps {
   open: boolean
@@ -48,61 +49,10 @@ export interface DataUploadDialogProps {
   onAuthRequired?: () => void
 }
 
-interface FormState {
-step: DialogStep
-  protocol: string
-  file: File | null
-  isDragging: boolean
-  uploadMessage: string
-  /** ID of the workspace spawned in the current dialog session; drives retry behaviour. */
-  spawnedWorkspaceId: number | undefined
-  /** Where the last run's results are, relative to the workspace root. */
-  outputsDir: string
-  /** The DOI of the version published with "Publish dandiset". */
-  doi?: { doi: string }
-  /** That publish is under way, or failed (it can be retried). */
-  publishing?: 'running' | 'failed'
-  /** Why the publish failed, for the user. */
-  publishError?: string
-  /** The run's checklist (upload, imports, run), as last reported by the use-case. */
-  runSteps: RunStep[]
-  /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
-  dandisetId: string
-  /** Also upload into the protocol's MAABCD dandiset; on by default. */
-  shareWithMaabcd: boolean
-  /** What the last attempt got done: a retry carries on from there (the run checks it still applies). */
-  checkpoint?: RunCheckpoint
-  /** The finished run's result has been on screen: the next opening starts a new upload. */
-  resultSeen?: boolean
-}
-
-const INITIAL_FORM: FormState = {
-  step: 'select',
-  protocol: '',
-  file: null,
-  isDragging: false,
-  uploadMessage: '',
-  spawnedWorkspaceId: undefined,
-  outputsDir: '',
-  runSteps: [],
-  dandisetId: '',
-  shareWithMaabcd: true,
-}
-
-/**
- * The dialog's state, including a run in progress: kept outside the dialog, so closing it (or
- * moving to another page, which remounts it) neither stops the run nor forgets it. Reopening shows
- * it again, until a finished run's result has been seen.
- */
-const session = createSessionStore<FormState>(INITIAL_FORM)
 const setForm = session.set
 /** The run being watched; each run gets its own token, so stopping one never revives another. */
 let currentWatch: { current: boolean } | null = null
-
-/** `steps`, with one step changed. */
-function withStep(steps: RunStep[], id: RunStepId, change: Partial<RunStep>): RunStep[] {
-  return steps.map((s) => (s.id === id ? { ...s, ...change } : s))
-}
+const RUN_IN_OTHER_TAB = 'This run is going on in another tab.'
 
 export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
@@ -115,6 +65,10 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const [protocolDandisets, setProtocolDandisets] = useState<ProtocolDandiset[] | null>(null)
   const [dandisetsError, setDandisetsError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const user = typeof tokenParsed?.sub === 'string' ? tokenParsed.sub : null
+
+  // Once the user is known, their run saved before a reload comes back.
+  useEffect(() => { if (user) restoreSession(user) }, [user])
 
   // While a run is being set up, uploaded or watched, ask before the page is reloaded or closed,
   // with the dialog open or not: the upload is driven by this tab and would be lost, and the
@@ -136,11 +90,12 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   })
 
   // Opening shows the current run: running, failed (for Retry), or finished and not yet seen
-  // (it ended while the dialog was closed). Otherwise it starts a new upload.
+  // (it ended while the dialog was closed). Otherwise it starts a new upload. A run sent back to
+  // the first step for the EMBER-DANDI sign-in keeps its checkpoint, so it counts as started.
   useEffect(() => {
     if (!open) return
     const current = session.get()
-    const unstarted = current.step === 'select' || (current.step === 'upload' && !current.checkpoint)
+    const unstarted = (current.step === 'select' || current.step === 'upload') && !current.checkpoint
     if ((unstarted || current.resultSeen) && current.publishing !== 'running') freshForm()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -154,7 +109,6 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           : null
   const checklist = publishStep ? [...runSteps, publishStep] : runSteps
   // Once the run has ended, so its reports can't overwrite what the Retry shows.
-  const canRetryShare = step !== 'uploading' && runSteps.some((s) => s.id === RUN_STEP.maabcd && s.state === 'failed')
   useEffect(() => {
     if (open && finished) setForm((prev) => (prev.resultSeen ? prev : { ...prev, resultSeen: true }))
   }, [open, finished])
@@ -170,8 +124,9 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
       .then((list) => {
         if (!current) return
         setProtocolDandisets(list)
-        // Only while choosing: reopening on a run must not change its dandiset or workspace.
-        setForm((prev) => (prev.step !== 'select' ? prev
+        // Only while choosing: reopening on a run (also one back here for the EMBER-DANDI sign-in)
+        // must not change its dandiset or workspace.
+        setForm((prev) => (prev.step !== 'select' || prev.checkpoint?.protocolId === protocolId ? prev
           : { ...prev, dandisetId: list[0]?.id ?? '', spawnedWorkspaceId: list[0]?.workspaceId }))
       })
       .catch((err: unknown) => {
@@ -210,24 +165,42 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const fileProblem = file ? inputFileProblem(file, selectedProtocol?.name ?? 'This protocol', selectedProtocol?.inputFormats) : null
 
   const handleUpload = async () => {
-    if (!file || fileProblem || !selectedProtocol) return
+    if (fileProblem || !selectedProtocol) return
+    // Picked up after a reload: the file is needed again unless it was already uploaded.
+    if (!file) {
+      if (checkpoint?.stored) return runLocked(selectedProtocol, null)
+      return setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: finishUploadMessage(fileKeyName(checkpoint?.fileKey)) }))
+    }
+    return runLocked(selectedProtocol, file)
+  }
+
+  /** Runs it, unless another tab is already running this user's run. */
+  const runLocked = async (selectedProtocol: RunnableProtocol, file: File | null) => {
+    const ran = await withRunLock(user ?? '', () => startRun(selectedProtocol, file))
+    if (!ran) setForm((prev) => ({ ...prev, step: 'failed', uploadMessage: RUN_IN_OTHER_TAB }))
+  }
+
+  /** What every attempt is given: it carries on from `checkpoint` where that applies. */
+  const inputFor = (selectedProtocol: RunnableProtocol, file: File | null): RunProtocolInput => ({
+    protocol: selectedProtocol,
+    file,
+    // `spawnedWorkspaceId` is set as soon as the run has a workspace, so a retry reuses it
+    // instead of creating another one.
+    workspaceId: spawnedWorkspaceId,
+    workspaceName: selectedProtocol.name,
+    dandisetId: dandisetId || undefined,
+    shareWithMaabcd,
+    resume: checkpoint,
+  })
+
+  const startRun = async (selectedProtocol: RunnableProtocol, file: File | null) => {
     setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [], doi: undefined, publishing: undefined }))
     if (currentWatch) currentWatch.current = true
     const watch = { current: false }
     currentWatch = watch
 
     await runProtocol(
-      {
-        protocol: selectedProtocol,
-        file,
-        // `spawnedWorkspaceId` is set as soon as the run has a workspace, so a retry reuses it
-        // instead of creating another one.
-        workspaceId: spawnedWorkspaceId,
-        workspaceName: selectedProtocol.name,
-        dandisetId: dandisetId || undefined,
-        shareWithMaabcd,
-        resume: checkpoint,
-      },
+      inputFor(selectedProtocol, file),
       (state) => {
         if (watch.current) return // another run started: no longer this one's
         if (state.phase === 'failed' && state.error?.toLowerCase().includes(SIGN_IN_AGAIN)) {
@@ -239,8 +212,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           return
         }
         if (state.phase === 'failed' && state.error === EMBER_SIGN_IN) {
-          // The EMBER-DANDI session ended: back to the form, where the sign-in button is.
-          // Back to the first step, which points to the Login dialog; the dandiset and workspace stay.
+          // The EMBER-DANDI session ended: back to the first step, which points to the Login
+          // dialog. The checkpoint, dandiset and workspace stay, so the next attempt carries on.
           setForm((prev) => ({
             ...prev, step: 'select', uploadMessage: EMBER_SIGN_IN,
             spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId, dandisetId: state.dandisetId ?? prev.dandisetId,
@@ -279,19 +252,20 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     }
   }
 
-  /** The MAABCD step's Retry: only the copy is tried again. */
-  const retryShare = async () => {
-    if (!checkpoint) return
-    const share = (change: Partial<RunStep>) => (prev: FormState) => ({ ...prev, runSteps: withStep(prev.runSteps, RUN_STEP.maabcd, change) })
-    setForm(share({ state: 'running', detail: undefined }))
-    try {
-      const next = await retryMaabcdCopy(checkpoint)
-      setForm((prev) => ({ ...share({ state: 'succeeded' })(prev), checkpoint: next }))
-    } catch (err) {
-      console.error('Not shared with the MAABCD consortium', err)
-      setForm(share({ state: 'failed', detail: userMessage(err, RUN_STEP.maabcd) }))
-    }
+  /** A finished run's Retry: only its failed non-blocking steps run again, and only their rows change. */
+  const retryFinishedRun = async () => {
+    if (!selectedProtocol) return
+    await withRunLock(user ?? '', () => runProtocol(
+      { ...inputFor(selectedProtocol, file), finishedRun: runSteps },
+      (state) => setForm((prev) => ({ ...prev, runSteps: state.steps, checkpoint: state.checkpoint ?? prev.checkpoint })),
+    ))
   }
+
+  // Every failed row has Retry while no run is going: a stopped run carries on, a finished one retries only those rows.
+  const failedRows = step === 'uploading' ? [] : runSteps.filter((s) => s.state === 'failed')
+  const rowRetry = finished ? retryFinishedRun : handleUpload
+  const rowActions: Partial<Record<RunStepId, ReactNode>> = Object.fromEntries(
+    failedRows.map((s) => [s.id, <Button size="small" onClick={rowRetry}>Retry</Button>]))
 
   // "Retry" only when an earlier attempt can be carried on (same protocol, file, dandiset and
   // sharing choice); choosing a dandiset that already has a workspace is still a new run.
@@ -610,7 +584,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
             {checklist.length > 0 && (
               <RunChecklist
                 steps={checklist}
-                actions={canRetryShare ? { [RUN_STEP.maabcd]: <Button size="small" onClick={retryShare}>Retry</Button> } : {}}
+                actions={rowActions}
               />
             )}
             {/* Optional, after the run: publishing is the researcher's choice (they can also do it on EMBER). */}
@@ -660,9 +634,12 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           <Button variant="outlined" onClick={() => setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))}>
             Back
           </Button>
-          <Button variant="contained" endIcon={<ArrowForwardIcon />} onClick={handleUpload}>
-            Retry
-          </Button>
+          {/* For a failure no row shows: before any step, or a run cut off by a reload. */}
+          {failedRows.length === 0 && (
+            <Button variant="contained" endIcon={<ArrowForwardIcon />} onClick={handleUpload}>
+              Retry
+            </Button>
+          )}
         </Box>
       )}
     </Dialog>

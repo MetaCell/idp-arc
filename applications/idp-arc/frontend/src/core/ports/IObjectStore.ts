@@ -29,20 +29,27 @@ export interface ObjectUploadInput {
   onCheckpoint?: (checkpoint: UploadCheckpoint) => void
 }
 
+/** An uploaded file, as plain data: kept with the run's checkpoint, which is saved across reloads. */
 export interface StoredObject {
   /** Where OSB's workspace import fetches the file from (`workspaceresource` `origin.path`). */
   url: string
   /** The object's name in its store, for messages and logs. */
   key: string
+  /** The uploaded file's name and size. */
+  name: string
+  size?: number
   /** EMBER-DANDI: the researcher's dandiset it went into (possibly created by this upload). */
   dandisetId?: string
-  /** EMBER-DANDI: records the run's workspace in the dandiset's metadata. */
-  recordWorkspace?: (workspaceId: number) => Promise<void>
-  /** EMBER-DANDI, when a MAABCD copy was asked for: makes that copy. Safe to call again (Retry). */
-  shareWithMaabcd?: () => Promise<void>
+  /** EMBER-DANDI: the file's DANDI etag, so the MAABCD copy needs no file. */
+  etag?: string
 }
 
 export interface IObjectStore {
   /** Stores the file. `onProgress` gets the bytes sent so far, repeatedly while it uploads. */
   put(input: ObjectUploadInput, onProgress?: (sentBytes: number, totalBytes: number) => void): Promise<StoredObject>
+  /** EMBER-DANDI: records the run's workspace in the upload's dandiset. */
+  recordWorkspace?(stored: StoredObject, workspaceId: number, protocol: { id: string; name: string; url?: string }): Promise<void>
+  /** EMBER-DANDI: copies the upload into `dandisetId` (MAABCD's), through OSB. `file` is needed only
+   *  if EMBER doesn't already hold its bytes. */
+  shareWithMaabcd?(stored: StoredObject, dandisetId: string, file?: File | null): Promise<void>
 }
