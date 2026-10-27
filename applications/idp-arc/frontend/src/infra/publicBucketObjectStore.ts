@@ -1,8 +1,9 @@
 import type { IObjectStore, ObjectUploadInput, StoredObject } from '../core/ports/IObjectStore'
+import { UPLOADS_NOT_SET_UP, UserFacingError } from '../core/userMessages'
 
 /**
- * Scenario 1: PUTs straight from the browser to a bucket open for anonymous writes (`gs://maabcd`,
- * `https://storage.googleapis.com/maabcd`). No Authorization header; the object is readable at the
+ * PUTs straight from the browser to a bucket open for anonymous writes (VITE_UPLOAD_BUCKET_URL).
+ * No Authorization header; the object is readable at the
  * same URL afterwards, which is what OSB's import fetches. The bucket's CORS must allow PUT from
  * MAABCD's origin.
  *
@@ -14,13 +15,13 @@ import type { IObjectStore, ObjectUploadInput, StoredObject } from '../core/port
 export class PublicBucketObjectStore implements IObjectStore {
   private readonly baseUrl: string
 
-  /** `baseUrl`: e.g. `https://storage.googleapis.com/maabcd` (VITE_UPLOAD_BUCKET_URL). */
+  /** `baseUrl`: the bucket's public URL (VITE_UPLOAD_BUCKET_URL). */
   constructor(baseUrl: string | undefined) {
     this.baseUrl = (baseUrl ?? '').replace(/\/+$/, '')
   }
 
   put(input: ObjectUploadInput, onProgress?: (sentBytes: number, totalBytes: number) => void): Promise<StoredObject> {
-    if (!this.baseUrl) return Promise.reject(new Error('No upload bucket is configured (VITE_UPLOAD_BUCKET_URL)'))
+    if (!this.baseUrl) return Promise.reject(new UserFacingError(UPLOADS_NOT_SET_UP, 'No upload bucket is configured (VITE_UPLOAD_BUCKET_URL)'))
     const key = objectKey(input.protocolId, input.userSub, crypto.randomUUID(), input.file.name)
     const url = `${this.baseUrl}/${key.split('/').map(encodeURIComponent).join('/')}`
     const { file } = input
@@ -36,7 +37,7 @@ export class PublicBucketObjectStore implements IObjectStore {
           reject(new Error(`Upload to the bucket failed: ${xhr.status} ${xhr.statusText}`.trim()))
         } else {
           onProgress?.(file.size, file.size)
-          resolve({ url, key })
+          resolve({ url, key, name: file.name })
         }
       }
       xhr.onerror = () => reject(new Error('Upload to the bucket failed: network error (check the bucket’s CORS)'))

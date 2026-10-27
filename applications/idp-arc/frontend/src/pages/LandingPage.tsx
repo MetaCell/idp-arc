@@ -13,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import PageLayout from '../components/PageLayout'
+import { UPLOAD_BACKEND } from '../app/container'
 import { openUpload } from '../components/UploadContext'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
@@ -23,7 +24,11 @@ export default function LandingPage() {
 
   const navigate = useNavigate()
 
-  const features = t('features', { returnObjects: true }) as Array<{ title: string; desc: string; cta: string; ctaPath: string }>
+  type Feature = { id?: string; title: string; desc: string; cta: string; ctaPath: string }
+  // The upload card names where uploads go: EMBER-DANDI, or the bucket (UPLOAD_BACKEND).
+  const bucketUpload = t('uploadFeatureBucket', { returnObjects: true }) as Pick<Feature, 'title' | 'desc'>
+  const features = (t('features', { returnObjects: true }) as Feature[])
+    .map((f) => (f.id === 'upload' && UPLOAD_BACKEND === 'bucket' ? { ...f, ...bucketUpload } : f))
 
   const protocols = t('protocols.items', { returnObjects: true }) as Array<{ name: string; desc: string }>
 
@@ -34,7 +39,7 @@ export default function LandingPage() {
       <Button variant="outlined" onClick={() => navigate('/protocols')}>
         {t('banner.ctaProtocols')}
       </Button>
-      <Button variant="contained" endIcon={<ArrowIcon />} onClick={openUpload}>
+      <Button variant="contained" endIcon={<ArrowIcon />} onClick={() => openUpload()}>
         {t('banner.ctaDataUpload')}
       </Button>
     </Stack>

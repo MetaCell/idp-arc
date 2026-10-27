@@ -12,6 +12,7 @@
       "ctaPath": "/protocols"
     },
     {
+      "id": "upload",
       "title": "Upload data in EMBER-DANDI",
       "desc": "Share your experimental results with the research community. Sign in to upload dandisets to the Ember-Dandi platform.",
       "cta": "Data upload",
@@ -19,7 +20,7 @@
     },
     {
       "title": "Use your data in Open Source Brain",
-      "desc": "Explore and analyze community data and your uploaded data with our integration with Open Source Brain (OSB). OSB lets you use interactive visualizations and powerful analysis tools with Jupyterlab, NetPyNE and NWB Explorer.",
+      "desc": "Explore and analyze your uploaded data in Open Source Brain (OSB), with interactive visualizations and analysis tools: JupyterLab, NetPyNE and NWB Explorer.",
       "cta": "Go to Open Source Brain",
       "ctaPath": "https://www.opensourcebrain.org/"
     }
@@ -39,11 +40,16 @@
     "body2": "In the long term we are interested in understanding a) if there are different dimensions of adversity which have separable effects on brain and behavior and b) if there are sensitive periods for exposure. We hope to disseminate these protocols so many labs can similarly harmonize their data collection enabling comparisons of a wide variety of treatments on the same behavioral outcome metrics. Our project is supported by the BBQS R34.",
     "learnMore": "Learn more"
   },
+  "uploadFeatureBucket": {
+    "title": "Upload your data",
+    "desc": "Share your experimental results with the research community. Sign in to upload your data and analyze it in Open Source Brain."
+  },
   "nav": {
     "logoTitle": "MAABCD Platform",
     "protocols": "Protocols",
     "about": "About",
     "myWorkspaces": "My workspaces",
+    "myDandisets": "My dandisets",
     "login": "Login",
     "logout": "Logout",
     "dataUpload": "Data upload",
@@ -60,5 +66,28 @@
       "about": "About",
       "contact": "Contact"
     }
+  },
+  "account": {
+    "title": "Your accounts"
+  },
+  "loginDialog": {
+    "title": "Login",
+    "subtitle": "Login or sign up to view or upload data.",
+    "notice": "Login to both is required to upload & view your data.",
+    "noticeOsbOnly": "Login to Open Source Brain is required to upload and analyze your data.",
+    "emberTitle": "EMBER-DANDI",
+    "emberDescription": "Upload your data in EMBER-DANDI",
+    "osbTitle": "Open Source Brain",
+    "osbDescription": "Run the protocol's analysis on your uploaded data, in your own Open Source Brain (OSB) workspace.",
+    "login": "Login",
+    "signedIn": "Signed in",
+    "loggedIn": "Logged in",
+    "emberWaiting": "Sign in in the EMBER-DANDI window…",
+    "osbWaiting": "Sign in in the Open Source Brain window…",
+    "osbUnreachable": "Can't reach Open Source Brain's sign-in. Check your connection and try again.",
+    "finishingSignIn": "Finishing sign in…",
+    "closeWindow": "You can close this window and go back to IDP.",
+    "cancel": "Cancel",
+    "close": "Close"
   }
 }

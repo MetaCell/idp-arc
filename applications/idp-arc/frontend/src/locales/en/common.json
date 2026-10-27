@@ -1,5 +1,11 @@
 {
-    "app": {
+  "notFound": {
+    "title": "404",
+    "heading": "Page not found",
+    "body": "There is no page at this address. It may have moved, or the link may be mistyped.",
+    "home": "Go to the home page"
+  },
+  "app": {
     "title": "MAABCD"
   },
   "auth": {

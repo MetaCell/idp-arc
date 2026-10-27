@@ -21,6 +21,10 @@ export class MockAuthClient implements IAuthClient {
     return '/'
   }
 
+  async isReachable(): Promise<boolean> {
+    return true
+  }
+
   async init(): Promise<boolean> {
     console.info('[MockAuthClient] init() → authenticated')
     return true
@@ -32,6 +36,10 @@ export class MockAuthClient implements IAuthClient {
 
   login(): void {
     console.info('[MockAuthClient] login() called — no-op in mock mode')
+  }
+
+  onSessionEnded(): void {
+    // The mock session never ends.
   }
 
   logout(): void {

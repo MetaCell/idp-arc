@@ -32,4 +32,15 @@ export const RUN_SETTINGS = {
    * run stopped before any notebook ran.
    */
   runResultTimeoutMs: 15_000,
+
+  // ─── The DOI ─────────────────────────────────────────────────────────────────
+
+  /** How often EMBER-DANDI is asked whether the draft is valid, and whether the version is out. */
+  publishStatusPollMs: 5_000,
+
+  /** How long EMBER may take to validate the draft (it checks every new file). */
+  publishDraftValidationTimeoutMs: 15 * 60_000,
+
+  /** How long EMBER may take to publish the version once asked. */
+  publishVersionTimeoutMs: 10 * 60_000,
 }

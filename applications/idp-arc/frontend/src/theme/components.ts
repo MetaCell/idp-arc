@@ -178,6 +178,12 @@ export const theme = createTheme({
           '&:hover': {
             backgroundColor: 'var(--mui-palette-text-secondary)',
           },
+          // Keeps its own colours when disabled (the root's opacity dims it): MUI's disabled
+          // colours are near-transparent here, so the button vanished against the dialog.
+          '&.Mui-disabled': {
+            backgroundColor: 'var(--mui-palette-text-primary)',
+            color: 'var(--mui-palette-background-default)',
+          },
         },
         outlined: {
           color: 'var(--mui-palette-text-primary)',

@@ -8,24 +8,38 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
 
 | Field | Used by | Meaning |
 |---|---|---|
-| `id` | run | **Stable id, never derived from the name** (`four-choice-reversal`). Tags the workspace (`maabcd:<id>`), prefixes the upload in the bucket and names the workspace folder its runs go in (`<id>/run-<id>-<UTC timestamp>/`). Don't change it once uploads exist. |
+| `id` | run | **Stable id, chosen once** (`four-choice-reversal`). Tags the workspace (`maabcd:<id>`), is the first folder of the upload in the researcher's dandiset and names the workspace folder its runs go in (`<id>/run-<id>-<UTC timestamp>/`). Keep it once uploads exist. |
 | `name` | everywhere | Display name. Free to edit. |
 | `description`, `imageUrl`, `videoUrl` | Protocols page | Text and media shown for the protocol. |
 | `repoZipUrl` | run | GitHub archive of the analysis repository, `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>` (or `refs/tags/<tag>`, or `/zip/<commit>`). A **branch** follows the latest fixes; a **commit** freezes the code. An empty `repoZipUrl` = no analysis yet: the upload dialog doesn't offer the protocol. |
 | `notebooksDir` | run | Repository-relative folder of the notebooks (`notebooks`). |
+| `maabcdAggregateDandisetId` | upload | The protocol's MAABCD consortium dandiset on EMBER-DANDI (`000607`): six digits, owned by the consortium account. When the researcher shares their upload, a copy goes there through OSB's `/dandi` endpoints, signed with that account's key. Leave it out and uploads for the protocol aren't shared. |
 | `requirements`, `pythonPath`, `install` | run | Override the repository setup below (defaults in `REPOSITORY_SETUP`, runProtocol.ts: `requirements.txt`; `["scripts"]`; `["scripts/install.py", "scripts/setup.py", "scripts/pyproject.toml"]`). OSB applies only the ones the repository has. Leave them out for a repository that follows the contract. |
 | `templatesZipUrl` | Protocols page, dialog | Archive of the protocol's templates (data sheets, instructions), downloaded by the **Download** buttons on the Protocols page and in the dialog's upload step. A path relative to `public/` (`protocols_archives/4c.zip`) or an absolute URL. Missing or empty = both buttons disabled. |
 | `inputFormats` | dialog, run | Extensions the analysis code can actually read. The dialog refuses other files before anything starts. **Without it, any file is accepted** (except an empty one, always refused). |
+
+## Where uploads go
+
+Each upload goes to EMBER-DANDI, in up to two copies:
+
+| | Researcher's dandiset | MAABCD aggregate dandiset |
+|---|---|---|
+| Dandiset | picked in the dialog, or a new one | `maabcdAggregateDandisetId`, if the researcher shares |
+| Path | `<id>/<upload id>/<file>` | `<OSB user id>/<upload id>/<file>` |
+| Built and signed by | IDP, with the researcher's EMBER login | OSB, with the consortium's `DANDI_API_KEY` |
+
+`<upload id>` is a random UUID, so uploads never overwrite each other. OSB builds the MAABCD path
+from the caller's login, so no one can write into another's folder.
 
 ## What happens on "Upload and run" (core/use-cases/runProtocol.ts)
 
 The button stays disabled until a file is chosen, and while that file is empty or of a format the
 protocol doesn't read.
 
-1. The file goes from the browser straight to the bucket (`VITE_UPLOAD_BUCKET_URL`), as
-   `uploads/<id>/<user>/<upload id>/<file>`. Once it has landed: the workspace (the selected one, or
-   a new one tagged `maabcd:<id>`), then the repository import. No lab server is started; OSB's
-   import and run tasks don't need one.
+1. The file goes from the browser to EMBER-DANDI: into the researcher's dandiset and, if they
+   share it, into the protocol's MAABCD dandiset (paths in [Where uploads go](#where-uploads-go)).
+   Once it has landed: the workspace (the selected one, or a new one tagged `maabcd:<id>`), then
+   the repository import.
 2. OSB imports both into this run's folder (`POST /workspaceresource`; names in
    core/workspaceLayout.ts): `<id>/run-<id>-<UTC timestamp>/<repo>-<ref>/` for the code, fresh for
    every run, and `…/inputs/` for the upload (a `.zip` is unpacked there).
@@ -52,21 +66,21 @@ protocol doesn't read.
 
 Agreed with the protocol authors on 30 Sep 2026. These conventions live in IDP (`REPOSITORY_SETUP`
 and `notebooksDir`): IDP tells OSB which notebooks to run, in what order, and which setup files to
-use; OSB uses the ones the repository has and assumes nothing else.
+use; OSB applies the ones the repository has.
 
 1. `requirements.txt` at the root — **optional**, installed first. Pin versions: the task image
    pre-installs pandas, numpy, openpyxl and matplotlib, and an unpinned requirement is satisfied by
    whatever version that is (four-choice broke on matplotlib 3.11, which removed `boxplot(labels=)`).
 2. `scripts/` — **optional**: `scripts/install.py` is run if present, else it's pip-installed if it
-   is a package (`setup.py`/`pyproject.toml`); it's always on `PYTHONPATH`. A failure here doesn't
-   stop the run.
+   is a package (`setup.py`/`pyproject.toml`); it's always on `PYTHONPATH`. The run carries on if
+   this step fails.
 3. `notebooks/` — **required**. Every visible `*.ipynb` directly in it runs, one after another, in
    byte order of the file name (**zero-pad the numbers**: `01_…`, `02_…`; `10_x` sorts before
    `2_x`), each with its own folder as working directory. The first failing notebook stops the run.
 4. **Input and output: a cell tagged `parameters`** (papermill's convention) in every notebook, setting
    `INPUT_DIR` and `OUTPUT_DIR` to its own defaults (e.g. its example data). The notebooks read from
    `INPUT_DIR` and write everything they produce to `OUTPUT_DIR`; for a run, IDP passes the run's
-   `inputs/` and `outputs/`. A notebook without that cell isn't run.
+   `inputs/` and `outputs/`. A run stops at the first notebook without that cell.
 
 ## Per protocol
 
@@ -77,26 +91,28 @@ use; OSB uses the ones the repository has and assumes nothing else.
     *File → Download → Microsoft Excel (.xlsx)*.
   - `.zip`: several such workbooks (e.g. one per animal), analysed together; files at the top level
     or inside one folder (what Finder/Explorer "Compress" makes).
-- **Not accepted: `.csv`, `.tsv`, `.xls`, `.ods`**: the pipeline only reads `*.xlsx` with openpyxl.
+- **The pipeline reads `*.xlsx` with openpyxl**, so the dialog refuses `.csv`, `.tsv`, `.xls` and `.ods`.
 - **Needs a `parameters` cell (not there yet):** its notebooks set `INPUT_DIR` / `OUTDIR` in their
   first cell without the tag, and 02/03 call `example_input_dir()` again. Until that cell is tagged
   and used (asked of the authors, 5 Oct 2026), runs stop with "has no cell tagged parameters".
 - **One workbook is one animal:** PCA and the group figures need at least two.
-- **Without an upload** (not offered by the dialog) the notebooks run on the repository's own 11
-  example workbooks.
 - Verified 2 Oct 2026 with the task image in Docker: all three notebooks in ~9 s on one workbook.
 
 ### Two arm bandit, ASST digging
 
-No analysis repository yet (`repoZipUrl` is empty): they are shown on the site, but the upload
-dialog doesn't offer them. When a repository exists, fill in `repoZipUrl` and add `notebooksDir`
+Shown on the Protocols page; the upload dialog lists them once `repoZipUrl` is set (no analysis
+repository yet). When a repository exists, fill in `repoZipUrl` and add `notebooksDir`
 and — after checking what its code reads — `inputFormats`.
 
-## Adding or changing a protocol
+## Adding a protocol
 
-1. Check what the analysis code really reads (file types, single file vs folder, where it looks)
-   and set `inputFormats` to match, and check its notebooks have the `parameters` cell — don't list formats the code ignores; researchers
-   would only find out minutes into a run.
-2. Run it once from the dialog with the sample file.
+1. **Repository**: the protocol's analysis code on GitHub, in the expected standard
+   ([repository rules](#what-a-protocol-repository-must-look-like)).
+2. **Aggregate dandiset**: on EMBER-DANDI, signed in as `maabcd` (it must own it). Name = the
+   protocol's name, licence CC-BY-4.0, public. Note its id (four-choice: `000607`).
+3. **Files**: images in `src/assets/`, templates zip in `public/protocols_archives/`.
+4. **Entry** in `protocols.json` ([Fields](#fields)). `id` is permanent: it names the workspace
+   tag, the dandiset folder and the run folders.
+5. **This README**: a section under [Per protocol](#per-protocol).
 
-Tunable timings of the run (time limits, polling) are in `../core/runSettings.ts`, not here.
+Run timings are in `../core/runSettings.ts`.

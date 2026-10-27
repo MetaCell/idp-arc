@@ -70,9 +70,21 @@ Unit tests (no browser, no backend):
 yarn test:unit
 ```
 
-Uploads (Scenario 1 of the MAABCD–OSB integration) go from the browser straight to a public bucket
-open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL` (e.g. `https://storage.googleapis.com/maabcd`),
-as `uploads/<protocolId>/<userSub>/<uploadId>/<filename>`. The bucket's CORS must allow PUT from this app's origin.
+Uploads go to one of two places, chosen at build time by `VITE_UPLOAD_BACKEND`: `bucket`, or
+EMBER-DANDI for any other value, including when it isn't set (the default). If the chosen backend
+lacks what it needs (`VITE_EMBER_CLIENT_ID` for EMBER-DANDI, `VITE_UPLOAD_BUCKET_URL` for the
+bucket), the rest of the site works, and signing in to EMBER-DANDI or uploading says uploads aren't
+set up; the console names the missing variable. Either way, OSB imports the file into the
+researcher's workspace from there.
+
+- **`ember`** (default): EMBER-DANDI, into the researcher's own dandiset and the protocol's
+  MAABCD dandiset (`maabcdAggregateDandisetId` in `src/data/protocols.json`). Needs both logins
+  (EMBER-DANDI and OSB), `VITE_EMBER_CLIENT_ID`,
+  an EMBER-DANDI OAuth application (public client, PKCE) with `<this app's origin>/ember-callback`
+  as a redirect URI, and, for the MAABCD copy, the
+  `DANDI_API_KEY` attribute on the OSB user named by `MAABCD_EMBER_USERNAME` (`container.ts`).
+- **`bucket`**: a public bucket open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL`.
+  Its CORS must allow PUT from this app's origin. Needs only the OSB login.
 
 ---
 

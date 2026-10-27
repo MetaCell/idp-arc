@@ -1,3 +1,5 @@
+import { RUN_STEP, type RunStepId } from './types'
+
 /**
  * What the user reads when a run fails: one plain sentence per step. Technical details (HTTP
  * errors, OSB's messages) go to the browser console; the run's own log is in its results folder.
@@ -12,20 +14,51 @@ export class UserFacingError extends Error {
   }
 }
 
-const STEP_FAILED: Record<string, string> = {
-  upload: 'Your file could not be uploaded. Check your connection and try again.',
-  workspace: 'The workspace could not be prepared. Please try again.',
-  repo: 'The analysis code could not be added to the workspace. Please try again.',
-  data: 'Your file could not be added to the workspace. Please try again.',
-  imports: 'The files could not be copied into the workspace. Please try again.',
-  run: 'The analysis did not finish. Open the workspace to see what happened.',
+const STEP_FAILED: Record<RunStepId, string> = {
+  [RUN_STEP.upload]: 'Your file could not be uploaded. Check your connection and try again.',
+  [RUN_STEP.maabcd]: 'Not shared with the MAABCD consortium. Retry to try again.',
+  [RUN_STEP.workspace]: 'The workspace could not be prepared. Please try again.',
+  [RUN_STEP.repo]: 'The analysis code could not be added to the workspace. Please try again.',
+  [RUN_STEP.data]: 'Your file could not be added to the workspace. Please try again.',
+  [RUN_STEP.imports]: 'The files could not be copied into the workspace. Please try again.',
+  [RUN_STEP.run]: 'The analysis did not finish. Open the workspace to see what happened.',
+  [RUN_STEP.doi]: 'Your data could not be published with a DOI. Please try again.',
 }
+
+/** A step a retry skipped because an earlier attempt did it. */
+export const DONE_EARLIER = 'Done earlier'
+
+/** The headline when the run stops at a step; that step's row says why. */
+const STEP_STOPPED: Record<RunStepId, string> = {
+  [RUN_STEP.upload]: "Your file wasn't uploaded",
+  [RUN_STEP.maabcd]: 'Not shared with the MAABCD consortium',
+  [RUN_STEP.workspace]: "The workspace isn't ready",
+  [RUN_STEP.repo]: "The analysis code wasn't added to the workspace",
+  [RUN_STEP.data]: "Your file wasn't added to the workspace",
+  [RUN_STEP.imports]: "The files weren't copied into the workspace",
+  [RUN_STEP.run]: 'The analysis did not complete',
+  [RUN_STEP.doi]: "Your dandiset wasn't published",
+}
+
+/** The run's headline when it stops at `step`, or before any step. */
+export const stoppedMessage = (step?: RunStepId) => (step ? STEP_STOPPED[step] : 'The analysis did not complete')
+
+/** Says the EMBER-DANDI session is missing or over. Deliberately not SIGN_IN_AGAIN's wording,
+ *  which sends the user to the OSB (Keycloak) login instead. */
+export const EMBER_SIGN_IN = 'Please sign in with EMBER-DANDI and try again.'
+
+/** EMBER refuses to publish the dandiset as it is (its metadata or a file); EMBER's editor says what to fix. */
+export const DANDISET_NOT_PUBLISHABLE = "This dandiset can't be published yet. Check on EMBER-DANDI on specific errors."
+
+/** This site's build lacks what the upload needs (the bucket's URL, EMBER's client id): ours to fix. */
+export const UPLOADS_NOT_SET_UP = "Uploads aren't set up on this site yet."
+export const EMBER_LOGIN_NOT_SET_UP = "EMBER-DANDI sign-in isn't set up on this site yet."
 
 /** Says the session has ended; the dialog sends the user to sign in when the text contains it. */
 export const SIGN_IN_AGAIN = 'sign in again'
 
 /** The user's text for an error thrown during `step`. */
-export function userMessage(err: unknown, step?: string): string {
+export function userMessage(err: unknown, step?: RunStepId): string {
   if (err instanceof UserFacingError) return err.message
   // The auth client's "Please sign in again." can come from any step that asks for a token: kept,
   // so the dialog can send the user to sign in instead of suggesting a retry that fails the same way.

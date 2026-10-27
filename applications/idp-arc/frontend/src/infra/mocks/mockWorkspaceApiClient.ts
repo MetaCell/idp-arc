@@ -68,6 +68,11 @@ export class MockWorkspaceApiClient implements IWorkspaceApi {
   private runPolls = 0
   private runCount = 0
 
+  async getWorkspaceOwner(_token: string, workspaceId: number): Promise<string | null> {
+    await delay(100)
+    return MOCK_WORKSPACES.some((w) => Number(w.id) === workspaceId) ? 'mock-user-id' : null
+  }
+
   async getWorkspaceResources(_token: string, _workspaceId: number): Promise<WorkspaceResourceState[]> {
     await delay(200)
     this.imports.forEach((i) => { i.pendingPolls -= 1 })
