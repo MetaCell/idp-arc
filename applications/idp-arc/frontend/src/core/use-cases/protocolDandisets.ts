@@ -1,4 +1,4 @@
-import { VERSION_STATUS, type IDandiDirectApi, type PublishedVersion } from '../ports/IDandiDirectApi'
+import { VERSION_STATUS, type IDandiDirectApi, type PublishedVersion, type VersionStatus } from '../ports/IDandiDirectApi'
 import type { IEmberAuth } from '../ports/IEmberAuth'
 import { protocolLinkId, readProtocolLink, readWorkspaceLink, withProtocolLink, withWorkspaceLink } from '../dandisetLinks'
 import { RUN_SETTINGS } from '../runSettings'
@@ -8,8 +8,8 @@ import { pollUntil } from './runProgress'
 /** The license of the dandisets IDP creates. EMBER publishes no dandiset without one. */
 export const DANDISET_LICENSE = ['spdx:CC-BY-4.0']
 
-/** Statuses a draft can be published from (or, when Published, already was). */
-const PUBLISHABLE: string[] = [VERSION_STATUS.valid, VERSION_STATUS.published]
+/** Draft statuses that end the wait: publish it (Valid), or it already was (Published). */
+const PUBLISHABLE: VersionStatus[] = [VERSION_STATUS.valid, VERSION_STATUS.published]
 
 /** Why a dandiset could not be published, for the console; the user reads the DOI step's message. */
 class PublishError extends Error {
@@ -108,16 +108,16 @@ export function createProtocolDandisetsUseCases(deps: {
    * Waits for EMBER to finish checking the draft and every file in it; the draft's status, or null
    * if `stopped`. Stops at once, with EMBER's reasons for the user, when it can't be published.
    */
-  async function waitUntilPublishable(t: string, dandisetId: string, stopped: () => boolean): Promise<string | null> {
-    let status = ''
+  async function waitUntilPublishable(t: string, dandisetId: string, stopped: () => boolean): Promise<VersionStatus | null> {
+    let status: VersionStatus = VERSION_STATUS.pending
     const ended = await pollUntil(async () => {
-      const readiness = await direct.getPublishReadiness(t, dandisetId)
-      status = readiness.status
+      const draft = await direct.getVersionInfo(t, dandisetId, 'draft')
+      status = draft.status
       // Invalid, or Valid with an invalid file: EMBER would refuse the publish.
-      if (status === VERSION_STATUS.invalid || (status === VERSION_STATUS.valid && readiness.errors.length)) {
-        throw notPublishable(readiness.errors)
+      if (status === VERSION_STATUS.invalid || (status === VERSION_STATUS.valid && draft.errors.length)) {
+        throw notPublishable(draft.errors)
       }
-      return PUBLISHABLE.includes(status) && readiness.filesBeingChecked === 0
+      return PUBLISHABLE.includes(status) && draft.filesBeingChecked === 0
     }, { everyMs: RUN_SETTINGS.publishStatusPollMs, timeoutMs: RUN_SETTINGS.publishDraftValidationTimeoutMs, stopped })
     if (ended === 'timeout') {
       throw new UserFacingError('EMBER-DANDI is still checking your dandiset. Please try again in a few minutes.',

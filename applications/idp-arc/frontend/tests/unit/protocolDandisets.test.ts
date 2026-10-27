@@ -8,7 +8,7 @@ import {
 import { createProtocolDandisetsUseCases, DANDISET_LICENSE } from '../../src/core/use-cases/protocolDandisets'
 import { RUN_SETTINGS } from '../../src/core/runSettings'
 import { DANDISET_NOT_PUBLISHABLE, UserFacingError } from '../../src/core/userMessages'
-import type { IDandiDirectApi } from '../../src/core/ports/IDandiDirectApi'
+import type { IDandiDirectApi, VersionStatus } from '../../src/core/ports/IDandiDirectApi'
 
 const DEV = 'v2dev.opensourcebrain.org'
 const FOUR = { id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/o/r' }
@@ -59,11 +59,11 @@ function fakeEmber(metadata: Record<string, DandisetMetadata>, publishing: {
     async createDandiset(_t, name, m) { created.push({ name, metadata: m }); return '000900' },
     async getDraftMetadata(_t, id) { drafts.push(id); return metadata[id] ?? {} },
     async updateDraftMetadata(_t, id, m) { writes.push({ id, metadata: m }) },
-    async getPublishReadiness() {
+    async getVersionInfo(_t, _id, version) {
       const all = publishing.statuses ?? [{ status: 'Valid' }]
       const s = all[Math.min(statusReads++, all.length - 1)]
       calls.push(`status:${s.status}`)
-      return { status: s.status, errors: s.errors ?? [], filesBeingChecked: s.filesBeingChecked ?? 0 }
+      return { version, status: s.status as VersionStatus, errors: s.errors ?? [], filesBeingChecked: s.filesBeingChecked ?? 0 }
     },
     async publishDraft(_t, id) { calls.push(`publish:${id}`) },
     async getLatestPublished() {

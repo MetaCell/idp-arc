@@ -19,7 +19,7 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
     async createDandiset() { throw new Error('created through the protocol use case') },
     async getDraftMetadata() { return {} },
     async updateDraftMetadata() {},
-    async getPublishReadiness() { return { status: 'Valid', errors: [], filesBeingChecked: 0 } },
+    async getVersionInfo() { return { version: 'draft', status: 'Valid', errors: [], filesBeingChecked: 0 } },
     async publishDraft() {},
     async getLatestPublished() { return null },
     async initUpload(token, dandisetId) {

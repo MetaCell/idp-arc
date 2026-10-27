@@ -50,28 +50,33 @@ export interface OwnDandiset {
 }
 
 /**
- * DANDI's status of a dandiset version (its `status` field), as read for the draft before
- * publishing. Only the values IDP acts on; while EMBER is still checking the draft it reports
- * others (`Pending`, `Validating`), and `Publishing` while a publish is under way.
- * A version status, not a draft status: in DANDI the draft is itself a version (`"draft"`), and
- * its status can be `Published` (identical to the last published version).
+ * DANDI's status of a dandiset version (its `status` field), exactly as EMBER's API defines it.
+ * The draft is a version (`draft`), as is each published one (`0.YYMMDD.HHMM`). The draft:
+ * - starts `Pending`, and goes back to `Pending` after every change (an upload, a metadata edit);
+ * - is checked by EMBER in the background: `Pending` → `Validating` → `Valid` or `Invalid`;
+ * - can be published only when `Valid` and every file in it has been checked: `Publishing`, then
+ *   `Published` (identical to the version that publish created, until the next change).
  */
 export const VERSION_STATUS = {
-  /** EMBER has checked the draft and it can be published. */
+  pending: 'Pending',
+  validating: 'Validating',
   valid: 'Valid',
-  /** It can't be published; `errors` says why. */
+  /** Can't be published as it is; `errors` says why. */
   invalid: 'Invalid',
-  /** Nothing changed since the last published version: nothing new to publish. */
+  publishing: 'Publishing',
+  /** For the draft: unchanged since the last published version, so nothing new to publish. */
   published: 'Published',
 } as const
 
-/**
- * Whether the draft can be published yet. EMBER re-checks the draft in the background after every
- * change (an upload, a metadata edit) and accepts a publish only once it is `Valid`.
- */
-export interface PublishReadiness {
-  /** The draft's VERSION_STATUS, or a status EMBER reports while it is still checking. */
-  status: string
+/** A version's state: one of VERSION_STATUS. */
+export type VersionStatus = (typeof VERSION_STATUS)[keyof typeof VERSION_STATUS]
+
+/** A version of a dandiset, as EMBER reports it: which one, its state, and what stops it from
+ *  being published. */
+export interface DandisetVersion {
+  /** `draft`, or a published version (`0.YYMMDD.HHMM`). */
+  version: string
+  status: VersionStatus
   /** Why it can't be published, one line per problem: the dandiset's metadata, or a file's. */
   errors: string[]
   /** Files EMBER hasn't checked yet. Publishing needs every file checked, even on a `Valid` draft. */
@@ -103,8 +108,9 @@ export interface IDandiDirectApi {
    *  writable; a published version is a frozen snapshot of it. */
   updateDraftMetadata(token: string, dandisetId: string, metadata: DandisetMetadata): Promise<void>
 
-  /** `GET /dandisets/{id}/versions/draft/info/`: whether the draft can be published yet. */
-  getPublishReadiness(token: string, dandisetId: string): Promise<PublishReadiness>
+  /** `GET /dandisets/{id}/versions/{version}/info/`: the version (`draft`, or a published one) and
+   *  its state. */
+  getVersionInfo(token: string, dandisetId: string, version: string): Promise<DandisetVersion>
 
   /** `POST /dandisets/{id}/versions/draft/publish/`: starts publishing the draft as a new
    *  version. EMBER finishes it in the background. */

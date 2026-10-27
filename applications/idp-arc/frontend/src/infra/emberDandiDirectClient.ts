@@ -2,7 +2,8 @@ import type { DandisetMetadata } from '../core/dandisetLinks'
 import type {
   DirectFinalizeInput,
   DirectInitResult,
-  PublishReadiness,
+  DandisetVersion,
+  VersionStatus,
   IDandiDirectApi,
   OwnDandiset,
   PublishedVersion,
@@ -106,14 +107,15 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
     if (!res.ok) await this.fail(res, 'draft metadata update')
   }
 
-  async getPublishReadiness(token: string, dandisetId: string): Promise<PublishReadiness> {
-    const res = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/versions/draft/info/`, {
+  async getVersionInfo(token: string, dandisetId: string, version: string): Promise<DandisetVersion> {
+    const res = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/versions/${encodeURIComponent(version)}/info/`, {
       headers: this.headers(token),
     })
-    if (!res.ok) await this.fail(res, 'publish readiness read')
+    if (!res.ok) await this.fail(res, 'version info read')
     type Problem = { field?: string; path?: string; message: string }
     const body = (await res.json()) as {
-      status: string
+      version?: string
+      status: VersionStatus
       version_validation_errors?: Problem[]
       asset_validation_errors?: Problem[]
     }
@@ -123,7 +125,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
     const assetProblems = body.asset_validation_errors ?? []
     const errors = [...(body.version_validation_errors ?? []), ...assetProblems.filter((e) => !beingChecked(e))]
       .map((e) => [e.path || e.field, e.message].filter(Boolean).join(': '))
-    return { status: body.status, errors, filesBeingChecked: assetProblems.filter(beingChecked).length }
+    return { version: body.version ?? version, status: body.status, errors, filesBeingChecked: assetProblems.filter(beingChecked).length }
   }
 
   async publishDraft(token: string, dandisetId: string): Promise<void> {
