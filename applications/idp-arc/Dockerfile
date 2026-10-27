@@ -22,7 +22,10 @@ FROM nginxinc/nginx-unprivileged:stable-alpine
 USER root
 RUN rm -rf /usr/share/nginx/html/*
 COPY --from=build --chown=101:101 /app/dist/ /usr/share/nginx/html/
-COPY --chown=101:101 deploy/resources/default.conf /etc/nginx/conf.d/default.conf
+# The image's entrypoint renders templates into conf.d at start; the local-resolvers flag gives the
+# template the pod's DNS servers so the EMBER proxy can resolve at request time (see default.conf).
+COPY --chown=101:101 deploy/resources/default.conf /etc/nginx/templates/default.conf.template
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
 USER 101
 
 EXPOSE 8080
