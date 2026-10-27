@@ -590,6 +590,23 @@ test('notebooks already submitted when the page went are followed, not submitted
   assert.equal(count(f.calls, 'import:g'), 1, 'nothing imported again')
 })
 
+test('the dandiset\'s recorded workspace is used while it is still the user\'s, else a new one is made', async () => {
+  const kept = fakes()
+  const reused = (await run(kept, { file: data, workspaceId: 7 })).at(-1)!
+  assert.equal(reused.phase, 'succeeded', reused.error)
+  assert.equal(reused.workspaceId, 7)
+  assert.equal(count(kept.calls, 'create'), 0)
+
+  for (const owner of [null, 'someone-else']) {
+    const f = fakes()
+    f.api.getWorkspaceOwner = async () => owner
+    const last = (await run(f, { file: data, workspaceId: 7 })).at(-1)!
+    assert.equal(last.phase, 'succeeded', last.error)
+    assert.equal(last.workspaceId, 42, `owner ${owner}: a new workspace`)
+    assert.equal(count(f.calls, 'create'), 1)
+  }
+})
+
 test('a run picked up again whose workspace was deleted says so', async () => {
   const f = fakes()
   failFirst(f, 'importResource', 1, (_t, input) => input.resourceType === 'e')

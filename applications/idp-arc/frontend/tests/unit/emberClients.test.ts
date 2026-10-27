@@ -110,6 +110,12 @@ test('the dandiset list reads as many pages as EMBER\'s count says, through the 
   assert.match(requests[1].url, /page_size=100&page=2$/)
 })
 
+test('a search is passed to EMBER, encoded, on every page', async () => {
+  const requests = recordFetch(() => ({ json: { count: 1, results: [{ identifier: '000001' }] } }))
+  await new EmberDandiDirectClient('/ember-proxy').listOwnDandisets('ember-token', 'idp-protocol:four-choice-reversal')
+  assert.match(requests[0].url, /&search=idp-protocol%3Afour-choice-reversal&/)
+})
+
 test('one page when the count fits in it, none more for an empty account', async () => {
   let requests = recordFetch(() => ({ json: { count: 1, results: [{ identifier: '000001' }] } }))
   await new EmberDandiDirectClient('/ember-proxy').listOwnDandisets('ember-token')

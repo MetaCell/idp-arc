@@ -15,6 +15,9 @@ export type DandisetMetadata = Record<string, unknown>
 const PROTOCOL_PREFIX = 'idp-protocol:'
 const WORKSPACE_PREFIX = 'osb-workspace'
 
+/** The identifier of a protocol's link, as recorded in the metadata (and found by EMBER's search). */
+export const protocolLinkId = (protocolId: string) => `${PROTOCOL_PREFIX}${protocolId}`
+
 interface Resource {
   identifier?: unknown
   [key: string]: unknown
@@ -60,7 +63,7 @@ export function withProtocolLink(
 ): DandisetMetadata {
   return withEntry(metadata, PROTOCOL_PREFIX, {
     schemaKey: 'Resource',
-    identifier: `${PROTOCOL_PREFIX}${protocol.id}`,
+    identifier: protocolLinkId(protocol.id),
     name: `IDP protocol: ${protocol.name}`,
     ...(protocol.url ? { url: protocol.url } : {}),
     relation: 'dcite:IsDescribedBy',

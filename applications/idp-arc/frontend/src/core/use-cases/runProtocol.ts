@@ -325,15 +325,19 @@ export function createRunProtocolUseCase(
     /** Step 2. */
     async function prepareWorkspace(): Promise<number> {
       progress.start(RUN_STEP.workspace, 'workspace', 'Getting the workspace ready…')
-      const existing = checkpoint.workspaceId ?? input.workspaceId
       // A run picked up again (perhaps days later): its workspace may have been deleted since.
-      if (checkpoint.workspaceId !== undefined
-        && !(await workspaceApi.getWorkspaceOwner(await token(), checkpoint.workspaceId))) {
-        throw new UserFacingError('The workspace for this run no longer exists. Please start a new upload.')
-      }
-      if (existing !== undefined) {
+      if (checkpoint.workspaceId !== undefined) {
+        if (!(await workspaceApi.getWorkspaceOwner(await token(), checkpoint.workspaceId))) {
+          throw new UserFacingError('The workspace for this run no longer exists. Please start a new upload.')
+        }
         progress.done(RUN_STEP.workspace, undefined, 'Workspace ready')
-        return existing
+        return checkpoint.workspaceId
+      }
+      // The dandiset's recorded workspace, while it is still the researcher's; else a new one.
+      if (input.workspaceId !== undefined
+        && (await workspaceApi.getWorkspaceOwner(await token(), input.workspaceId)) === auth.tokenParsed?.sub) {
+        progress.done(RUN_STEP.workspace, undefined, 'Workspace ready')
+        return input.workspaceId
       }
       const id = await workspaceApi.createWorkspace(await token(), input.workspaceName, [`maabcd:${protocol.id}`])
       progress.workspaceId = id

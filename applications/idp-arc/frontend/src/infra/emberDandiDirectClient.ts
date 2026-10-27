@@ -48,16 +48,17 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
     throw new Error(`EMBER ${what} failed (HTTP ${res.status}): ${body.slice(0, 300)}`)
   }
 
-  async listOwnDandisets(token: string): Promise<OwnDandiset[]> {
+  async listOwnDandisets(token: string, search?: string): Promise<OwnDandiset[]> {
     // `empty=true` keeps a dandiset that has no assets yet in the list; embargoed ones need
     // `embargoed=true` (see ALLOW_EMBARGOED).
     const embargoed = ALLOW_EMBARGOED ? '&embargoed=true' : ''
+    const searched = search ? `&search=${encodeURIComponent(search)}` : ''
     const dandisets: OwnDandiset[] = []
     // Page by page until we have as many as EMBER's `count` says.
     let total = Infinity
     for (let page = 1; dandisets.length < total; page++) {
       const res = await fetch(
-        `${this.baseUrl}/api/dandisets/?user=me${embargoed}&empty=true&page_size=${DANDISET_PAGE_SIZE}&page=${page}`,
+        `${this.baseUrl}/api/dandisets/?user=me${embargoed}${searched}&empty=true&page_size=${DANDISET_PAGE_SIZE}&page=${page}`,
         { headers: this.headers(token) },
       )
       if (!res.ok) await this.fail(res, 'dandiset list')

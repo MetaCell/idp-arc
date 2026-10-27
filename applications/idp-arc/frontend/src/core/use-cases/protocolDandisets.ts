@@ -1,6 +1,6 @@
 import { VERSION_STATUS, type IDandiDirectApi, type PublishedVersion } from '../ports/IDandiDirectApi'
 import type { IEmberAuth } from '../ports/IEmberAuth'
-import { readProtocolLink, readWorkspaceLink, withProtocolLink, withWorkspaceLink, type DandisetMetadata } from '../dandisetLinks'
+import { protocolLinkId, readProtocolLink, readWorkspaceLink, withProtocolLink, withWorkspaceLink } from '../dandisetLinks'
 import { RUN_SETTINGS } from '../runSettings'
 import { DANDISET_NOT_PUBLISHABLE, EMBER_SIGN_IN, UserFacingError } from '../userMessages'
 import { pollUntil } from './runProgress'
@@ -22,8 +22,6 @@ class PublishError extends Error {
 export interface ProtocolDandiset {
   id: string
   name: string
-  /** The OSB workspace recorded in its metadata, when the researcher still has it. */
-  workspaceId?: number
 }
 
 export interface ProtocolRef {
@@ -54,32 +52,21 @@ export function createProtocolDandisetsUseCases(deps: {
   }
 
   /**
-   * The researcher's dandisets recorded for `protocolId`, each with its workspace. One metadata
-   * read per dandiset they own (EMBER's list carries no metadata). A workspace link is kept only
-   * when `ownsWorkspace` says the workspace is still the researcher's (not deleted, not someone
-   * else's); otherwise a new one is made. It is asked once per recorded workspace, so how many
-   * workspaces they have doesn't matter.
+   * The researcher's dandisets recorded for `protocolId`, in one list call: EMBER's search also
+   * matches the metadata, where the protocol link is. No metadata is read here; the selected
+   * dandiset's workspace is (recordedWorkspace).
    */
-  async function listForProtocol(protocolId: string, ownsWorkspace: (workspaceId: number) => Promise<boolean>): Promise<ProtocolDandiset[]> {
-    const t = token()
-    const own = await direct.listOwnDandisets(t)
-    const read = await Promise.all(own.map(async (d) => {
-      try {
-        return { d, metadata: await direct.getDraftMetadata(t, d.id) }
-      } catch (err) {
-        console.warn(`Could not read the metadata of dandiset ${d.id}`, err)
-        return null
-      }
-    }))
-    const forProtocol = read
-      .filter((r): r is { d: (typeof own)[number]; metadata: DandisetMetadata } => !!r && readProtocolLink(r.metadata) === protocolId)
-      .map(({ d, metadata }) => ({ d, linked: readWorkspaceLink(metadata, osbDomain) }))
-    // Several dandisets can record the same workspace: each is checked once.
-    const owned = new Map<number, Promise<boolean>>()
-    for (const { linked } of forProtocol) if (linked && !owned.has(linked)) owned.set(linked, ownsWorkspace(linked))
-    return Promise.all(forProtocol.map(async ({ d, linked }) => ({
-      id: d.id, name: d.name, ...(linked && await owned.get(linked) ? { workspaceId: linked } : {}),
-    })))
+  async function listForProtocol(protocolId: string): Promise<ProtocolDandiset[]> {
+    return direct.listOwnDandisets(token(), protocolLinkId(protocolId))
+  }
+
+  /**
+   * The workspace recorded in the dandiset, when it is really `protocolId`'s (the search also
+   * matches a longer protocol id). Whether the researcher still has it, the run checks.
+   */
+  async function recordedWorkspace(dandisetId: string, protocolId: string): Promise<number | undefined> {
+    const metadata = await direct.getDraftMetadata(token(), dandisetId)
+    return readProtocolLink(metadata) === protocolId ? readWorkspaceLink(metadata, osbDomain) : undefined
   }
 
   /** A new dandiset in the researcher's account, recorded for `protocol`. */
@@ -163,7 +150,7 @@ export function createProtocolDandisetsUseCases(deps: {
     return latest
   }
 
-  return { listForProtocol, createForProtocol, recordWorkspace, publish }
+  return { listForProtocol, recordedWorkspace, createForProtocol, recordWorkspace, publish }
 }
 
 export type ProtocolDandisets = ReturnType<typeof createProtocolDandisetsUseCases>

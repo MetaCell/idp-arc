@@ -88,8 +88,9 @@ export interface PublishedVersion {
 }
 
 export interface IDandiDirectApi {
-  /** `GET /dandisets/?user=me`: every dandiset this account owns, empty ones included. */
-  listOwnDandisets(token: string): Promise<OwnDandiset[]>
+  /** `GET /dandisets/?user=me`: every dandiset this account owns, empty ones included; with
+   *  `search`, only those EMBER's search matches (it also looks in the metadata). */
+  listOwnDandisets(token: string, search?: string): Promise<OwnDandiset[]>
 
   /** `POST /dandisets/`: creates a public dandiset and returns its identifier. `metadata` is
    *  merged into the default (a description). */

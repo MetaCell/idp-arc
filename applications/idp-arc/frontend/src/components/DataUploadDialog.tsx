@@ -21,7 +21,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
-import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
+import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, recordedWorkspace, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
 import { EMBER_SIGN_IN, UserFacingError, userMessage } from '../core/userMessages'
 import { withRunLock } from './runStorage'
 import { INITIAL_FORM, restoreSession, session } from './uploadSession'
@@ -76,6 +76,9 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const emberSignedIn = !usesEmber || emberAuth.isConnected()
   const [protocolDandisets, setProtocolDandisets] = useState<ProtocolDandiset[] | null>(null)
   const [dandisetsError, setDandisetsError] = useState('')
+  // The selected dandiset's workspace is being read: Next waits for it.
+  const [findingWorkspace, setFindingWorkspace] = useState(false)
+  const workspaceLookup = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const user = typeof tokenParsed?.sub === 'string' ? tokenParsed.sub : null
 
@@ -130,6 +133,19 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
   // The chosen protocol's dandisets; the first is preselected, with its workspace.
   const protocolId = runnableProtocols.find((p) => p.name === protocol)?.id
+
+  /** Selects a dandiset and reads its recorded workspace (this one only); none: a new one is made. */
+  const selectDandiset = (id: string) => {
+    setForm((prev) => ({ ...prev, dandisetId: id, spawnedWorkspaceId: undefined }))
+    const lookup = ++workspaceLookup.current
+    if (!id || !protocolId) return setFindingWorkspace(false)
+    setFindingWorkspace(true)
+    recordedWorkspace(id, protocolId)
+      .then((workspaceId) => setForm((prev) => (prev.dandisetId === id ? { ...prev, spawnedWorkspaceId: workspaceId } : prev)))
+      .catch((err: unknown) => console.warn(`Could not read dandiset ${id}'s workspace; the run will make a new one`, err))
+      .finally(() => { if (workspaceLookup.current === lookup) setFindingWorkspace(false) })
+  }
+
   useEffect(() => {
     setProtocolDandisets(null)
     setDandisetsError('')
@@ -141,8 +157,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
         setProtocolDandisets(list)
         // Only while choosing: reopening on a run (also one back here for the EMBER-DANDI sign-in)
         // must not change its dandiset or workspace.
-        setForm((prev) => (prev.step !== 'select' || prev.checkpoint?.protocolId === protocolId ? prev
-          : { ...prev, dandisetId: list[0]?.id ?? '', spawnedWorkspaceId: list[0]?.workspaceId }))
+        const prev = session.get()
+        if (prev.step === 'select' && prev.checkpoint?.protocolId !== protocolId) selectDandiset(list[0]?.id ?? '')
       })
       .catch((err: unknown) => {
         console.error('Could not list the EMBER-DANDI dandisets', err)
@@ -151,14 +167,12 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
         setDandisetsError('Your dandisets could not be listed; a new one will be created.')
       })
     return () => { current = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, usesEmber, emberSignedIn, protocolId])
 
   /** Messages in the dandiset section: the dialog's own 14px Inter, quieter than labels. */
   const noteText = { fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px', color: '#FFFFFF99' }
 
-  const chooseDandiset = (id: string) => setForm((prev) => ({
-    ...prev, dandisetId: id, spawnedWorkspaceId: protocolDandisets?.find((d) => d.id === id)?.workspaceId,
-  }))
 
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -293,7 +307,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     <Button size="small" variant="outlined" onClick={() => (isNonBlocking(s.id) ? retryNonBlockingRow(s.id) : handleUpload())}>Retry</Button>]))
 
   const stepIndex = step === 'select' ? 0 : 1
-  const canGoNext = !!protocol && (!usesEmber || (emberSignedIn && protocolDandisets !== null))
+  const canGoNext = !!protocol && (!usesEmber || (emberSignedIn && protocolDandisets !== null && !findingWorkspace))
   const canUpload = !!file && !fileProblem && emberSignedIn
 
   return (
@@ -436,12 +450,12 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                         fullWidth
                         displayEmpty
                         value={dandisetId}
-                        onChange={(e) => chooseDandiset(e.target.value)}
+                        onChange={(e) => selectDandiset(e.target.value)}
                         sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: '22px' }}
                       >
                         {protocolDandisets.map((d) => (
                           <MenuItem key={d.id} value={d.id} sx={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>
-                            {d.name} ({d.id}){d.workspaceId !== undefined ? ` · workspace ${d.workspaceId}` : ' · new workspace'}
+                            {d.name} ({d.id})
                           </MenuItem>
                         ))}
                         <MenuItem value="" sx={{ fontFamily: 'Inter, sans-serif', fontSize: '14px' }}>Create a new dandiset and workspace</MenuItem>

@@ -46,14 +46,18 @@ function fakeEmber(metadata: Record<string, DandisetMetadata>, publishing: {
   versions?: ({ version: string; doi?: string; url?: string } | null)[]
 } = {}) {
   const calls: string[] = []
+  const drafts: string[] = []
   let statusReads = 0
   let versionReads = 0
   const writes: { id: string; metadata: DandisetMetadata }[] = []
   const created: { name: string; metadata?: DandisetMetadata }[] = []
   const direct: IDandiDirectApi = {
-    async listOwnDandisets() { return Object.keys(metadata).map((id) => ({ id, name: `set ${id}` })) },
+    async listOwnDandisets(_t, search) {
+      calls.push(`list:${search ?? ''}`)
+      return Object.keys(metadata).map((id) => ({ id, name: `set ${id}` }))
+    },
     async createDandiset(_t, name, m) { created.push({ name, metadata: m }); return '000900' },
-    async getDraftMetadata(_t, id) { return metadata[id] ?? {} },
+    async getDraftMetadata(_t, id) { drafts.push(id); return metadata[id] ?? {} },
     async updateDraftMetadata(_t, id, m) { writes.push({ id, metadata: m }) },
     async getPublishReadiness() {
       const all = publishing.statuses ?? [{ status: 'Valid' }]
@@ -73,38 +77,29 @@ function fakeEmber(metadata: Record<string, DandisetMetadata>, publishing: {
   const uc = createProtocolDandisetsUseCases({
     emberAuth: { getToken: () => 'ember-token' }, direct, osbDomain: DEV, workspaceUrl: (id) => `https://ws/${id}`,
   })
-  return { uc, writes, created, calls }
+  return { uc, writes, created, calls, drafts }
 }
 
-test('lists only the dandisets recorded for the protocol, with the workspaces the user still has', async () => {
-  const { uc } = fakeEmber({
-    '000001': withWorkspaceLink(withProtocolLink({}, FOUR), DEV, 42, 'u'),
-    '000002': withWorkspaceLink(withProtocolLink({}, FOUR), DEV, 99, 'u'), // workspace gone
-    '000003': withProtocolLink({}, { id: 'asst', name: 'ASST' }),
-    '000004': {}, // not an IDP dandiset
-  })
+test('the protocol\'s dandisets come from one search for its link, with no metadata read', async () => {
+  const { uc, calls, drafts } = fakeEmber({ '000001': withProtocolLink({}, FOUR) })
 
-  const asked: number[] = []
-  const list = await uc.listForProtocol('four-choice-reversal', async (id) => { asked.push(id); return id === 42 })
-
-  assert.deepEqual(list, [
-    { id: '000001', name: 'set 000001', workspaceId: 42 },
-    { id: '000002', name: 'set 000002' },
-  ])
-  // Only the protocol's recorded workspaces are checked, not every workspace the user has.
-  assert.deepEqual(asked.sort(), [42, 99])
+  assert.deepEqual(await uc.listForProtocol('four-choice-reversal'), [{ id: '000001', name: 'set 000001' }])
+  assert.deepEqual(calls, ['list:idp-protocol:four-choice-reversal'])
+  assert.deepEqual(drafts, [])
 })
 
-test('a workspace recorded in several dandisets is checked once', async () => {
-  const { uc } = fakeEmber({
+test('the selected dandiset\'s workspace is read from its own metadata, only for its protocol', async () => {
+  const { uc, drafts } = fakeEmber({
     '000001': withWorkspaceLink(withProtocolLink({}, FOUR), DEV, 42, 'u'),
-    '000002': withWorkspaceLink(withProtocolLink({}, FOUR), DEV, 42, 'u'),
+    '000002': withProtocolLink({}, FOUR), // no workspace yet
+    '000003': withWorkspaceLink(withProtocolLink({}, { id: 'four-choice-reversal-v2', name: 'v2' }), DEV, 7, 'u'),
   })
-  const asked: number[] = []
-  const list = await uc.listForProtocol('four-choice-reversal', async (id) => { asked.push(id); return true })
 
-  assert.deepEqual(list.map((d) => d.workspaceId), [42, 42])
-  assert.deepEqual(asked, [42])
+  assert.equal(await uc.recordedWorkspace('000001', 'four-choice-reversal'), 42)
+  assert.equal(await uc.recordedWorkspace('000002', 'four-choice-reversal'), undefined)
+  // The search also matches a longer protocol id: its workspace is not this protocol's.
+  assert.equal(await uc.recordedWorkspace('000003', 'four-choice-reversal'), undefined)
+  assert.deepEqual(drafts, ['000001', '000002', '000003'])
 })
 
 test('a new dandiset is created already recorded for its protocol', async () => {

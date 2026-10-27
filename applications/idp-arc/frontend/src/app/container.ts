@@ -98,14 +98,13 @@ export const createWorkspace = createCreateWorkspaceUseCase(authClient, workspac
  * through OSB, and runs the notebooks in OSB's Argo task. */
 export const runProtocol = createRunProtocolUseCase(authClient, workspaceApi, objectStore)
 
-/** The researcher's EMBER-DANDI dandisets for a protocol, each with the workspace it runs in when
- *  they still have it: what the upload dialog offers once a protocol is chosen. */
-export async function listProtocolDandisets(protocolId: string): Promise<ProtocolDandiset[]> {
-  const token = await authClient.getToken()
-  const me = authClient.tokenParsed?.sub
-  return protocolDandisets.listForProtocol(protocolId,
-    async (workspaceId) => !!me && (await workspaceApi.getWorkspaceOwner(token, workspaceId)) === me)
-}
+/** The researcher's EMBER-DANDI dandisets for a protocol: what the upload dialog offers once a
+ *  protocol is chosen. */
+export const listProtocolDandisets = (protocolId: string): Promise<ProtocolDandiset[]> => protocolDandisets.listForProtocol(protocolId)
+
+/** The OSB workspace recorded in the selected dandiset, read once it is selected. */
+export const recordedWorkspace = (dandisetId: string, protocolId: string): Promise<number | undefined> =>
+  protocolDandisets.recordedWorkspace(dandisetId, protocolId)
 export type { ProtocolDandiset }
 
 /** Publishes the researcher's dandiset as a new version, for its DOI; only when they ask for it. */
