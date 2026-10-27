@@ -20,7 +20,7 @@
     },
     {
       "title": "Use your data in Open Source Brain",
-      "desc": "Explore and analyze community data and your uploaded data with our integration with Open Source Brain (OSB). OSB lets you use interactive visualizations and powerful analysis tools with Jupyterlab, NetPyNE and NWB Explorer.",
+      "desc": "Explore and analyze your uploaded data in Open Source Brain (OSB), with interactive visualizations and analysis tools: JupyterLab, NetPyNE and NWB Explorer.",
       "cta": "Go to Open Source Brain",
       "ctaPath": "https://www.opensourcebrain.org/"
     }
@@ -42,7 +42,7 @@
   },
   "uploadFeatureBucket": {
     "title": "Upload your data",
-    "desc": "Share your experimental results with the research community. Sign in to upload your data and analyse it in Open Source Brain."
+    "desc": "Share your experimental results with the research community. Sign in to upload your data and analyze it in Open Source Brain."
   },
   "nav": {
     "logoTitle": "MAABCD Platform",
@@ -74,11 +74,11 @@
     "title": "Login",
     "subtitle": "Login or sign up to view or upload data.",
     "notice": "Login to both is required to upload & view your data.",
-    "noticeOsbOnly": "Login to Open Source Brain is required to upload and analyse your data.",
+    "noticeOsbOnly": "Login to Open Source Brain is required to upload and analyze your data.",
     "emberTitle": "EMBER-DANDI",
     "emberDescription": "Upload your data in EMBER-DANDI",
     "osbTitle": "Open Source Brain",
-    "osbDescription": "Explore and analyze your uploaded data and community data with our integration with Open Source Brain (OSB).",
+    "osbDescription": "Run the protocol's analysis on your uploaded data, in your own Open Source Brain (OSB) workspace.",
     "login": "Login",
     "signedIn": "Signed in",
     "loggedIn": "Logged in",

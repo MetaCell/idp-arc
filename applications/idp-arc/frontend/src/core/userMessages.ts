@@ -25,15 +25,30 @@ const STEP_FAILED: Record<RunStepId, string> = {
   [RUN_STEP.doi]: 'Your data could not be published with a DOI. Please try again.',
 }
 
+/** A step a retry skipped because an earlier attempt did it. */
+export const DONE_EARLIER = 'Done earlier'
+
+/** The headline when the run stops at a step; that step's row says why. */
+const STEP_STOPPED: Record<RunStepId, string> = {
+  [RUN_STEP.upload]: "Your file wasn't uploaded",
+  [RUN_STEP.maabcd]: 'Not shared with the MAABCD consortium',
+  [RUN_STEP.workspace]: "The workspace isn't ready",
+  [RUN_STEP.repo]: "The analysis code wasn't added to the workspace",
+  [RUN_STEP.data]: "Your file wasn't added to the workspace",
+  [RUN_STEP.imports]: "The files weren't copied into the workspace",
+  [RUN_STEP.run]: 'The analysis did not complete',
+  [RUN_STEP.doi]: "Your dandiset wasn't published",
+}
+
+/** The run's headline when it stops at `step`, or before any step. */
+export const stoppedMessage = (step?: RunStepId) => (step ? STEP_STOPPED[step] : 'The analysis did not complete')
+
 /** Says the EMBER-DANDI session is missing or over. Deliberately not SIGN_IN_AGAIN's wording,
  *  which sends the user to the OSB (Keycloak) login instead. */
 export const EMBER_SIGN_IN = 'Please sign in with EMBER-DANDI and try again.'
 
 /** EMBER refuses to publish the dandiset as it is (its metadata or a file); EMBER's editor says what to fix. */
 export const DANDISET_NOT_PUBLISHABLE = "This dandiset can't be published yet. Check on EMBER-DANDI on specific errors."
-
-/** A run picked up after a reload whose upload hadn't finished: the browser no longer has the file. */
-export const finishUploadMessage = (fileName: string) => `Choose ${fileName} again to finish uploading it.`
 
 /** This site's build lacks what the upload needs (the bucket's URL, EMBER's client id): ours to fix. */
 export const UPLOADS_NOT_SET_UP = "Uploads aren't set up on this site yet."

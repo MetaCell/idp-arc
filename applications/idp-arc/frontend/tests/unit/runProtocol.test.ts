@@ -174,6 +174,16 @@ test('a failed upload marks only the upload step failed', async () => {
   // The user reads plain words; the 403 goes to the console.
   assert.equal(last.error, 'Your file could not be uploaded. Check your connection and try again.')
   assert.deepEqual(last.steps.filter((s) => s.state === 'failed').map((s) => s.id), ['upload'])
+  // The headline names the step; the row says why, not its last progress.
+  assert.equal(last.message, "Your file wasn't uploaded")
+  assert.equal(last.steps.find((s) => s.id === 'upload')?.detail, last.error)
+})
+
+test('a failure before any step keeps the general headline', async () => {
+  const last = (await run(fakes(), { file: new File([''], 'animal_01.xlsx') })).at(-1)!
+  assert.equal(last.phase, 'failed')
+  assert.equal(last.message, 'The analysis did not complete')
+  assert.equal(last.steps.some((s) => s.state === 'failed'), false)
 })
 
 test('the run is followed through the workspace\'s placeholder: running while listed, finished once gone', async () => {
@@ -379,7 +389,7 @@ test('a failed MAABCD copy fails only its own step; its Retry makes only the cop
   const runs = count(f.calls, 'run')
   const retried: RunState[] = []
   await createRunProtocolUseCase(auth, f.api, store)(
-    { ...shared(), workspaceId: last.workspaceId, resume: last.checkpoint, finishedRun: last.steps }, (s) => retried.push(s))
+    { ...shared(), workspaceId: last.workspaceId, resume: last.checkpoint, retryNonBlockingOf: last.steps }, (s) => retried.push(s))
   assert.equal(maabcdStep(retried.at(-1))?.state, 'succeeded')
   assert.equal(retried.at(-1)?.checkpoint?.maabcdShared, true)
   assert.deepEqual(retried.at(-1)?.steps.filter((s) => s.id !== 'maabcd'), last.steps.filter((s) => s.id !== 'maabcd'),

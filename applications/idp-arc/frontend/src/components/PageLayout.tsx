@@ -154,7 +154,8 @@ export default function PageLayout({
   useEffect(() => {
     if (savedRunOffered || typeof user !== 'string' || loginDialogOpen) return
     savedRunOffered = true
-    if (loadRun(user)) void openUploadOrLogin()
+    // Only a run cut off while it was going; a stopped or finished one waits for Data upload.
+    if (loadRun<{ step?: string }>(user)?.step === 'uploading') void openUploadOrLogin()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loginDialogOpen])
 

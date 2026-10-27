@@ -6,7 +6,7 @@ import { formatBytes } from '../formatBytes'
 import { inputFileProblem } from '../inputFormats'
 import { parseRepoZipUrl, repoPage } from '../protocolRepo'
 import { RUN_SETTINGS } from '../runSettings'
-import { UserFacingError, userMessage } from '../userMessages'
+import { DONE_EARLIER, UserFacingError, userMessage } from '../userMessages'
 import { workspaceLayout } from '../workspaceLayout'
 import { inStep, pollUntil, RunProgress, type OnRunState } from './runProgress'
 
@@ -49,18 +49,16 @@ export interface RunProtocolInput {
   shareWithMaabcd?: boolean
   /** From an earlier attempt that stopped: the run carries on from there when canResume allows. */
   resume?: RunCheckpoint
-  /** The checklist of a run that finished: only its failed non-blocking steps run again, on it. */
-  finishedRun?: RunStep[]
+  /** A checklist as last shown: only its failed non-blocking steps run again, on it (their Retry). */
+  retryNonBlockingOf?: RunStep[]
 }
+
+/** Steps whose failure doesn't stop the run: each has a Retry of its own, any time. */
+export const isNonBlocking = (id: RunStepId) => id === RUN_STEP.maabcd
 
 /** Names a file well enough to tell it is the same one again: name, size, last modified. */
 export function fileKey(file?: File | null): string | null {
   return file ? `${file.name}|${file.size}|${file.lastModified}` : null
-}
-
-/** The file name in a fileKey. */
-export function fileKeyName(key?: string | null): string {
-  return key?.split('|')[0] || 'your file'
 }
 
 /**
@@ -155,8 +153,8 @@ export function createRunProtocolUseCase(
   const steps = STEPS.filter((s) => s.id !== RUN_STEP.maabcd || !!objectStore.shareWithMaabcd)
 
   return async function runProtocol(input: RunProtocolInput, report: OnRunState, abortRef?: { current: boolean }): Promise<void> {
-    const { protocol, file, finishedRun } = input
-    const progress = new RunProgress(report, finishedRun ?? steps.map((s) => ({ ...s, state: 'pending' })), input.workspaceId)
+    const { protocol, file, retryNonBlockingOf } = input
+    const progress = new RunProgress(report, retryNonBlockingOf ?? steps.map((s) => ({ ...s, state: 'pending' })), input.workspaceId)
     const stopped = () => !!abortRef?.current
     const checkpoint: RunCheckpoint = canResume(input.resume, input)
       ? { ...input.resume }
@@ -169,9 +167,9 @@ export function createRunProtocolUseCase(
     save({})
     if (checkpoint.stored?.dandisetId) progress.dandisetId = checkpoint.stored.dandisetId
     if (checkpoint.workspaceId !== undefined) progress.workspaceId = checkpoint.workspaceId
-    const doneEarlier = (id: RunStepId) => progress.done(id, 'Done earlier')
+    const doneEarlier = (id: RunStepId) => progress.done(id, DONE_EARLIER)
 
-    if (finishedRun) return retryNonBlocking(finishedRun)
+    if (retryNonBlockingOf) return retryNonBlocking(retryNonBlockingOf)
 
     try {
       // Before anything moves: the protocol and the file.

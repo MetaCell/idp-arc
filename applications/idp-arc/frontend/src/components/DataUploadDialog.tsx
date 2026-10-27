@@ -22,16 +22,16 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
 import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
-import { EMBER_SIGN_IN, finishUploadMessage, UserFacingError, userMessage } from '../core/userMessages'
+import { EMBER_SIGN_IN, UserFacingError, userMessage } from '../core/userMessages'
 import { withRunLock } from './runStorage'
 import { INITIAL_FORM, restoreSession, session } from './uploadSession'
 import { useAppContext } from '../AppContext'
-import { RUN_STEP, type RunStep, type RunStepId } from '../core/types'
+import { RUN_STEP, type RunCheckpoint, type RunState, type RunStep, type RunStepId } from '../core/types'
 import RunChecklist from './RunChecklist'
 import { useSessionStore } from './sessionStore'
 import DoiField from './DoiField'
 import { inputFileProblem, inputFormatsFor } from '../core/inputFormats'
-import { canResume, fileKeyName, PUBLISH_STEP, PUBLISHING_LABEL, type RunProtocolInput } from '../core/use-cases/runProtocol'
+import { isNonBlocking, PUBLISH_STEP, PUBLISHING_LABEL, type RunProtocolInput } from '../core/use-cases/runProtocol'
 import { formatBytes } from '../core/formatBytes'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
@@ -53,6 +53,18 @@ const setForm = session.set
 /** The run being watched; each run gets its own token, so stopping one never revives another. */
 let currentWatch: { current: boolean } | null = null
 const RUN_IN_OTHER_TAB = 'This run is going on in another tab.'
+/** The run's steps and checkpoint, with the rows a Retry of their own settled kept over what the
+ *  run (still going, or saved) reports; a shared MAABCD copy is then done for the run too. */
+function withRetriedRows(runSteps: RunStep[], checkpoint: RunCheckpoint | undefined, retriedRows: RunStep[] = []) {
+  const shared = retriedRows.some((s) => s.id === RUN_STEP.maabcd && s.state === 'succeeded')
+  return {
+    runSteps: runSteps.map((s) => retriedRows.find((r) => r.id === s.id) ?? s),
+    checkpoint: checkpoint && shared ? { ...checkpoint, maabcdShared: true } : checkpoint,
+  }
+}
+
+/** How long a Retry shows that it is trying, even when it fails at once. */
+const MIN_ATTEMPT_MS = 300
 
 export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
@@ -83,6 +95,9 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [step])
+
+  /** Leaves this run (it stays on OSB and EMBER) for a fresh form on the same protocol; nothing is kept for it. */
+  const startNewUpload = () => setForm({ ...INITIAL_FORM, protocol })
 
   /** A fresh form, on the protocol the dialog was opened for. */
   const freshForm = () => setForm({
@@ -169,7 +184,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     // Picked up after a reload: the file is needed again unless it was already uploaded.
     if (!file) {
       if (checkpoint?.stored) return runLocked(selectedProtocol, null)
-      return setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: finishUploadMessage(fileKeyName(checkpoint?.fileKey)) }))
+      return setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))
     }
     return runLocked(selectedProtocol, file)
   }
@@ -194,15 +209,19 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   })
 
   const startRun = async (selectedProtocol: RunnableProtocol, file: File | null) => {
-    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [], doi: undefined, publishing: undefined }))
+    setForm((prev) => ({ ...prev, step: 'uploading', uploadMessage: '', outputsDir: '', runSteps: [], doi: undefined, publishing: undefined, retriedRows: [] }))
     if (currentWatch) currentWatch.current = true
     const watch = { current: false }
     currentWatch = watch
+    const started = Date.now()
 
     await runProtocol(
       inputFor(selectedProtocol, file),
-      (state) => {
+      function report(state: RunState): void {
         if (watch.current) return // another run started: no longer this one's
+        // A run that fails at once still shows, briefly, that it tried.
+        const wait = state.phase === 'failed' ? MIN_ATTEMPT_MS - (Date.now() - started) : 0
+        if (wait > 0) return void setTimeout(() => report(state), wait)
         if (state.phase === 'failed' && state.error?.toLowerCase().includes(SIGN_IN_AGAIN)) {
           setForm((prev) => ({
             ...prev, step: 'upload', uploadMessage: '', spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
@@ -226,10 +245,10 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
           // A dandiset this run created is reused by a retry, not created again.
           dandisetId: state.dandisetId ?? prev.dandisetId,
-          uploadMessage: state.phase === 'failed' ? `${state.message}: ${state.error}` : state.message,
+          // A failed row already says why; otherwise the headline does.
+          uploadMessage: state.phase === 'failed' && !state.steps.some((s) => s.state === 'failed') ? `${state.message}: ${state.error}` : state.message,
           outputsDir: state.outputsDir ?? prev.outputsDir,
-          runSteps: state.steps,
-          checkpoint: state.checkpoint ?? prev.checkpoint,
+          ...withRetriedRows(state.steps, state.checkpoint ?? prev.checkpoint, prev.retriedRows),
           ...(state.phase === 'succeeded' ? { step: 'success' } : {}),
           ...(state.phase === 'stillRunning' ? { step: 'stillRunning' } : {}),
           ...(state.phase === 'failed' ? { step: 'failed' } : {}),
@@ -253,26 +272,30 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   }
 
   /** A finished run's Retry: only its failed non-blocking steps run again, and only their rows change. */
-  const retryFinishedRun = async () => {
+  /** A failed non-blocking row's Retry, any time: only that step runs, on the checklist as shown. */
+  const retryNonBlockingRow = async (id: RunStepId) => {
     if (!selectedProtocol) return
-    await withRunLock(user ?? '', () => runProtocol(
-      { ...inputFor(selectedProtocol, file), finishedRun: runSteps },
-      (state) => setForm((prev) => ({ ...prev, runSteps: state.steps, checkpoint: state.checkpoint ?? prev.checkpoint })),
-    ))
+    const started = Date.now()
+    await runProtocol(
+      { ...inputFor(selectedProtocol, file), retryNonBlockingOf: runSteps },
+      function report(state: RunState): void {
+        // Its outcome waits until the row has shown, briefly, that it is trying.
+        const wait = state.steps.some((s) => s.state === 'running') ? 0 : MIN_ATTEMPT_MS - (Date.now() - started)
+        if (wait > 0) return void setTimeout(() => report(state), wait)
+        const row = state.steps.find((s) => s.id === id)
+        setForm((prev) => {
+          const retriedRows = [...(prev.retriedRows ?? []).filter((s) => s.id !== id), ...(row ? [row] : [])]
+          return { ...prev, retriedRows, ...withRetriedRows(prev.runSteps, prev.checkpoint, retriedRows) }
+        })
+      },
+    )
   }
 
-  // Every failed row has Retry while no run is going: a stopped run carries on, a finished one retries only those rows.
-  const failedRows = step === 'uploading' ? [] : runSteps.filter((s) => s.state === 'failed')
-  const rowRetry = finished ? retryFinishedRun : handleUpload
-  const rowActions: Partial<Record<RunStepId, ReactNode>> = Object.fromEntries(
-    failedRows.map((s) => [s.id, <Button size="small" onClick={rowRetry}>Retry</Button>]))
-
-  // "Retry" only when an earlier attempt can be carried on (same protocol, file, dandiset and
-  // sharing choice); choosing a dandiset that already has a workspace is still a new run.
-  const resumable = !!selectedProtocol && canResume(checkpoint, {
-    protocol: selectedProtocol, file, workspaceName: selectedProtocol.name,
-    workspaceId: spawnedWorkspaceId, dandisetId: dandisetId || undefined, shareWithMaabcd,
-  })
+  // Each failed row has Retry: a non-blocking one any time; a blocking one once the run has stopped.
+  const failedRows = runSteps.filter((s) => s.state === 'failed' && (isNonBlocking(s.id) || step === 'failed'))
+  const footerRetry = step === 'failed' && !failedRows.some((s) => !isNonBlocking(s.id))
+  const rowActions: Partial<Record<RunStepId, ReactNode>> = Object.fromEntries(failedRows.map((s) => [s.id,
+    <Button size="small" variant="outlined" onClick={() => (isNonBlocking(s.id) ? retryNonBlockingRow(s.id) : handleUpload())}>Retry</Button>]))
 
   const stepIndex = step === 'select' ? 0 : 1
   const canGoNext = !!protocol && (!usesEmber || (emberSignedIn && protocolDandisets !== null))
@@ -480,7 +503,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           {usesEmber && (
             <Typography variant="body2" sx={{ opacity: 0.7 }}>
               {dandisetId ? `Uploading into your dandiset ${dandisetId}` : 'Uploading into a new dandiset in your EMBER-DANDI account'}
-              {spawnedWorkspaceId !== undefined ? `, analysed in workspace ${spawnedWorkspaceId}.` : ', analysed in a new workspace.'}
+              {spawnedWorkspaceId !== undefined ? `, analyzed in workspace ${spawnedWorkspaceId}.` : ', analyzed in a new workspace.'}
             </Typography>
           )}
           <Stack direction="row" sx={{ flex: 1, gap: 6 }}>
@@ -558,7 +581,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
         {/* Running, finished or failed: the same checklist, with a different header */}
         {(step === 'uploading' || step === 'success' || step === 'stillRunning' || step === 'failed') && (
-          <Stack sx={{ flex: 1, gap: 3, minWidth: 0, overflowY: 'auto', py: 1 }}>
+          // One scroll: its children keep their height instead of shrinking to fit.
+          <Stack sx={{ flex: 1, gap: 3, minWidth: 0, overflowY: 'auto', py: 1, '& > *': { flexShrink: 0 } }}>
             <Stack sx={{ alignItems: 'center', gap: 1.5, textAlign: 'center' }}>
               {step === 'uploading' && <CircularProgress size={28} />}
               {step === 'success' && <CheckCircleOutlineIcon sx={{ fontSize: 40, color: 'success.main' }} />}
@@ -625,17 +649,24 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
             disabled={!canUpload}
             onClick={handleUpload}
           >
-            {resumable ? 'Retry' : 'Upload and run'}
+            {/* The same file carries on its stopped run (its checklist says "Done earlier"); another starts a new one. */}
+            Upload and run
           </Button>
         </Box>
       )}
-      {step === 'failed' && (
+      {(step === 'failed' || finished) && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5 }}>
-          <Button variant="outlined" onClick={() => setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))}>
-            Back
+          {/* Back to change the file or options; what was chosen stays. */}
+          {step === 'failed' && (
+            <Button variant="outlined" onClick={() => setForm((prev) => ({ ...prev, step: 'upload', uploadMessage: '' }))}>
+              Back
+            </Button>
+          )}
+          <Button variant={footerRetry ? 'outlined' : 'contained'} endIcon={footerRetry ? undefined : <ArrowForwardIcon />} onClick={startNewUpload}>
+            Start a new upload
           </Button>
           {/* For a failure no row shows: before any step, or a run cut off by a reload. */}
-          {failedRows.length === 0 && (
+          {footerRetry && (
             <Button variant="contained" endIcon={<ArrowForwardIcon />} onClick={handleUpload}>
               Retry
             </Button>

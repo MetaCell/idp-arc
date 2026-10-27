@@ -36,6 +36,8 @@ export interface FormState {
   checkpoint?: RunCheckpoint
   /** The finished run's result has been on screen: the next opening starts a new upload. */
   resultSeen?: boolean
+  /** Rows a Retry of their own settled while the run went on: kept over what the run reports. */
+  retriedRows?: RunStep[]
 }
 
 export const INITIAL_FORM: FormState = {
@@ -57,7 +59,7 @@ export const session = createSessionStore<FormState>(INITIAL_FORM)
 type SavedRun = Pick<FormState, 'step' | 'protocol' | 'dandisetId' | 'spawnedWorkspaceId' | 'shareWithMaabcd'
   | 'checkpoint' | 'runSteps' | 'outputsDir' | 'uploadMessage'>
 
-const RUN_INTERRUPTED = 'The page was reloaded during the run. Retry to carry on from where it stopped.'
+const RUN_INTERRUPTED = 'The run stopped unexpectedly. Retry to carry on from where it stopped.'
 
 /** The user whose run is saved, once known. */
 let savingFor: string | null = null

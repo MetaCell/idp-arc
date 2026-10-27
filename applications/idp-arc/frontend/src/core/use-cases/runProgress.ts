@@ -1,5 +1,5 @@
 import type { RunCheckpoint, RunPhase, RunState, RunStep, RunStepId, StepState } from '../types'
-import { UserFacingError, userMessage } from '../userMessages'
+import { stoppedMessage, UserFacingError, userMessage } from '../userMessages'
 
 export type OnRunState = (state: RunState) => void
 
@@ -95,10 +95,12 @@ export class RunProgress {
     const failed = err instanceof StepError ? err.step : this.steps.find((s) => s.state === 'running')?.id
     const cause = err instanceof StepError ? err.original : err
     console.error(cause instanceof UserFacingError && cause.details ? cause.details : cause)
+    const error = userMessage(cause, failed)
+    // The failed row says why, in place of its last progress.
     this.steps = this.steps.map((s) =>
-      s.id === failed ? { ...s, state: 'failed' } : s.state === 'running' ? { ...s, state: 'pending', detail: undefined } : s)
+      s.id === failed ? { ...s, state: 'failed', detail: error } : s.state === 'running' ? { ...s, state: 'pending', detail: undefined } : s)
     this.phase = 'failed'
-    this.emit('The analysis did not complete', userMessage(cause, failed))
+    this.emit(stoppedMessage(failed), error)
   }
 
   emit(message: string, error?: string) {
