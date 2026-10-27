@@ -28,6 +28,8 @@ import { registerUploadOpener } from './UploadContext'
 import LoginDialog from './LoginDialog'
 import { OSB_LOGIN_POPUP_NAME, takeLoginDialogReturn } from './loginReturn'
 import { clearAllRuns, loadRun } from './runStorage'
+import type { RunStep } from '../core/types'
+import { SIGN_IN_AGAIN } from '../core/userMessages'
 
 const ArrowIcon = () => <ArrowForwardIcon sx={{ fontSize: '1rem !important' }} />
 
@@ -154,8 +156,10 @@ export default function PageLayout({
   useEffect(() => {
     if (savedRunOffered || typeof user !== 'string' || loginDialogOpen) return
     savedRunOffered = true
-    // Only a run cut off while it was going; a stopped or finished one waits for Data upload.
-    if (loadRun<{ step?: string }>(user)?.step === 'uploading') void openUploadOrLogin()
+    // Only a run cut off while it was going, or stopped for this sign-in; others wait for Data upload.
+    const saved = loadRun<{ step?: string; runSteps?: RunStep[] }>(user)
+    const stoppedForSignIn = saved?.step === 'failed' && !!saved.runSteps?.some((s) => s.detail?.toLowerCase().includes(SIGN_IN_AGAIN))
+    if (saved?.step === 'uploading' || stoppedForSignIn) void openUploadOrLogin()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loginDialogOpen])
 

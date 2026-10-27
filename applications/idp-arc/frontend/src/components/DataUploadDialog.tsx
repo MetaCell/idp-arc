@@ -222,14 +222,9 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
         // A run that fails at once still shows, briefly, that it tried.
         const wait = state.phase === 'failed' ? MIN_ATTEMPT_MS - (Date.now() - started) : 0
         if (wait > 0) return void setTimeout(() => report(state), wait)
-        if (state.phase === 'failed' && state.error?.toLowerCase().includes(SIGN_IN_AGAIN)) {
-          setForm((prev) => ({
-            ...prev, step: 'upload', uploadMessage: '', spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
-            checkpoint: state.checkpoint ?? prev.checkpoint,
-          }))
-          onAuthRequired?.()
-          return
-        }
+        // The OSB session ended: shown stopped like any failure; sign in, then Retry carries on.
+        const signInNeeded = state.phase === 'failed' && !!state.error?.toLowerCase().includes(SIGN_IN_AGAIN)
+        if (signInNeeded) onAuthRequired?.()
         if (state.phase === 'failed' && state.error === EMBER_SIGN_IN) {
           // The EMBER-DANDI session ended: back to the first step, which points to the Login
           // dialog. The checkpoint, dandiset and workspace stay, so the next attempt carries on.
@@ -245,8 +240,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           spawnedWorkspaceId: state.workspaceId ?? prev.spawnedWorkspaceId,
           // A dandiset this run created is reused by a retry, not created again.
           dandisetId: state.dandisetId ?? prev.dandisetId,
-          // A failed row already says why; otherwise the headline does.
-          uploadMessage: state.phase === 'failed' && !state.steps.some((s) => s.state === 'failed') ? `${state.message}: ${state.error}` : state.message,
+          // A failed row already says why; otherwise the headline does, except for a needed sign-in.
+          uploadMessage: state.phase === 'failed' && !signInNeeded && !state.steps.some((s) => s.state === 'failed') ? `${state.message}: ${state.error}` : state.message,
           outputsDir: state.outputsDir ?? prev.outputsDir,
           ...withRetriedRows(state.steps, state.checkpoint ?? prev.checkpoint, prev.retriedRows),
           ...(state.phase === 'succeeded' ? { step: 'success' } : {}),
