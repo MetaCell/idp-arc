@@ -466,18 +466,40 @@ test('a retry after the data import failed imports only the data, into the same 
   assert.deepEqual(last.steps.filter((s) => s.detail === 'Done earlier').map((s) => s.id), ['upload', 'repo'])
 })
 
-test('when waiting for the imports fails, the retry imports into a new run folder', async () => {
+test('OSB unreachable while waiting for the imports: the retry waits on the same folder', async () => {
   const f = fakes()
   failFirst(f, 'getWorkspaceResources')
   const first = (await run(f, { file: data })).at(-1)!
   assert.equal(first.steps.find((s) => s.id === 'imports')?.state, 'failed')
-  assert.equal(first.checkpoint?.runFolderAt, undefined)
+  assert.ok(first.checkpoint?.runFolderAt, 'the folder is kept')
 
   const last = (await run(f, { file: data, workspaceId: first.workspaceId, resume: first.checkpoint })).at(-1)!
 
   assert.equal(last.phase, 'succeeded', last.error)
   assert.equal(count(f.calls, 'upload'), 1)
   assert.equal(count(f.calls, 'create'), 1)
+  assert.equal(count(f.calls, 'import:g'), 1, 'the code not imported again')
+  assert.equal(count(f.calls, 'import:e'), 1, 'the data not imported again')
+})
+
+test('an import OSB reports as failed: the retry imports into a new run folder', async () => {
+  const f = fakes()
+  const list = f.api.getWorkspaceResources.bind(f.api)
+  let failOnce = true
+  f.api.getWorkspaceResources = async (t, ws) => {
+    const dataImport = f.imports.find((i) => i.resourceType === 'e')
+    if (failOnce && dataImport) {
+      failOnce = false
+      return [{ id: 3, name: 'animal_01.xlsx', status: 'e', path: `${dataImport.folder}/animal_01.xlsx` }]
+    }
+    return list(t, ws)
+  }
+  const first = (await run(f, { file: data })).at(-1)!
+  assert.equal(first.checkpoint?.runFolderAt, undefined)
+
+  const last = (await run(f, { file: data, workspaceId: first.workspaceId, resume: first.checkpoint })).at(-1)!
+  assert.equal(last.phase, 'succeeded', last.error)
+  assert.equal(count(f.calls, 'upload'), 1)
   assert.equal(count(f.calls, 'import:g'), 2, 'the code imported again')
   assert.equal(count(f.calls, 'import:e'), 2, 'the data imported again')
 })

@@ -247,10 +247,6 @@ export function createRunProtocolUseCase(
       // a failed or half-finished import: the next attempt starts a new folder.
       if (stopped()) return false
       const notebooks = await inStep(RUN_STEP.imports, () => waitForImports(workspaceId, layout.run, repoDir))
-        .catch((err: unknown) => {
-          save(NEW_RUN_FOLDER)
-          throw err
-        })
       if (!notebooks) return false
 
       // 6. Run the notebooks.
@@ -376,11 +372,19 @@ export function createRunProtocolUseCase(
       const ended = await pollUntil(async () => {
         resources = await workspaceApi.getWorkspaceResources(await token(), workspaceId)
         const failed = resources.find((r) => ours(r) && r.status === 'e')
-        if (failed) throw new Error(`OSB could not import ${failed.name}`)
+        if (failed) {
+          // OSB couldn't import it: the next attempt imports into a new folder.
+          save(NEW_RUN_FOLDER)
+          throw new Error(`OSB could not import ${failed.name}`)
+        }
         return !resources.some((r) => r.id === -1 || (ours(r) && r.status === 'p'))
       }, { everyMs: RUN_SETTINGS.importPollMs, timeoutMs: RUN_SETTINGS.importTimeoutMs, stopped })
-      if (ended === 'timeout') throw new UserFacingError('Copying the files into the workspace is taking too long. Please try again later.',
+      if (ended === 'timeout') {
+        // Never finished: the next attempt imports into a new folder.
+        save(NEW_RUN_FOLDER)
+        throw new UserFacingError('Copying the files into the workspace is taking too long. Please try again later.',
           `The imports did not finish within ${RUN_SETTINGS.importTimeoutMs / 60_000} minutes`)
+      }
       if (ended !== 'done') return null
       // The visible notebooks directly in the notebooks folder, relative to the repository.
       const folderInRepo = `${protocol.notebooksDir}/`
@@ -391,8 +395,12 @@ export function createRunProtocolUseCase(
           return path.startsWith(folderInRepo) && name.endsWith('.ipynb') && !name.includes('/') && !name.startsWith('.')
         })
         .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-      if (!notebooks.length) throw new UserFacingError('The analysis code has no notebooks to run. Please let the protocol\'s maintainers know.',
-        `No notebooks in ${repoDir}/${folderInRepo} after the import`)
+      if (!notebooks.length) {
+        // Imported, but not usable: the next attempt imports into a new folder.
+        save(NEW_RUN_FOLDER)
+        throw new UserFacingError('The analysis code has no notebooks to run. Please let the protocol\'s maintainers know.',
+          `No notebooks in ${repoDir}/${folderInRepo} after the import`)
+      }
       progress.done(RUN_STEP.imports)
       return notebooks
     }

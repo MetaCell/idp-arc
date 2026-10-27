@@ -63,9 +63,16 @@ const RUN_INTERRUPTED = 'The run stopped unexpectedly. Retry to carry on from wh
 
 /** The user whose run is saved, once known. */
 let savingFor: string | null = null
+/** Set when the page is reloaded or closed: the requests it cancels mid-run aren't saved as the run failing. */
+let leaving = false
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => { leaving = true })
+  // Back from the browser's back/forward cache: the page lives on.
+  window.addEventListener('pageshow', () => { leaving = false })
+}
 
 session.subscribe(() => {
-  if (!savingFor) return
+  if (!savingFor || leaving) return
   const { step, protocol, dandisetId, spawnedWorkspaceId, shareWithMaabcd, checkpoint, runSteps, outputsDir, uploadMessage, resultSeen } = session.get()
   if (!checkpoint || resultSeen) return clearRun(savingFor)
   const run: SavedRun = { step, protocol, dandisetId, spawnedWorkspaceId, shareWithMaabcd, checkpoint, runSteps, outputsDir, uploadMessage }
