@@ -9,10 +9,12 @@ import type { IAuthClient } from '../core/ports/IAuthClient'
  */
 export class KeycloakAuthClient implements IAuthClient {
   private readonly kc: Keycloak
+  private readonly realmUrl: string
   private sessionEndedListeners: (() => void)[] = []
 
   constructor(config: { url: string; realm: string; clientId: string }) {
     this.kc = new Keycloak(config)
+    this.realmUrl = `${config.url}/realms/${config.realm}`
     // keycloak-js clears its tokens when a refresh is refused (the Keycloak session is over).
     this.kc.onAuthLogout = () => this.sessionEnded()
   }
@@ -60,6 +62,16 @@ export class KeycloakAuthClient implements IAuthClient {
 
   getLoginUrl(redirectUri: string): Promise<string> {
     return this.kc.createLoginUrl({ redirectUri })
+  }
+
+  async isReachable(timeoutMs = 5000): Promise<boolean> {
+    try {
+      // Any response counts (no-cors makes it opaque); only a network failure or the timeout doesn't.
+      await fetch(this.realmUrl, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(timeoutMs) })
+      return true
+    } catch {
+      return false
+    }
   }
 
   login(): void {

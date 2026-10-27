@@ -26,7 +26,7 @@ import { Logo } from '../Icons'
 import DataUploadDialog from './DataUploadDialog'
 import { registerUploadOpener } from './UploadContext'
 import LoginDialog from './LoginDialog'
-import { OSB_LOGIN_POPUP_NAME, takeLoginDialogReturn } from './loginReturn'
+import { OSB_LOGIN_POPUP_NAME, OsbUnreachable, takeLoginDialogReturn } from './loginReturn'
 import { clearAllRuns, loadRun } from './runStorage'
 import type { RunStep } from '../core/types'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
@@ -73,23 +73,29 @@ export default function PageLayout({
   /**
    * Opens OSB's (Keycloak) login in a popup. When it completes, the popup posts to this window and
    * App.tsx reloads the page; `onEnded` is for the popup being closed without that. Returns how to
-   * stop waiting, or null when it fell back to a full-page redirect.
+   * stop waiting, or null when it fell back to a full-page redirect. Throws OsbUnreachable when
+   * Keycloak doesn't answer.
    */
   async function startOsbLogin(onEnded: () => void): Promise<{ cancel: () => void } | null> {
-    let loginUrl: string
-    try {
-      loginUrl = await authClient.getLoginUrl(`${window.location.origin}/`)
-    } catch {
-      // keycloak-js 26 + PKCE can throw if internal state is unset (e.g. after
-      // token expiry). Fall back to a full-page redirect via kc.login().
-      authClient.login()
-      return null
-    }
+    // Opened blank before any wait, while the click still counts (popup blockers), then pointed at Keycloak.
     const w = 480, h = 600
     const left = Math.round((screen.width - w) / 2)
     const top = Math.round((screen.height - h) / 2)
-    const popup = window.open(loginUrl, OSB_LOGIN_POPUP_NAME, `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`)
+    const popup = window.open('', OSB_LOGIN_POPUP_NAME, `width=${w},height=${h},left=${left},top=${top},toolbar=no,menubar=no`)
+    if (!(await authClient.isReachable())) {
+      popup?.close()
+      throw new OsbUnreachable()
+    }
     if (!popup) {
+      authClient.login()
+      return null
+    }
+    try {
+      popup.location.href = await authClient.getLoginUrl(`${window.location.origin}/`)
+    } catch {
+      // keycloak-js 26 + PKCE can throw if internal state is unset (e.g. after
+      // token expiry). Fall back to a full-page redirect via kc.login().
+      popup.close()
       authClient.login()
       return null
     }

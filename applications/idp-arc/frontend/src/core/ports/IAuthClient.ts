@@ -15,6 +15,9 @@ export interface IAuthClient {
   /** Returns the IdP login URL so callers can open it in a popup rather than redirecting. */
   getLoginUrl(redirectUri: string): Promise<string>
 
+  /** Whether the IdP answers at all, so a login isn't sent to a server that is down. */
+  isReachable(): Promise<boolean>
+
   /** Redirects the user to the IdP login page. */
   login(): void
 

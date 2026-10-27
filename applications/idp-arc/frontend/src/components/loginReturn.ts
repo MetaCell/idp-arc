@@ -35,3 +35,10 @@ export function takeLoginDialogReturn(): boolean {
  * tell, since any tab opened by script without `noopener` (from an OSB page, say) has one too.
  */
 export const OSB_LOGIN_POPUP_NAME = 'kc-login'
+
+/** OSB's login couldn't start: Keycloak didn't answer. */
+export class OsbUnreachable extends Error {
+  constructor() {
+    super("Open Source Brain's sign-in (Keycloak) could not be reached")
+  }
+}

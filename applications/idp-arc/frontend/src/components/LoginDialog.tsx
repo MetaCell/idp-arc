@@ -6,13 +6,14 @@ import CloseIcon from '@mui/icons-material/Close'
 import { useTranslation } from 'react-i18next'
 
 import { emberAuth, EmberPopupBlocked, EmberSignInCancelled, UPLOAD_BACKEND } from '../app/container'
-import { markLoginDialogReturn } from './loginReturn'
+import { markLoginDialogReturn, OsbUnreachable, takeLoginDialogReturn } from './loginReturn'
 
 export interface LoginDialogProps {
   open: boolean
   onClose: () => void
   /** Opens OSB's (Keycloak) login popup; `onEnded` when it closes without completing (completing
-   *  reloads the page). Resolves to how to stop waiting, or null after a full-page redirect. */
+   *  reloads the page). Resolves to how to stop waiting, or null after a full-page redirect;
+   *  rejects with OsbUnreachable when Keycloak doesn't answer. */
   onOsbLogin: (onEnded: () => void) => Promise<{ cancel: () => void } | null>
   osbSignedIn: boolean
   /** EMBER-DANDI's sign-in finished in its popup (the page didn't reload). */
@@ -32,10 +33,19 @@ export default function LoginDialog({ open, onClose, onOsbLogin, osbSignedIn, on
   const [emberWait, setEmberWait] = useState<{ cancel: () => void } | null>(null)
   const [emberError, setEmberError] = useState('')
   const [osbWait, setOsbWait] = useState<{ cancel: () => void } | null>(null)
+  const [osbError, setOsbError] = useState('')
 
   const loginToOsb = async () => {
+    setOsbError('')
     markLoginDialogReturn()
-    setOsbWait(await onOsbLogin(() => setOsbWait(null)))
+    try {
+      setOsbWait(await onOsbLogin(() => setOsbWait(null)))
+    } catch (err) {
+      // The page stays, so there is no dialog to reopen.
+      takeLoginDialogReturn()
+      console.error('OSB sign-in could not start', err)
+      setOsbError(err instanceof OsbUnreachable ? t('loginDialog.osbUnreachable') : err instanceof Error ? err.message : String(err))
+    }
   }
 
   const loginToEmber = () => {
@@ -82,7 +92,7 @@ export default function LoginDialog({ open, onClose, onOsbLogin, osbSignedIn, on
       login: () => void loginToOsb(),
       waiting: osbWait,
       waitingText: t('loginDialog.osbWaiting'),
-      error: '',
+      error: osbError,
     },
   ].map((row, i) => ({ ...row, n: String(i + 1).padStart(2, '0') }))
 

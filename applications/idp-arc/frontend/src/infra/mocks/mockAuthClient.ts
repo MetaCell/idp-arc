@@ -21,6 +21,10 @@ export class MockAuthClient implements IAuthClient {
     return '/'
   }
 
+  async isReachable(): Promise<boolean> {
+    return true
+  }
+
   async init(): Promise<boolean> {
     console.info('[MockAuthClient] init() → authenticated')
     return true

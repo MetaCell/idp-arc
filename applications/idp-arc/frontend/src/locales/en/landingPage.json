@@ -84,6 +84,7 @@
     "loggedIn": "Logged in",
     "emberWaiting": "Sign in in the EMBER-DANDI window…",
     "osbWaiting": "Sign in in the Open Source Brain window…",
+    "osbUnreachable": "Can't reach Open Source Brain's sign-in. Check your connection and try again.",
     "finishingSignIn": "Finishing sign in…",
     "closeWindow": "You can close this window and go back to IDP.",
     "cancel": "Cancel",
