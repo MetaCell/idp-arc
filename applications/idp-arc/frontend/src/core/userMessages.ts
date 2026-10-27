@@ -36,8 +36,8 @@ export const DANDISET_NOT_PUBLISHABLE = "This dandiset can't be published yet. C
 export const finishUploadMessage = (fileName: string) => `Choose ${fileName} again to finish uploading it.`
 
 /** This site's build lacks what the upload needs (the bucket's URL, EMBER's client id): ours to fix. */
-export const UPLOADS_NOT_SET_UP = "Uploads aren't set up on this site yet. Please let the MAABCD team know."
-export const EMBER_LOGIN_NOT_SET_UP = "EMBER-DANDI sign-in isn't set up on this site yet. Please let the MAABCD team know."
+export const UPLOADS_NOT_SET_UP = "Uploads aren't set up on this site yet."
+export const EMBER_LOGIN_NOT_SET_UP = "EMBER-DANDI sign-in isn't set up on this site yet."
 
 /** Says the session has ended; the dialog sends the user to sign in when the text contains it. */
 export const SIGN_IN_AGAIN = 'sign in again'

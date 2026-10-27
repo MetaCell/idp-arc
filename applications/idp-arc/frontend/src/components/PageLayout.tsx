@@ -144,7 +144,7 @@ export default function PageLayout({
     setEmberSignedIn(false)
     if (isAuthenticated) authClient.logout()
   }
-  const anySignedIn = isAuthenticated || emberSignedIn
+  const anySignedIn = isAuthenticated || (needsEmber && emberSignedIn)
 
   // Re-registered on every render, so buttons outside this component never call a stale copy.
   useEffect(() => { registerUploadOpener(openUploadOrLogin) })
@@ -163,7 +163,7 @@ export default function PageLayout({
     { label: t('nav.about'), path: '/about' },
     ...(isAuthenticated ? [
       { label: t('nav.myWorkspaces'), path: OSB_WORKSPACES_URL, external: true },
-      { label: t('nav.myDandisets'), path: MY_DANDISETS_URL, external: true },
+      ...(needsEmber ? [{ label: t('nav.myDandisets'), path: MY_DANDISETS_URL, external: true }] : []),
     ] : []),
   ]
 

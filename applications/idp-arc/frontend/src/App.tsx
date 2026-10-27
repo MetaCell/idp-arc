@@ -16,6 +16,7 @@ import Workspaces from './pages/Workspaces'
 import ProtocolsPage from './pages/ProtocolsPage'
 import AboutPage from './pages/AboutPage'
 import EmberCallback from './pages/EmberCallback'
+import NotFound from './pages/NotFound'
 import { OSB_LOGIN_POPUP_NAME } from './components/loginReturn'
 
 /**
@@ -53,6 +54,7 @@ const router = createBrowserRouter([
   { path: '/protocols', element: <ProtocolsPage /> },
   { path: '/about', element: <AboutPage /> },
   { path: EMBER_CALLBACK_PATH, element: <EmberCallback /> },
+  { path: '*', element: <NotFound /> },
 ])
 
 function App() {

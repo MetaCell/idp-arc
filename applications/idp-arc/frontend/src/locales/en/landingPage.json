@@ -12,6 +12,7 @@
       "ctaPath": "/protocols"
     },
     {
+      "id": "upload",
       "title": "Upload data in EMBER-DANDI",
       "desc": "Share your experimental results with the research community. Sign in to upload dandisets to the Ember-Dandi platform.",
       "cta": "Data upload",
@@ -38,6 +39,10 @@
     "body1": "Welcome to our site. MAABCD stands for Model Adolescent Adversity Brain and Cognitive Development. Many researchers are working hard to learn more and more about how experience of adversity can alter brain and behavioral development. One challenge of this work comes from the fact that it is hard to compare data between studies. This prevents us from learning which experiences have common or separable effects. Null results may also not often reach publication and can be lost to the community. To gain a more complete picture of the impacts of adversity, we sought to build a tool that could help our research community harmonize data collection across sites so that we can begin to compare the effects of different treatments on behavioral outcomes. We were inspired by the goals of the human ABCD projects to study adolescent development and the success of the International Brain lab, which harmonized a behavioral data collection from mice across 7 global sites.",
     "body2": "In the long term we are interested in understanding a) if there are different dimensions of adversity which have separable effects on brain and behavior and b) if there are sensitive periods for exposure. We hope to disseminate these protocols so many labs can similarly harmonize their data collection enabling comparisons of a wide variety of treatments on the same behavioral outcome metrics. Our project is supported by the BBQS R34.",
     "learnMore": "Learn more"
+  },
+  "uploadFeatureBucket": {
+    "title": "Upload your data",
+    "desc": "Share your experimental results with the research community. Sign in to upload your data and analyse it in Open Source Brain."
   },
   "nav": {
     "logoTitle": "MAABCD Platform",
@@ -69,7 +74,7 @@
     "title": "Login",
     "subtitle": "Login or sign up to view or upload data.",
     "notice": "Login to both is required to upload & view your data.",
-    "noticeOsbOnly": "Login to Open Source Brain is required to upload & view your data.",
+    "noticeOsbOnly": "Login to Open Source Brain is required to upload and analyse your data.",
     "emberTitle": "EMBER-DANDI",
     "emberDescription": "Upload your data in EMBER-DANDI",
     "osbTitle": "Open Source Brain",
