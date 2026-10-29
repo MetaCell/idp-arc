@@ -334,10 +334,29 @@ test('an EMBER-DANDI upload gets the run\'s workspace recorded in its dandiset, 
   const create = f.calls.findIndex((c) => c.startsWith('create:'))
   assert.equal(f.calls[create + 1], 'record:42')
   assert.deepEqual(seen.dandisets, {
-    user: '000123', newName: 'Four-choice reversal digging task (IDP)', maabcd: '000533',
+    user: '000123', newName: 'Four-choice reversal digging task', maabcd: '000533',
     protocol: { id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/maracbaylis/four-choice-example' },
   })
 })
+
+for (const [typed, expected] of [
+  ['  Cohort A, week 3  ', 'Cohort A, week 3'],
+  ['   ', 'Four-choice reversal digging task'],
+  [undefined, 'Four-choice reversal digging task'],
+] as const) {
+  test(`a new dandiset is named ${JSON.stringify(typed)} -> "${expected}"`, async () => {
+    const seen: { dandisets?: { newName?: string } } = {}
+    const store: IObjectStore = {
+      async put(input) {
+        seen.dandisets = input.dandisets
+        return { url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', name: 'animal_01.xlsx', dandisetId: '000777' }
+      },
+    }
+    await createRunProtocolUseCase(auth, fakes().api, store)(
+      { protocol: FOUR_CHOICE, file: file(), workspaceName: 'Four-choice', dandisetName: typed }, () => {})
+    assert.equal(seen.dandisets?.newName, expected)
+  })
+}
 
 test('with "Share with MAABCD" unticked, nothing goes to the protocol\'s MAABCD dandiset', async () => {
   const f = fakes()

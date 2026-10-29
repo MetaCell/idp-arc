@@ -60,7 +60,7 @@ export function createEmberObjectStore(
       // The researcher's own copy.
       const protocol = input.dandisets?.protocol ?? { id: input.protocolId, name: input.protocolId }
       const userDandisetId = saved.userDandisetId || input.dandisets?.user
-        || await dandisets.createForProtocol(input.dandisets?.newName || `IDP upload: ${protocol.name}`, protocol)
+        || await dandisets.createForProtocol(input.dandisets?.newName || protocol.name, protocol)
       if (saved.userDandisetId !== userDandisetId) save({ userDandisetId })
       let asset = saved.own
       if (!asset) {

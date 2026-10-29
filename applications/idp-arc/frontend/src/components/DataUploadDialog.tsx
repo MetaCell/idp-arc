@@ -10,6 +10,7 @@ import {
   MenuItem,
   Select,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined'
@@ -69,7 +70,7 @@ const MIN_ATTEMPT_MS = 300
 export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
   const [form] = useSessionStore(session)
-  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi, publishing, publishError, checkpoint } = form
+  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, dandisetName, shareWithMaabcd, doi, publishing, publishError, checkpoint } = form
   // EMBER-DANDI: the upload goes to the researcher's own account. Choosing a protocol lists their
   // dandisets for it, each with the workspace it runs in, so choosing one chooses both.
   const usesEmber = UPLOAD_BACKEND === 'ember'
@@ -218,6 +219,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     workspaceId: spawnedWorkspaceId,
     workspaceName: selectedProtocol.name,
     dandisetId: dandisetId || undefined,
+    dandisetName: dandisetId ? undefined : dandisetName,
     shareWithMaabcd,
     resume: checkpoint,
   })
@@ -465,6 +467,18 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                       )}
                     </>
                   )}
+                  {emberSignedIn && protocolDandisets !== null && !dandisetId && (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Name of the new dandiset"
+                      placeholder={selectedProtocol?.name}
+                      value={dandisetName}
+                      onChange={(e) => setForm((prev) => ({ ...prev, dandisetName: e.target.value }))}
+                      slotProps={{ htmlInput: { style: { fontFamily: 'Inter, sans-serif', fontSize: '14px' } } }}
+                      sx={{ mt: 1.5 }}
+                    />
+                  )}
                 </Box>
               )}
               {usesEmber && selectedProtocol?.maabcdAggregateDandisetId && (
@@ -511,7 +525,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           )}
           {usesEmber && (
             <Typography variant="body2" sx={{ opacity: 0.7 }}>
-              {dandisetId ? `Uploading into your dandiset ${dandisetId}` : 'Uploading into a new dandiset in your EMBER-DANDI account'}
+              {dandisetId ? `Uploading into your dandiset ${dandisetId}` : `Uploading into a new dandiset${dandisetName.trim() ? ` "${dandisetName.trim()}"` : ''} in your EMBER-DANDI account`}
               {spawnedWorkspaceId !== undefined ? `, analyzed in workspace ${spawnedWorkspaceId}.` : ', analyzed in a new workspace.'}
             </Typography>
           )}

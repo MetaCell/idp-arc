@@ -45,6 +45,8 @@ export interface RunProtocolInput {
   /** The researcher's EMBER-DANDI dandiset to upload into; undefined creates one. The bucket
    *  ignores it. */
   dandisetId?: string
+  /** Name for the dandiset created when `dandisetId` is undefined; the protocol's name when empty. */
+  dandisetName?: string
   /** Also upload into the protocol's MAABCD dandiset, when it has one (the default). */
   shareWithMaabcd?: boolean
   /** From an earlier attempt that stopped: the run carries on from there when canResume allows. */
@@ -286,7 +288,7 @@ export function createRunProtocolUseCase(
         onCheckpoint: (upload) => save({ upload }),
         dandisets: {
           user: input.dandisetId,
-          newName: `${protocol.name} (IDP)`,
+          newName: input.dandisetName?.trim() || protocol.name,
           protocol: protocolRef(),
           maabcd: input.shareWithMaabcd === false ? undefined : protocol.maabcdAggregateDandisetId,
         },
