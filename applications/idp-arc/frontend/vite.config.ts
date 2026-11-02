@@ -4,7 +4,7 @@ import path from 'path'
 import fs from 'node:fs'
 import http from 'node:http'
 import https from 'node:https'
-import { EMBER_API_ORIGIN } from './src/infra/emberUrls'
+import { dandiInstance } from './src/core/dandiInstances'
 
 // Must use loadEnv(), not process.env — Vite doesn't load .env into process.env for this
 // file, so process.env here silently falls back to the production domain.
@@ -13,6 +13,8 @@ const OSB_DOMAIN = env.VITE_OSB_BASE_DOMAIN || 'v2dev.opensourcebrain.org'
 const OSB_SCHEME = env.VITE_OSB_PROTOCOL || 'https'
 
 const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
+// Throws at start for a VITE_DANDI_INSTANCE that isn't one of the four.
+const DANDI_API_ORIGIN = dandiInstance(env.VITE_DANDI_INSTANCE).api
 /**
  * Optional HTTPS for the dev server: EMBER-DANDI's OAuth application only accepts https://
  * redirect URIs, so its sign-in needs https://localhost:5173 (registered as
@@ -65,7 +67,7 @@ export default defineConfig({
       },
       // EMBER's token reply has no CORS headers. Only what the app calls, as nginx (default.conf).
       '^/ember-proxy/(oauth/token/|api/)': {
-        target: EMBER_API_ORIGIN,
+        target: DANDI_API_ORIGIN,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ember-proxy/, ''),
       },

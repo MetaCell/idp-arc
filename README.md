@@ -86,6 +86,23 @@ researcher's workspace from there.
 - **`bucket`**: a public bucket open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL`.
   Its CORS must allow PUT from this app's origin. Needs only the OSB login.
 
+### Choosing the DANDI instance
+
+EMBER-DANDI is the default. To use another instance, such as DANDI's sandbox for testing, name it in
+`applications/idp-arc/frontend/.env.local`:
+
+```bash
+# dandi, dandi-sandbox, ember-dandi (default) or ember-dandi-sandbox
+VITE_DANDI_INSTANCE=dandi-sandbox
+```
+
+That one name sets the API and web origins (`src/core/dandiInstances.ts`), the instance OSB copies
+into for MAABCD, and which dandiset of a protocol's `maabcdAggregateDandisets` in
+`src/data/protocols.json` the copy goes to (none for that instance: nothing is shared). Any other
+name stops the dev server and the build. In deployment, pass it as the `VITE_DANDI_INSTANCE` build
+argument (the image's nginx proxy follows it; the container's `DANDI_INSTANCE` overrides the proxy).
+The OSB user's `DANDI_API_KEY` must be a key for that instance.
+
 ---
 
 ## Docker (Local Build + Run)

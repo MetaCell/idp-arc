@@ -15,6 +15,9 @@ ENV VITE_UPLOAD_BUCKET_URL=${VITE_UPLOAD_BUCKET_URL}
 # EMBER-DANDI OAuth application (public client, PKCE) registered for this IDP origin.
 ARG VITE_EMBER_CLIENT_ID
 ENV VITE_EMBER_CLIENT_ID=${VITE_EMBER_CLIENT_ID}
+# The DANDI instance: dandi, dandi-sandbox, ember-dandi (the default) or ember-dandi-sandbox.
+ARG VITE_DANDI_INSTANCE
+ENV VITE_DANDI_INSTANCE=${VITE_DANDI_INSTANCE}
 RUN yarn build
 
 FROM nginxinc/nginx-unprivileged:stable-alpine
@@ -26,6 +29,10 @@ COPY --from=build --chown=101:101 /app/dist/ /usr/share/nginx/html/
 # template the pod's DNS servers so the EMBER proxy can resolve at request time (see default.conf).
 COPY --chown=101:101 deploy/resources/default.conf /etc/nginx/templates/default.conf.template
 ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+# The DANDI instance the /ember-proxy forwards to: the one the bundle was built for, EMBER-DANDI
+# when unset; the container's DANDI_INSTANCE overrides it at start.
+ARG VITE_DANDI_INSTANCE
+ENV DANDI_INSTANCE=${VITE_DANDI_INSTANCE:-ember-dandi}
 USER 101
 
 EXPOSE 8080

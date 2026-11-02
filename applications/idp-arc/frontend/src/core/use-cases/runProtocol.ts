@@ -29,8 +29,9 @@ export interface RunProtocolDefinition {
   /** The image the notebooks run in (their environment): an OSB application's name (e.g. `netpyne`)
    *  or an image reference from a registry OSB allows. Without it, OSB's default (JupyterLab). */
   image?: string
-  /** The protocol's MAABCD dandiset on EMBER-DANDI, which each upload is also copied into
-   *  (through OSB). Empty or absent: no MAABCD copy. */
+  /** The protocol's MAABCD dandiset on the DANDI instance in use (protocols.json
+   *  `maabcdAggregateDandisets`), which each upload is also copied into (through OSB). Empty or
+   *  absent: no MAABCD copy. */
   maabcdAggregateDandisetId?: string
 }
 

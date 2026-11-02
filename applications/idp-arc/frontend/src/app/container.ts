@@ -22,7 +22,7 @@ import { PublicBucketObjectStore } from '../infra/publicBucketObjectStore'
 import { EmberOAuthClient, EMBER_CALLBACK_PATH } from '../infra/emberOAuthClient'
 import { EmberDandiDirectClient } from '../infra/emberDandiDirectClient'
 import { EmberUploadApiClient } from '../infra/emberUploadApiClient'
-import { EMBER_API_ORIGIN, EMBER_WEB_ORIGIN } from '../infra/emberUrls'
+import { dandiInstance } from '../core/dandiInstances'
 import type { IObjectStore } from '../core/ports/IObjectStore'
 import { createEmberObjectStore } from '../core/use-cases/emberObjectStore'
 import { createProtocolDandisetsUseCases, type ProtocolDandiset } from '../core/use-cases/protocolDandisets'
@@ -45,10 +45,14 @@ const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
 export type UploadBackend = 'ember' | 'bucket'
 /** VITE_UPLOAD_BACKEND: `bucket`, or EMBER-DANDI for anything else, unset included. */
 export const UPLOAD_BACKEND: UploadBackend = import.meta.env.VITE_UPLOAD_BACKEND === 'bucket' ? 'bucket' : 'ember'
+/** The DANDI instance in use, from VITE_DANDI_INSTANCE (EMBER-DANDI when unset): where the
+ *  researcher's uploads go, and which of a protocol's MAABCD dandisets the copy goes to. */
+export const DANDI_INSTANCE = dandiInstance(import.meta.env.VITE_DANDI_INSTANCE)
+const { api: EMBER_API_ORIGIN, web: EMBER_WEB_ORIGIN } = DANDI_INSTANCE
 /** The OSB (Keycloak) user whose key (user attribute `DANDI_API_KEY`) signs the copy into the
- *  protocol's MAABCD dandiset, and the DANDI deployment it goes to (dandi-cli's name). */
+ *  protocol's MAABCD dandiset, on the same instance (dandi-cli's name for it). */
 const MAABCD_EMBER_USERNAME = 'maabcd-consortium'
-const MAABCD_DANDI_INSTANCE = 'ember-dandi'
+const MAABCD_DANDI_INSTANCE = DANDI_INSTANCE.name
 /** Same-origin path for the browser's own EMBER calls (Vite proxy in dev, nginx deployed): EMBER's
  *  token response carries no CORS headers. */
 const EMBER_FETCH_BASE = '/ember-proxy'

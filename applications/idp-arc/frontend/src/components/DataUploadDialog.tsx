@@ -22,7 +22,8 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
-import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, recordedWorkspace, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
+import { DANDI_INSTANCE, emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, recordedWorkspace, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
+import { maabcdDandisetFor } from '../core/dandiInstances'
 import { EMBER_SIGN_IN, UserFacingError, userMessage } from '../core/userMessages'
 import { withRunLock } from './runStorage'
 import { INITIAL_FORM, restoreSession, session } from './uploadSession'
@@ -38,8 +39,11 @@ import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplate
 import { SIGN_IN_AGAIN } from '../core/userMessages'
 import protocols from '../data/protocols.json'
 
-/** Only protocols with an analysis repository can be run, so only those are offered. */
-const runnableProtocols = protocols.filter((p) => 'repoZipUrl' in p && p.repoZipUrl)
+/** Only protocols with an analysis repository can be run, so only those are offered. Each carries
+ *  its MAABCD dandiset on the DANDI instance in use (none: nothing is shared). */
+const runnableProtocols = protocols
+  .filter((p) => 'repoZipUrl' in p && p.repoZipUrl)
+  .map((p) => ({ ...p, maabcdAggregateDandisetId: maabcdDandisetFor(p, DANDI_INSTANCE.name) }))
 type RunnableProtocol = (typeof runnableProtocols)[number]
 
 export interface DataUploadDialogProps {
@@ -480,6 +484,11 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                     />
                   )}
                 </Box>
+              )}
+              {usesEmber && selectedProtocol && 'maabcdAggregateDandisets' in selectedProtocol && !selectedProtocol.maabcdAggregateDandisetId && (
+                <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                  No MAABCD dandiset on {DANDI_INSTANCE.name} for this protocol, so nothing is shared with the consortium.
+                </Typography>
               )}
               {usesEmber && selectedProtocol?.maabcdAggregateDandisetId && (
                 <FormControlLabel

@@ -13,7 +13,7 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
 | `description`, `imageUrl`, `videoUrl` | Protocols page | Text and media shown for the protocol. |
 | `repoZipUrl` | run | GitHub archive of the analysis repository, `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>` (or `refs/tags/<tag>`, or `/zip/<commit>`). A **branch** follows the latest fixes; a **commit** freezes the code. An empty `repoZipUrl` = no analysis yet: the upload dialog doesn't offer the protocol. |
 | `notebooksDir` | run | Repository-relative folder of the notebooks (`notebooks`). |
-| `maabcdAggregateDandisetId` | upload | The protocol's MAABCD consortium dandiset on EMBER-DANDI (`000607`): six digits, owned by the consortium account. When the researcher shares their upload, a copy goes there through OSB's `/dandi` endpoints, signed with that account's key. Leave it out and uploads for the protocol aren't shared. |
+| `maabcdAggregateDandisets` | upload | The protocol's MAABCD consortium dandiset on each DANDI instance, by instance name (`{ "ember-dandi": "000607", "dandi-sandbox": "219158" }`; names in `src/core/dandiInstances.ts`, six digits each, owned by the consortium account there). The one for the instance in use (`VITE_DANDI_INSTANCE`) is where a shared copy goes, through OSB's `/dandi` endpoints, signed with that account's key. No entry for the instance, or no field: uploads for the protocol aren't shared there. |
 | `requirements`, `pythonPath`, `install` | run | Override the repository setup below (defaults in `REPOSITORY_SETUP`, runProtocol.ts: `requirements.txt`; `["scripts"]`; `["scripts/install.py", "scripts/setup.py", "scripts/pyproject.toml"]`). OSB applies only the ones the repository has. Leave them out for a repository that follows the contract. |
 | `templatesZipUrl` | Protocols page, dialog | Archive of the protocol's templates (data sheets, instructions), downloaded by the **Download** buttons on the Protocols page and in the dialog's upload step. A path relative to `public/` (`protocols_archives/4c.zip`) or an absolute URL. Missing or empty = both buttons disabled. |
 | `inputFormats` | dialog, run | Extensions the analysis code can actually read. The dialog refuses other files before anything starts. **Without it, any file is accepted** (except an empty one, always refused). |
@@ -24,7 +24,7 @@ Each upload goes to EMBER-DANDI, in up to two copies:
 
 | | Researcher's dandiset | MAABCD aggregate dandiset |
 |---|---|---|
-| Dandiset | picked in the dialog, or a new one | `maabcdAggregateDandisetId`, if the researcher shares |
+| Dandiset | picked in the dialog, or a new one | `maabcdAggregateDandisets` (the instance's), if the researcher shares |
 | Path | `<id>/<upload id>/<file>` | `<OSB user id>/<upload id>/<file>` |
 | Built and signed by | IDP, with the researcher's EMBER login | OSB, with the consortium's `DANDI_API_KEY` |
 
