@@ -10,6 +10,240 @@
     },
     "inputFormats": [".xlsx", ".zip"],
     "templatesZipUrl": "protocols_archives/4c.zip",
+    "bids": {
+      "task": "fourchoice",
+      "subjectId": {
+        "sheet": "METADATA",
+        "label": "Animal ID: (XXX001)"
+      },
+      "sex": {
+        "sheet": "METADATA",
+        "label": "Sex (M/F)"
+      },
+      "sessionDate": {
+        "label": "Date:"
+      },
+      "tables": [
+        {
+          "sheet": "ACCLIM",
+          "acq": "acclimation",
+          "header": "Round"
+        },
+        {
+          "sheet": "SHAPE",
+          "acq": "shaping",
+          "header": "Trial",
+          "filledBy": [
+            "time_to_dig_s",
+            "time_to_eat_s",
+            "notes"
+          ]
+        },
+        {
+          "sheet": "DISC",
+          "acq": "discrimination",
+          "header": "Trial",
+          "filledBy": [
+            "odor_chosen",
+            "latency_s",
+            "entry_sequence",
+            "notes"
+          ]
+        },
+        {
+          "sheet": "RECALL",
+          "acq": "recall",
+          "header": "Trial",
+          "filledBy": [
+            "odor_chosen",
+            "latency_s",
+            "entry_sequence",
+            "notes"
+          ]
+        },
+        {
+          "sheet": "REV",
+          "acq": "reversal",
+          "header": "Trial",
+          "filledBy": [
+            "odor_chosen",
+            "latency_s",
+            "entry_sequence",
+            "error_type",
+            "notes"
+          ]
+        }
+      ],
+      "participants": {
+        "species": "mus musculus",
+        "fields": [
+          {
+            "column": "strain",
+            "sheet": "METADATA",
+            "label": "Strain",
+            "Description": "Strain of the mouse, e.g. C57BL/6."
+          },
+          {
+            "column": "genotype",
+            "sheet": "METADATA",
+            "label": "Genotype",
+            "Description": "Genotype: WT, HET or KO, for example."
+          },
+          {
+            "column": "dob",
+            "sheet": "METADATA",
+            "label": "DOB (mm/dd/yyyy)",
+            "LongName": "Date of birth",
+            "Description": "Date of birth.",
+            "type": "date"
+          },
+          {
+            "column": "experiment_cohort",
+            "sheet": "METADATA",
+            "label": "Experiment Cohort",
+            "Description": "Cohort the mouse was run in, e.g. MAABCD_2026."
+          },
+          {
+            "column": "experimental_group",
+            "sheet": "METADATA",
+            "label": "Experimental Group",
+            "Description": "Control, or the experimental group."
+          },
+          {
+            "column": "adversity_condition",
+            "sheet": "METADATA",
+            "label": "Adversity Condition",
+            "Description": "Model of adversity or stress tested, e.g. Food Insecurity."
+          },
+          {
+            "column": "adversity_age_range",
+            "sheet": "METADATA",
+            "label": "Adversity Age Range (PXX-XX)",
+            "Description": "Postnatal age range of the adversity, e.g. P21-40."
+          },
+          {
+            "column": "source",
+            "sheet": "METADATA",
+            "label": "Bred On Site or Shipped",
+            "Description": "Whether the mouse was bred on site or shipped."
+          },
+          {
+            "column": "vendor",
+            "sheet": "METADATA",
+            "label": "Vendor",
+            "Description": "Vendor, when shipped, e.g. Jackson."
+          },
+          {
+            "column": "mice_in_homecage",
+            "sheet": "METADATA",
+            "label": "# Of Mice In Homecage At Testing",
+            "Description": "Number of mice in the homecage at testing."
+          },
+          {
+            "column": "lab",
+            "sheet": "METADATA",
+            "label": "Lab and Institution",
+            "Description": "Lab and institution."
+          }
+        ]
+      },
+      "phenotype": [
+        {
+          "name": "weight",
+          "sheet": "WEIGHT",
+          "header": "Experimental Day",
+          "description": "Weight tracking from the WEIGHT tab of the 4C Digging Reversal Reporting Sheet, one group of columns per experimental day.",
+          "fields": [
+            {
+              "column": "stage",
+              "label": "Stage",
+              "Description": "Stage of the protocol that day."
+            },
+            {
+              "column": "date",
+              "label": "Date",
+              "Description": "Date of the weighing.",
+              "type": "date"
+            },
+            {
+              "column": "time",
+              "label": "Time",
+              "Description": "Time the mouse was weighed.",
+              "type": "time"
+            },
+            {
+              "column": "age",
+              "label": "Age (P)",
+              "Description": "Postnatal age.",
+              "Units": "day"
+            },
+            {
+              "column": "weight",
+              "label": "Weight (g)",
+              "Description": "Body weight.",
+              "Units": "g"
+            },
+            {
+              "column": "fraction_of_baseline",
+              "label": "% from baseline",
+              "Description": "That day's weight divided by the Day 1 reference ad libitum weight."
+            }
+          ]
+        }
+      ],
+      "skipColumns": ["quadrant_chosen"],
+      "tableInfo": [
+        { "key": "Experimenter", "label": "Experimenter:" },
+        { "key": "StartTime", "label": "Start time:", "type": "time" },
+        { "key": "EndTime", "label": "End time:", "type": "time" },
+        { "key": "Rewarded", "label": "Rewarded:" },
+        { "key": "Odors", "label": "Odors:", "type": "list" }
+      ],
+      "columns": {
+        "round": { "Description": "Acclimation round (Round 1 to 3)." },
+        "time_to_eat_nw_1": {
+          "Description": "Time the mouse took to start eating the plain pellet in the northwest quadrant (1).",
+          "Units": "s"
+        },
+        "time_to_eat_ne_2": {
+          "Description": "Time the mouse took to start eating the plain pellet in the northeast quadrant (2).",
+          "Units": "s"
+        },
+        "time_to_eat_sw_3": {
+          "Description": "Time the mouse took to start eating the plain pellet in the southwest quadrant (3).",
+          "Units": "s"
+        },
+        "time_to_eat_se_4": {
+          "Description": "Time the mouse took to start eating the plain pellet in the southeast quadrant (4).",
+          "Units": "s"
+        },
+        "number_of_pellets_eaten": { "Description": "Pellets eaten in the round." },
+        "bedding_level": { "Description": "Amount of shavings in the ramekin; it increases with each shaping trial." },
+        "ramekin_position": { "Description": "Quadrant the ramekin was placed in: NW, NE, SW or SE." },
+        "time_to_dig_s": {
+          "Description": "Time until the mouse purposefully touched the pellet or the shavings.",
+          "Units": "s"
+        },
+        "time_to_eat_s": {
+          "Description": "Time until the mouse started eating the pellet.",
+          "Units": "s"
+        },
+        "trial": { "Description": "Trial number within the session." },
+        "ramekin_order": {
+          "Description": "Order of the four odor ramekins by position (northwest, northeast, southwest, southeast), written as the odor letters A to D listed at the top of the sheet."
+        },
+        "odor_chosen": { "Description": "Odor the mouse chose." },
+        "correct": { "Description": "Whether the choice was the rewarded odor." },
+        "latency_s": {
+          "Description": "Time the mouse took to dig, in seconds (written as mm:ss on the testing sheet and converted for the reporting sheet).",
+          "Units": "s"
+        },
+        "entry_sequence": { "Description": "Order in which the quadrants were entered: 1 = northwest, 2 = northeast, 3 = southwest, 4 = southeast." },
+        "odor_sequences": { "Description": "The odor of each quadrant entered, in order: the entry sequence read through the ramekin order." },
+        "error_type": { "Description": "Kind of error made in the reversal stage; the protocol's types are Reversal, Perseverative, Regressive, Novel and Irrelevant." },
+        "notes": { "Description": "Free-text notes from the experimenter: grooming, jumping, climbing, sleeping or chewing for 5 seconds (tick marks count repeats), the time to dig and time to eat of a reminder trial after two omissions, and a 15-minute break." }
+      }
+    },
     "description": "In the four choice reversal digging task mice must identify the single rewarded option and update their choice when a previously unrewarded option becomes rewarded. The reversal phase in this task is sensitive to orbitofrontal and dorsomedial prefrontal cortex function and the 2-day version used here provides a metric of recall on the 2nd day of testing before reversal.",
     "imageUrls": ["assets/four_choice_graphic.jpeg"],
     "videoUrl": "https://storage.googleapis.com/maabcd/tutorial.mp4",

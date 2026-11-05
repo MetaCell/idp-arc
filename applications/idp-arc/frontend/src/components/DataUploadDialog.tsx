@@ -37,6 +37,9 @@ import { isNonBlocking, PUBLISH_STEP, PUBLISHING_LABEL, type RunProtocolInput } 
 import { formatBytes } from '../core/formatBytes'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
+import type { BidsConfig } from '../core/bids/convert'
+import { useBidsCheck } from './useBidsCheck'
+import BidsStructureButton from './BidsStructureButton'
 import protocols from '../data/protocols.json'
 
 /** Only protocols with an analysis repository can be run, so only those are offered. Each carries
@@ -197,9 +200,14 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const inputFormats = inputFormatsFor(selectedProtocol?.inputFormats)
   const templatesHref = templatesZipHref(selectedProtocol)
   const fileProblem = file ? inputFileProblem(file, selectedProtocol?.name ?? 'This protocol', selectedProtocol?.inputFormats) : null
+  // The file is converted to BIDS on pick, and its errors stop the upload.
+  const bidsConfig = selectedProtocol?.bids as BidsConfig | undefined
+  const bidsCheck = useBidsCheck(fileProblem ? null : file, bidsConfig, selectedProtocol?.name ?? '')
+  const bidsProblems = bidsCheck.result?.problems ?? []
+  const bidsBlocks = bidsCheck.checking || bidsProblems.some((p) => p.level === 'error')
 
   const handleUpload = async () => {
-    if (fileProblem || !selectedProtocol) return
+    if (fileProblem || bidsBlocks || !selectedProtocol) return
     // Picked up after a reload: the file is needed again unless it was already uploaded.
     if (!file) {
       if (checkpoint?.stored) return runLocked(selectedProtocol, null)
@@ -314,7 +322,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
   const stepIndex = step === 'select' ? 0 : 1
   const canGoNext = !!protocol && (!usesEmber || (emberSignedIn && protocolDandisets !== null && !findingWorkspace))
-  const canUpload = !!file && !fileProblem && emberSignedIn
+  const canUpload = !!file && !fileProblem && !bidsBlocks && emberSignedIn
 
   return (
     <Dialog
@@ -577,6 +585,30 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                         {fileProblem}
                       </Typography>
                     )}
+                    {bidsCheck.checking && (
+                      <Typography variant="body2" sx={{ opacity: 0.6 }}>Checking the file…</Typography>
+                    )}
+                    {bidsCheck.result && (
+                      <Stack sx={{ gap: 0.5, px: 4, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        {!bidsProblems.some((p) => p.level === 'error') && (
+                          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                            <Typography variant="body2" sx={{ color: 'success.main' }}>
+                              Ready for DANDI: {bidsCheck.result.subjects.length === 1 ? '1 animal' : `${bidsCheck.result.subjects.length} animals`} ({bidsCheck.result.subjects.map((s) => s.id).join(', ')}),{' '}
+                              {bidsCheck.result.files.filter((f) => f.path.startsWith('sub-') && f.path.endsWith('.tsv')).length} tables
+                            </Typography>
+                            <BidsStructureButton files={bidsCheck.result.files} />
+                          </Stack>
+                        )}
+                        {bidsProblems.slice(0, 8).map((p, i) => (
+                          <Typography key={i} variant="body2" sx={{ color: p.level === 'error' ? 'error.main' : 'warning.main' }}>
+                            {p.message}
+                          </Typography>
+                        ))}
+                        {bidsProblems.length > 8 && (
+                          <Typography variant="body2" sx={{ opacity: 0.6 }}>…and {bidsProblems.length - 8} more</Typography>
+                        )}
+                      </Stack>
+                    )}
                   </>
                 ) : (
                   <>
@@ -594,6 +626,11 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
               <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: 1, color: '#FFFFFFCC' }}>
                 Download an example input file for this protocol and fill in your data the same way.
               </Typography>
+              {bidsConfig && (
+                <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: 1.4, color: '#FFFFFFCC' }}>
+                  Upload one filled reporting sheet per animal, or a zip of them. Other files in the zip, such as the weight log or the protocol PDFs, are kept with your data.
+                </Typography>
+              )}
               <Button
                 variant="outlined"
                 size="small"
