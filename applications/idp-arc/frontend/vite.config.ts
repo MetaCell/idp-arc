@@ -13,12 +13,12 @@ const OSB_DOMAIN = env.VITE_OSB_BASE_DOMAIN || 'v2dev.opensourcebrain.org'
 const OSB_SCHEME = env.VITE_OSB_PROTOCOL || 'https'
 
 const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
-// Throws at start for a VITE_DANDI_INSTANCE that isn't one of the two.
+// Throws at start for a VITE_DANDI_INSTANCE that isn't one of the three.
 const DANDI_INSTANCE = dandiInstance(env.VITE_DANDI_INSTANCE)
 const DANDI_API_ORIGIN = DANDI_INSTANCE.api
-/** Dev server on DANDI's sandbox only (no OAuth app for us there): signs every proxied DANDI call with
- *  this key instead of the user's token. Not VITE_-prefixed, so it never reaches the bundle. */
-const DANDI_SANDBOX_API_KEY = DANDI_INSTANCE.name === 'dandi-sandbox' ? env.DANDI_SANDBOX_API_KEY?.trim() ?? '' : ''
+/** Dev server on a sandbox only (no OAuth app for us there): signs every proxied DANDI call with this
+ *  key instead of the user's token. Not VITE_-prefixed, so it never reaches the bundle. */
+const DANDI_SANDBOX_API_KEY = DANDI_INSTANCE.name.endsWith('-sandbox') ? env.DANDI_SANDBOX_API_KEY?.trim() ?? '' : ''
 /**
  * Optional HTTPS for the dev server: EMBER-DANDI's OAuth application only accepts https://
  * redirect URIs, so its sign-in needs https://localhost:5173 (registered as

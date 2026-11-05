@@ -86,27 +86,21 @@ researcher's workspace from there.
 - **`bucket`**: a public bucket open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL`.
   Its CORS must allow PUT from this app's origin. Needs only the OSB login.
 
-### Choosing the DANDI instance
+### Testing on a sandbox (local only)
 
-EMBER-DANDI is the default. To use another instance, such as DANDI's sandbox for testing, name it in
-`applications/idp-arc/frontend/.env.local`:
+Deployments always use EMBER-DANDI. To test on a sandbox instead, add this to
+`applications/idp-arc/frontend/.env.local` and restart `yarn start:dev`:
 
 ```bash
-# dandi, dandi-sandbox, ember-dandi (default) or ember-dandi-sandbox
+# dandi-sandbox or ember-dandi-sandbox
 VITE_DANDI_INSTANCE=dandi-sandbox
 ```
 
-That one name sets the API and web origins (`src/core/dandiInstances.ts`), the instance OSB copies
-into for MAABCD, and which dandiset of a protocol's `maabcdAggregateDandisets` in
-`src/data/protocols.json` the copy goes to (none for that instance: nothing is shared). Any other
-name stops the dev server and the build. In deployment, pass it as the `VITE_DANDI_INSTANCE` build
-argument (the image's nginx proxy follows it; the container's `DANDI_INSTANCE` overrides the proxy).
-The OSB user's `DANDI_API_KEY` must be a key for that instance.
+MAABCD copies then go to the protocol's dandiset for that sandbox in `src/data/protocols.json`
+(none listed: nothing is shared).
 
-### Signing in to DANDI's sandbox with an API key (local only)
-
-The sandbox has no OAuth app for us, so also add your sandbox API key to `.env.local`. The dev server
-signs DANDI calls with it, so it never reaches the browser, and `yarn build` ignores it:
+The sandboxes have no OAuth app for us, so also add your API key on that sandbox there. The dev
+server signs DANDI calls with it, so it never reaches the browser, and `yarn build` ignores it:
 
 ```bash
 DANDI_SANDBOX_API_KEY=<your sandbox API key>

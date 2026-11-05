@@ -47,9 +47,9 @@ const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
 export type UploadBackend = 'ember' | 'bucket'
 /** VITE_UPLOAD_BACKEND: `bucket`, or EMBER-DANDI for anything else, unset included. */
 export const UPLOAD_BACKEND: UploadBackend = import.meta.env.VITE_UPLOAD_BACKEND === 'bucket' ? 'bucket' : 'ember'
-/** The DANDI instance in use, from VITE_DANDI_INSTANCE (EMBER-DANDI when unset): where the
- *  researcher's uploads go, and which of a protocol's MAABCD dandisets the copy goes to. */
-export const DANDI_INSTANCE = dandiInstance(import.meta.env.VITE_DANDI_INSTANCE)
+/** The DANDI instance in use: VITE_DANDI_INSTANCE in the dev server, EMBER-DANDI otherwise. Sets where
+ *  the researcher's uploads go, and which of a protocol's MAABCD dandisets the copy goes to. */
+export const DANDI_INSTANCE = dandiInstance(import.meta.env.DEV ? import.meta.env.VITE_DANDI_INSTANCE : undefined)
 const { api: EMBER_API_ORIGIN, web: EMBER_WEB_ORIGIN } = DANDI_INSTANCE
 /** The OSB (Keycloak) user whose key (user attribute `DANDI_API_KEY`) signs the copy into the
  *  protocol's MAABCD dandiset, on the same instance (dandi-cli's name for it). */

@@ -10,15 +10,15 @@ test('EMBER-DANDI when no instance is configured', () => {
   }
 })
 
-test('each of the four instances gives its own API and web origins', () => {
-  assert.deepEqual(dandiInstance('dandi-sandbox'), { name: 'dandi-sandbox', api: 'https://api.sandbox.dandiarchive.org', web: 'https://sandbox.dandiarchive.org' })
-  assert.equal(dandiInstance(' ember-dandi-sandbox ').web, 'https://dandi.sandbox.emberarchive.org')
-  assert.equal(dandiInstance('dandi').api, 'https://api.dandiarchive.org')
-  assert.equal(Object.keys(DANDI_INSTANCES).length, 4)
+test('each sandbox gives its own API and web origins', () => {
+  assert.deepEqual(dandiInstance(' dandi-sandbox '), { name: 'dandi-sandbox', api: 'https://api.sandbox.dandiarchive.org', web: 'https://sandbox.dandiarchive.org' })
+  assert.equal(dandiInstance('ember-dandi-sandbox').api, 'https://api-dandi.sandbox.emberarchive.org')
+  assert.deepEqual(Object.keys(DANDI_INSTANCES), ['ember-dandi', 'ember-dandi-sandbox', 'dandi-sandbox'])
 })
 
 test('an unknown instance name throws, naming the ones there are', () => {
-  assert.throws(() => dandiInstance('dandi-sandbx'), /"dandi-sandbx".*dandi, dandi-sandbox, ember-dandi, ember-dandi-sandbox/)
+  assert.throws(() => dandiInstance('dandi-sandbx'), /"dandi-sandbx".*ember-dandi, ember-dandi-sandbox, dandi-sandbox/)
+  assert.throws(() => dandiInstance('dandi'), /not a DANDI instance/)
   assert.throws(() => dandiInstance('toString'), /not a DANDI instance/)
 })
 
@@ -26,7 +26,6 @@ test('a protocol\'s MAABCD dandiset is the one for the instance in use, or none'
   const protocol = { maabcdAggregateDandisets: { 'ember-dandi': '000607', 'dandi-sandbox': '219158' } }
   assert.equal(maabcdDandisetFor(protocol, 'ember-dandi'), '000607')
   assert.equal(maabcdDandisetFor(protocol, 'dandi-sandbox'), '219158')
-  assert.equal(maabcdDandisetFor(protocol, 'dandi'), undefined)
   assert.equal(maabcdDandisetFor({}, 'ember-dandi'), undefined)
 })
 
@@ -41,8 +40,3 @@ test('every maabcdAggregateDandisets key in protocols.json is an instance, and i
   }
 })
 
-test('nginx proxies to the same API origin for each instance as the app uses', () => {
-  const conf = readFileSync(new URL('../../../deploy/resources/default.conf', import.meta.url), 'utf8')
-  const mapped = Object.fromEntries([...conf.matchAll(/^\s*"([a-z-]+)"\s+(https:\/\/\S+);/gm)].map((m) => [m[1], m[2]]))
-  assert.deepEqual(mapped, Object.fromEntries(Object.entries(DANDI_INSTANCES).map(([name, { api }]) => [name, api])))
-})

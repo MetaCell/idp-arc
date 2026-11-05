@@ -6,7 +6,7 @@ const PLACEHOLDER_TOKEN = 'sandbox-proxy-api-key'
 /**
  * Local development only: always "signed in", as the owner of DANDI_SANDBOX_API_KEY. The key stays in
  * the Vite dev server, which sets `Authorization: token <key>` on every proxied DANDI call
- * (vite.config.ts); the browser never sees it. For DANDI's sandbox, which has no OAuth app for us.
+ * (vite.config.ts); the browser never sees it. For the sandboxes, which have no OAuth app for us.
  */
 export class SandboxApiKeyEmberAuth implements IEmberAuth {
   readonly expiresAt = Number.MAX_SAFE_INTEGER

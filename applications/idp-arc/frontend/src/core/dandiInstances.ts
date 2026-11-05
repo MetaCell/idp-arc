@@ -1,9 +1,9 @@
-/** The DANDI deployments the app can use, by the name OSB and dandi-cli know them by. */
+/** The DANDI deployments the app can use, by the name OSB and dandi-cli know them by: EMBER-DANDI,
+ *  and the two sandboxes for local testing. */
 export const DANDI_INSTANCES = {
-  'dandi': { api: 'https://api.dandiarchive.org', web: 'https://dandiarchive.org' },
-  'dandi-sandbox': { api: 'https://api.sandbox.dandiarchive.org', web: 'https://sandbox.dandiarchive.org' },
   'ember-dandi': { api: 'https://api-dandi.emberarchive.org', web: 'https://dandi.emberarchive.org' },
   'ember-dandi-sandbox': { api: 'https://api-dandi.sandbox.emberarchive.org', web: 'https://dandi.sandbox.emberarchive.org' },
+  'dandi-sandbox': { api: 'https://api.sandbox.dandiarchive.org', web: 'https://sandbox.dandiarchive.org' },
 } as const
 
 export type DandiInstanceName = keyof typeof DANDI_INSTANCES
