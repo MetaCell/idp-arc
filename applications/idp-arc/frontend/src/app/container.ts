@@ -23,6 +23,8 @@ import { EmberOAuthClient, EMBER_CALLBACK_PATH } from '../infra/emberOAuthClient
 import { EmberDandiDirectClient } from '../infra/emberDandiDirectClient'
 import { EmberUploadApiClient } from '../infra/emberUploadApiClient'
 import { dandiInstance } from '../core/dandiInstances'
+import { SandboxApiKeyEmberAuth } from '../infra/sandboxApiKeyEmberAuth'
+import type { IEmberAuth } from '../core/ports/IEmberAuth'
 import type { IObjectStore } from '../core/ports/IObjectStore'
 import { createEmberObjectStore } from '../core/use-cases/emberObjectStore'
 import { createProtocolDandisetsUseCases, type ProtocolDandiset } from '../core/use-cases/protocolDandisets'
@@ -71,12 +73,15 @@ const workspaceApi = new WorkspaceApiClient(WORKSPACES_API, WORKSPACES_LIST_URL)
 
 /** Signs the researcher in to EMBER-DANDI (OAuth in a popup, a full-page redirect if it is blocked);
  *  their token stays in the browser. */
-export const emberAuth = new EmberOAuthClient({
-  authOrigin: EMBER_API_ORIGIN,
-  apiBase: EMBER_FETCH_BASE,
-  clientId: import.meta.env.VITE_EMBER_CLIENT_ID ?? '',
-  redirectUri: `${window.location.origin}${EMBER_CALLBACK_PATH}`,
-})
+export const emberAuth: IEmberAuth = __DANDI_SANDBOX_API_KEY__
+  // Dev server only: the proxy signs every call with its DANDI_SANDBOX_API_KEY (vite.config.ts).
+  ? new SandboxApiKeyEmberAuth(EMBER_FETCH_BASE)
+  : new EmberOAuthClient({
+    authOrigin: EMBER_API_ORIGIN,
+    apiBase: EMBER_FETCH_BASE,
+    clientId: import.meta.env.VITE_EMBER_CLIENT_ID ?? '',
+    redirectUri: `${window.location.origin}${EMBER_CALLBACK_PATH}`,
+  })
 export { EMBER_CALLBACK_PATH }
 export { EmberPopupBlocked, EmberSignInCancelled } from '../infra/emberOAuthClient'
 const emberDirect = new EmberDandiDirectClient(EMBER_FETCH_BASE)

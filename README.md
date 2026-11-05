@@ -103,6 +103,15 @@ name stops the dev server and the build. In deployment, pass it as the `VITE_DAN
 argument (the image's nginx proxy follows it; the container's `DANDI_INSTANCE` overrides the proxy).
 The OSB user's `DANDI_API_KEY` must be a key for that instance.
 
+### Signing in to DANDI's sandbox with an API key (local only)
+
+The sandbox has no OAuth app for us, so also add your sandbox API key to `.env.local`. The dev server
+signs DANDI calls with it, so it never reaches the browser, and `yarn build` ignores it:
+
+```bash
+DANDI_SANDBOX_API_KEY=<your sandbox API key>
+```
+
 ---
 
 ## Docker (Local Build + Run)

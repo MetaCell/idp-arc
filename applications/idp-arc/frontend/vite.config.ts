@@ -13,8 +13,12 @@ const OSB_DOMAIN = env.VITE_OSB_BASE_DOMAIN || 'v2dev.opensourcebrain.org'
 const OSB_SCHEME = env.VITE_OSB_PROTOCOL || 'https'
 
 const OSB_WEB_ORIGIN = `${OSB_SCHEME}://www.${OSB_DOMAIN}`
-// Throws at start for a VITE_DANDI_INSTANCE that isn't one of the four.
-const DANDI_API_ORIGIN = dandiInstance(env.VITE_DANDI_INSTANCE).api
+// Throws at start for a VITE_DANDI_INSTANCE that isn't one of the two.
+const DANDI_INSTANCE = dandiInstance(env.VITE_DANDI_INSTANCE)
+const DANDI_API_ORIGIN = DANDI_INSTANCE.api
+/** Dev server on DANDI's sandbox only (no OAuth app for us there): signs every proxied DANDI call with
+ *  this key instead of the user's token. Not VITE_-prefixed, so it never reaches the bundle. */
+const DANDI_SANDBOX_API_KEY = DANDI_INSTANCE.name === 'dandi-sandbox' ? env.DANDI_SANDBOX_API_KEY?.trim() ?? '' : ''
 /**
  * Optional HTTPS for the dev server: EMBER-DANDI's OAuth application only accepts https://
  * redirect URIs, so its sign-in needs https://localhost:5173 (registered as
@@ -35,6 +39,7 @@ const devHttps = loadDevHttpsCerts()
 
 // eslint-disable-next-line no-console
 console.log(`[vite] proxying OSB -> ${OSB_WEB_ORIGIN}`)
+console.log(`[vite] proxying DANDI -> ${DANDI_API_ORIGIN}${DANDI_SANDBOX_API_KEY ? ' (signed with DANDI_SANDBOX_API_KEY, no OAuth)' : ''}`)
 
 // IPv4 lookups and reused connections for every proxied call. macOS resolves `*.local` names
 // (local minikube: `osb.local`) through multicast DNS first, and the IPv6 query only falls back
@@ -43,8 +48,11 @@ console.log(`[vite] proxying OSB -> ${OSB_WEB_ORIGIN}`)
 const agentOptions = { keepAlive: true, family: 4 }
 const upstreamAgent = OSB_SCHEME === 'https' ? new https.Agent(agentOptions) : new http.Agent(agentOptions)
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
+  define: {
+    __DANDI_SANDBOX_API_KEY__: JSON.stringify(command === 'serve' && !!DANDI_SANDBOX_API_KEY),
+  },
   build: {
     sourcemap: true,
     outDir: 'dist',
@@ -70,6 +78,9 @@ export default defineConfig({
         target: DANDI_API_ORIGIN,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/ember-proxy/, ''),
+        ...(DANDI_SANDBOX_API_KEY ? {
+          configure: (proxy) => proxy.on('proxyReq', (req) => req.setHeader('Authorization', `token ${DANDI_SANDBOX_API_KEY}`)),
+        } : {}),
       },
     },
   },
@@ -78,4 +89,4 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   }
-})
+}))
