@@ -5,13 +5,16 @@ import { createEmberObjectStore, EMBER_SIGN_IN } from '../../src/core/use-cases/
 import type { IDandiDirectApi } from '../../src/core/ports/IDandiDirectApi'
 import type { IEmberUploadApi } from '../../src/core/ports/IEmberUploadApi'
 import { UserFacingError } from '../../src/core/userMessages'
+import { strFromU8, unzipSync } from 'fflate'
 
 const ORIGIN = 'https://api-dandi.example.org'
+const WEB = 'https://dandi.example.org'
 const file = () => new File(['animal data'], 'animal 01.xlsx')
 const finalizedPaths: string[] = []
 
 function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: boolean; failOsbOnce?: boolean; failDirectOnce?: boolean } = {}) {
   const calls: string[] = []
+  const sent: Blob[] = []
   let osbFails = opts.failOsbOnce ? 1 : 0
   let directFails = opts.failDirectOnce ? 1 : 0
   const direct: IDandiDirectApi = {
@@ -27,7 +30,7 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
       if (directFails > 0) { directFails -= 1; throw new Error('EMBER initialize failed') }
       return opts.dedupDirect ? { parts: [], blobId: 'blob-1' } : { uploadId: 'up-1', parts: [{ partNumber: 1, size: 11, url: 'https://s3/direct' }] }
     },
-    async putPart(url) { calls.push(`put:${url}`); return `etag-${url.split('/').pop()}` },
+    async putPart(url, body) { calls.push(`put:${url}`); sent.push(body); return `etag-${url.split('/').pop()}` },
     async finalizeUpload(token, input) {
       finalizedPaths.push(input.path)
       calls.push(`direct-finalize:${input.dandisetId}:${input.uploadId ?? 'dedup'}:${input.parts.map((p) => p.etag).join(',')}`)
@@ -52,9 +55,11 @@ function fakes(opts: { dedupDirect?: boolean; dedupOsb?: boolean; shortParts?: b
     async recordWorkspace(dandisetId: string, workspaceId: number, protocol: { id: string }) { calls.push(`record:${dandisetId}:${workspaceId}:${protocol.id}`) },
   }
   const store = (emberToken: string | null = 'ember-token') => createEmberObjectStore(
-    { getToken: async () => 'osb-token' }, { getToken: () => emberToken }, direct, osb, dandisets, `${ORIGIN}/`,
+    { getToken: async () => 'osb-token' },
+    { getToken: () => emberToken },
+    direct, osb, dandisets, `${ORIGIN}/`, WEB,
   )
-  return { calls, store }
+  return { calls, store, sent }
 }
 
 test('uploads to the picked dandiset directly; the MAABCD copy is a separate call, through OSB', async () => {
@@ -69,10 +74,10 @@ test('uploads to the picked dandiset directly; the MAABCD copy is a separate cal
   // Plain data, so it can be saved across a reload: the copy needs the etag, not the file.
   assert.deepEqual(JSON.parse(JSON.stringify(stored)), stored)
   await store().shareWithMaabcd!(stored, '000533', file())
-  assert.deepEqual(calls.slice(3), ['osb-urls:osb-token:000533:animal 01.xlsx:true', 'put:https://s3/osb', 'osb-validate:000533:etag-osb'])
+  assert.deepEqual(calls.slice(3), ['osb-urls:osb-token:000533:animal 01.zip:true', 'put:https://s3/osb', 'osb-validate:000533:etag-osb'])
   // The run imports the researcher's own copy, from EMBER's public origin (not the browser's proxy).
   assert.equal(stored.url, `${ORIGIN}/api/assets/asset-1/download/`)
-  assert.match(stored.key, /^four-choice-reversal\/[0-9a-f-]{36}\/animal-01\.xlsx$/)
+  assert.match(stored.key, /^four-choice-reversal\/[0-9a-f-]{36}\/animal-01\.zip$/)
   assert.equal(stored.dandisetId, '000123')
   assert.equal(progress.at(-1), 1)
   assert.ok(progress.every((p, i) => i === 0 || p >= progress[i - 1]), 'progress never goes backwards')
@@ -129,7 +134,7 @@ test('a failed MAABCD copy rejects on its own; calling it again makes only that 
   calls.length = 0
 
   await store().shareWithMaabcd!(stored, '000533', file())
-  assert.deepEqual(calls, ['osb-urls:osb-token:000533:animal 01.xlsx:true', 'put:https://s3/osb', 'osb-validate:000533:etag-osb'])
+  assert.deepEqual(calls, ['osb-urls:osb-token:000533:animal 01.zip:true', 'put:https://s3/osb', 'osb-validate:000533:etag-osb'])
 })
 
 test('without the file, the MAABCD copy works when EMBER already holds the bytes, and fails when it would need the bytes', async () => {
@@ -177,3 +182,22 @@ test('a retry with everything done makes no copy at all', async () => {
   assert.equal(stored.url, `${ORIGIN}/api/assets/asset-1/download/`)
 })
 
+
+test('what goes up is the file zipped with a README linking the dandiset; the MAABCD copy rebuilds the same bytes', async () => {
+  const { store, sent } = fakes()
+  const stored = await store().put({
+    file: file(), protocolId: 'four-choice-reversal', userSub: 'user-1',
+    dandisets: { user: '000123', protocol: { id: 'four-choice-reversal', name: 'Four-choice reversal digging task' } },
+  })
+  const uploaded = unzipSync(new Uint8Array(await sent[0].arrayBuffer()))
+  assert.deepEqual(Object.keys(uploaded), ['README.md', 'animal 01.xlsx'])
+  assert.equal(strFromU8(uploaded['animal 01.xlsx']), 'animal data')
+  assert.match(strFromU8(uploaded['README.md']), /^- Dandiset 000123: https:\/\/dandi\.example\.org\/dandiset\/000123 /m)
+  assert.equal(stored.readme, strFromU8(uploaded['README.md']))
+  assert.equal(stored.name, 'animal 01.zip')
+  assert.equal(stored.size, sent[0].size)
+
+  // Without the etag (an older checkpoint), the copy hashes the file it is given: rebuilt, it matches.
+  await store().shareWithMaabcd!({ ...stored, etag: undefined }, '000533', file())
+  assert.deepEqual(new Uint8Array(await sent[1].arrayBuffer()), new Uint8Array(await sent[0].arrayBuffer()))
+})

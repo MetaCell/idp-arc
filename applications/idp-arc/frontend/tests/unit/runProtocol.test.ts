@@ -335,7 +335,10 @@ test('an EMBER-DANDI upload gets the run\'s workspace recorded in its dandiset, 
   assert.equal(f.calls[create + 1], 'record:42')
   assert.deepEqual(seen.dandisets, {
     user: '000123', newName: 'Four-choice reversal digging task', maabcd: '000533',
-    protocol: { id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/maracbaylis/four-choice-example' },
+    protocol: {
+      id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/maracbaylis/four-choice-example',
+      description: FOUR_CHOICE.description,
+    },
   })
 })
 

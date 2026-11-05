@@ -92,7 +92,7 @@ const protocolDandisets = createProtocolDandisetsUseCases({
 
 /** Where uploads go before OSB imports them (UPLOAD_BACKEND): EMBER-DANDI, or the public bucket. */
 export const objectStore: IObjectStore = UPLOAD_BACKEND === 'ember'
-  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_DANDI_INSTANCE, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_API_ORIGIN)
+  ? createEmberObjectStore(authClient, emberAuth, emberDirect, new EmberUploadApiClient(WORKSPACES_API, MAABCD_DANDI_INSTANCE, MAABCD_EMBER_USERNAME), protocolDandisets, EMBER_API_ORIGIN, EMBER_WEB_ORIGIN)
   : new PublicBucketObjectStore(import.meta.env.VITE_UPLOAD_BUCKET_URL)
 
 // ─── Use-cases (injected with their concrete dependencies) ────────────────────

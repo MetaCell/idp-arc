@@ -312,6 +312,8 @@ function guessContentType(path: string): string {
     csv: 'text/csv',
     tsv: 'text/tab-separated-values',
     json: 'application/json',
+    md: 'text/markdown',
+    zip: 'application/zip',
     nwb: 'application/x-nwb',
     txt: 'text/plain',
     xls: 'application/vnd.ms-excel',

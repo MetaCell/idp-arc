@@ -19,7 +19,7 @@ export interface ObjectUploadInput {
     user?: string
     newName?: string
     /** Recorded in the dandiset's metadata, with the workspace the run uses. */
-    protocol?: { id: string; name: string; url?: string }
+    protocol?: { id: string; name: string; url?: string; description?: string }
     /** The protocol's MAABCD dandiset (protocols.json `maabcdAggregateDandisets`, for the instance in use), uploaded to through OSB. */
     maabcd?: string
   }
@@ -42,6 +42,8 @@ export interface StoredObject {
   dandisetId?: string
   /** EMBER-DANDI: the file's DANDI etag, so the MAABCD copy needs no file. */
   etag?: string
+  /** EMBER-DANDI: the README packed into the upload (dandisetReadme.ts), to rebuild the same bytes from the file. */
+  readme?: string
 }
 
 export interface IObjectStore {

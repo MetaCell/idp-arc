@@ -33,6 +33,8 @@ export interface RunProtocolDefinition {
    *  `maabcdAggregateDandisets`), which each upload is also copied into (through OSB). Empty or
    *  absent: no MAABCD copy. */
   maabcdAggregateDandisetId?: string
+  /** What the task is: written into the upload's README. */
+  description?: string
 }
 
 export interface RunProtocolInput {
@@ -290,7 +292,7 @@ export function createRunProtocolUseCase(
         dandisets: {
           user: input.dandisetId,
           newName: input.dandisetName?.trim() || protocol.name,
-          protocol: protocolRef(),
+          protocol: { ...protocolRef(), description: protocol.description },
           maabcd: input.shareWithMaabcd === false ? undefined : protocol.maabcdAggregateDandisetId,
         },
       }, (sent, total) => {

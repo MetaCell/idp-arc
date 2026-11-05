@@ -4,6 +4,8 @@ import type { IEmberAuth } from '../ports/IEmberAuth'
 import type { IEmberUploadApi } from '../ports/IEmberUploadApi'
 import type { IObjectStore, ObjectUploadInput, StoredObject } from '../ports/IObjectStore'
 import { computeDandiEtag, type PartPlan } from '../dandiEtag'
+import { dandisetReadme, MAX_REPACK_BYTES, withReadme } from '../dandisetReadme'
+import { pathSafe } from '../pathSafe'
 import { EMBER_SIGN_IN, UserFacingError } from '../userMessages'
 import type { ProtocolDandisets } from './protocolDandisets'
 
@@ -42,10 +44,11 @@ export function createEmberObjectStore(
   /** EMBER's public API origin (`https://api-dandi.emberarchive.org`): the download link has to
    *  work from OSB's cluster, so never the browser's same-origin proxy. */
   emberApiOrigin: string,
+  /** EMBER-DANDI's web origin (`https://dandi.emberarchive.org`): the dandiset page in the README. */
+  emberWebOrigin: string,
 ): IObjectStore {
   return {
     async put(input: ObjectUploadInput, onProgress?: (sentBytes: number, totalBytes: number) => void): Promise<StoredObject> {
-      const { file } = input
       const token = emberAuth.getToken()
       if (!token) throw new UserFacingError(EMBER_SIGN_IN, 'No EMBER-DANDI token (not signed in, or it expired)')
       const saved: EmberUploadCheckpoint = { ...(input.resume as EmberUploadCheckpoint | undefined) }
@@ -54,6 +57,8 @@ export function createEmberObjectStore(
         input.onCheckpoint?.({ ...saved })
       }
 
+      // What goes up is the file with the README packed in, once the dandiset (its link) is known.
+      let file = input.file
       const progress = (sent: number) => onProgress?.(Math.min(sent, file.size), file.size)
       progress(saved.own ? file.size : 0)
 
@@ -62,6 +67,16 @@ export function createEmberObjectStore(
       const userDandisetId = saved.userDandisetId || input.dandisets?.user
         || await dandisets.createForProtocol(input.dandisets?.newName || protocol.name, protocol)
       if (saved.userDandisetId !== userDandisetId) save({ userDandisetId })
+      // The dandiset's own name: a re-upload into an existing one keeps the name it has.
+      const name = await dandisetName(token, userDandisetId) || input.dandisets?.newName || protocol.name
+      const readme = input.file.size <= MAX_REPACK_BYTES ? dandisetReadme({
+        name,
+        dandisetId: userDandisetId,
+        dandisetUrl: `${emberWebOrigin.replace(/\/+$/, '')}/dandiset/${userDandisetId}`,
+        protocol,
+        originalName: input.file.name,
+      }) : undefined
+      if (readme) file = await withReadme(input.file, readme)
       let asset = saved.own
       if (!asset) {
         const { etag, parts: plan } = await computeDandiEtag(file)
@@ -83,6 +98,7 @@ export function createEmberObjectStore(
         size: file.size,
         dandisetId: userDandisetId,
         etag: saved.etag,
+        ...(readme ? { readme } : {}),
       }
     },
 
@@ -90,7 +106,9 @@ export function createEmberObjectStore(
       if (stored.dandisetId) await dandisets.recordWorkspace(stored.dandisetId, workspaceId, protocol)
     },
 
-    async shareWithMaabcd(stored, dandisetId, file) {
+    async shareWithMaabcd(stored, dandisetId, original) {
+      // The bytes of the researcher's copy: the same README packed in the same way.
+      const file = original && stored.readme ? await withReadme(original, stored.readme) : original
       const hashed = !stored.etag && file ? await computeDandiEtag(file) : undefined
       const etag = stored.etag ?? hashed?.etag
       if (!etag) throw new Error('The MAABCD copy needs the file\'s checksum, but no file is selected (the page was reloaded)')
@@ -112,6 +130,11 @@ export function createEmberObjectStore(
     },
   }
 
+  async function dandisetName(token: string, dandisetId: string): Promise<string | undefined> {
+    const { name } = await direct.getDraftMetadata(token, dandisetId)
+    return typeof name === 'string' && name.trim() ? name.trim() : undefined
+  }
+
   async function putParts(parts: { partNumber: number; url: string }[], plan: PartPlan[], file: File,
     report: (sentInTransfer: number) => void) {
     // Every part or none (deduplicated): a shorter list would silently upload a truncated file.
@@ -130,9 +153,4 @@ export function createEmberObjectStore(
     }
     return result
   }
-}
-
-/** One asset path segment: DANDI rejects `@` and the like; also stops `/` adding segments. */
-function pathSafe(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-._]+|[-._]+$/g, '') || 'unknown'
 }

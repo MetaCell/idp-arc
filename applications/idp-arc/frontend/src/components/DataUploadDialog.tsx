@@ -631,7 +631,9 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                   {step === 'stillRunning' ? 'Results will be in' : 'Results are in'} <code>{outputsDir}/</code> in your workspace.
                 </Typography>
               )}
-              {step !== 'uploading' && spawnedWorkspaceId !== undefined && (
+              {/* Only once this run has its workspace: one merely recorded in the dandiset may not be touched yet. */}
+              {step !== 'uploading' && spawnedWorkspaceId !== undefined
+                && runSteps.some((s) => s.id === RUN_STEP.workspace && s.state === 'succeeded') && (
                 <Button variant="outlined" onClick={() => openWorkspaceTab(spawnedWorkspaceId)}>
                   Open workspace
                 </Button>
