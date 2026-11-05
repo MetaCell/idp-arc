@@ -1,7 +1,7 @@
 # Protocols (`protocols.json`)
 
 One entry per behavioral task / protocol. It drives the Protocols page and the upload dialog, and
-it tells IDP which analysis to run on a researcher's data and what input that analysis can read.
+it tells IDP/MAABCD which analysis to run on a researcher's data and what input that analysis can read.
 Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `notebooksDir`).
 
 ## Fields
@@ -27,7 +27,7 @@ Each upload goes to EMBER-DANDI, in up to two copies:
 |---|---|---|
 | Dandiset | picked in the dialog, or a new one | `maabcdAggregateDandisets` (the instance's), if the researcher shares |
 | Path | `sourcedata/upload-<UTC time>/<file>.zip`, plus the BIDS files made from it | `<OSB user id>/<upload id>/<file>.zip` |
-| Built and signed by | IDP, with the researcher's EMBER login | OSB, with the consortium's `DANDI_API_KEY` |
+| Built and signed by | IDP/MAABCD, with the researcher's EMBER login | OSB, with the consortium's `DANDI_API_KEY` |
 
 Both copies are the same zip: the upload with a `README.md` added (`core/dandisetReadme.ts`) that
 links the researcher's dandiset. Each upload gets its own folder, so uploads never overwrite each
@@ -45,11 +45,11 @@ protocol doesn't read.
 2. OSB imports both into this run's folder (`POST /workspaceresource`; names in
    core/workspaceLayout.ts): `<id>/run-<id>-<UTC timestamp>/<repo>-<ref>/` for the code, fresh for
    every run, and `…/inputs/` for the upload (a `.zip` is unpacked there).
-3. When the imports are done, IDP lists the notebooks OSB found in `notebooksDir` and sorts them.
+3. When the imports are done, IDP/MAABCD lists the notebooks OSB found in `notebooksDir` and sorts them.
    It then asks OSB to run exactly those, in that order (`POST /workspace/{id}/run`, papermill in
    an Argo task), with the run's `inputs/` and `outputs/` as the notebooks' `INPUT_DIR` and
    `OUTPUT_DIR` parameters. OSB sets up `requirements.txt` and `scripts/` first; which notebooks run
-   and where they read and write is IDP's decision.
+   and where they read and write is IDP/MAABCD's decision.
 4. Results, in the same run folder (e.g. `four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/`):
    `inputs/` (the upload), `outputs/` (what the notebooks wrote), the executed notebooks and `run.log`. The
    run task removes the code once it has copied it, so the next run gets the current code.
@@ -66,8 +66,8 @@ protocol doesn't read.
 
 ## What a protocol repository must look like
 
-Agreed with the protocol authors on 30 Sep 2026. These conventions live in IDP (`REPOSITORY_SETUP`
-and `notebooksDir`): IDP tells OSB which notebooks to run, in what order, and which setup files to
+Agreed with the protocol authors on 30 Sep 2026. These conventions live in IDP/MAABCD (`REPOSITORY_SETUP`
+and `notebooksDir`): IDP/MAABCD tells OSB which notebooks to run, in what order, and which setup files to
 use; OSB applies the ones the repository has.
 
 1. `requirements.txt` at the root — **optional**, installed first. Pin versions: the task image
@@ -81,7 +81,7 @@ use; OSB applies the ones the repository has.
    `2_x`), each with its own folder as working directory. The first failing notebook stops the run.
 4. **Input and output: a cell tagged `parameters`** (papermill's convention) in every notebook, setting
    `INPUT_DIR` and `OUTPUT_DIR` to its own defaults (e.g. its example data). The notebooks read from
-   `INPUT_DIR` and write everything they produce to `OUTPUT_DIR`; for a run, IDP passes the run's
+   `INPUT_DIR` and write everything they produce to `OUTPUT_DIR`; for a run, IDP/MAABCD passes the run's
    `inputs/` and `outputs/`. A run stops at the first notebook without that cell.
 
 ## Per protocol

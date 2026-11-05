@@ -79,7 +79,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
       body: JSON.stringify({
         name,
         metadata: {
-          description: 'Created by IDP to hold this researcher’s uploaded data.',
+          description: 'Created by MAABCD to hold this researcher’s uploaded data.',
           ...metadata,
         },
       }),
