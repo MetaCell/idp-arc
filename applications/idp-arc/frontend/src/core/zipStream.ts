@@ -45,6 +45,8 @@ export interface IndexEntry {
   compressedSize: number
   size: number
   localOffset: number
+  /** Where its record sits in the table of contents: [start, end), from the table's start. */
+  record: [number, number]
 }
 
 /** Where a zip's table of contents is, and what it lists. */
@@ -89,16 +91,20 @@ export async function readZipIndex(zip: Blob): Promise<ZipIndex | null> {
   return entries && { entries, names: entries.map((e) => e.name), count, cdOffset, cdSize, comment }
 }
 
-/** `zip` with `entry` added: its entries stay byte for byte; the new one is listed first. */
+/** `zip` with `entry` added, in place of any entry of the same name: the other entries stay byte
+ *  for byte; the new one is listed first. */
 export function withEntry(zip: Blob, index: ZipIndex, entry: NewEntry & { data: Uint8Array }): Blob {
   const header = { name: encode(entry.name), crc: crc32(0, entry.data), size: entry.data.length, date: entry.date, offset: index.cdOffset }
   const local = localHeader(header)
   const central = centralHeader(header)
   const cdOffset = index.cdOffset + local.length + entry.data.length
+  // The table of contents without the replaced entries' records (their bytes stay, unlisted).
+  const kept = index.entries.filter((e) => e.name !== entry.name)
+  const records = kept.map((e) => zip.slice(index.cdOffset + e.record[0], index.cdOffset + e.record[1]))
+  const recordsSize = kept.reduce((n, e) => n + e.record[1] - e.record[0], 0)
   return new Blob([
-    zip.slice(0, index.cdOffset), local, entry.data,
-    central, zip.slice(index.cdOffset, index.cdOffset + index.cdSize),
-    endRecords(index.count + 1, index.cdSize + central.length, cdOffset, index.comment),
+    zip.slice(0, index.cdOffset), local, entry.data, central, ...records,
+    endRecords(kept.length + 1, recordsSize + central.length, cdOffset, index.comment),
   ] as BlobPart[])
 }
 
@@ -149,8 +155,8 @@ function localHeader({ name, crc, size, date }: Header): Uint8Array {
   v.setUint16(4, zip64 ? 45 : 20, true)
   v.setUint16(6, UTF8, true)
   v.setUint16(8, 0, true) // stored
-  v.setUint16(10, dosTime(date), true)
-  v.setUint16(12, dosDate(date), true)
+  v.setUint16(10, dosTime(zipDate(date)), true)
+  v.setUint16(12, dosDate(zipDate(date)), true)
   v.setUint32(14, crc, true)
   v.setUint32(18, zip64 ? MAX32 : size, true)
   v.setUint32(22, zip64 ? MAX32 : size, true)
@@ -179,8 +185,8 @@ function centralHeader({ name, crc, size, date, offset }: Header): Uint8Array {
   v.setUint16(6, big.length ? 45 : 20, true)
   v.setUint16(8, UTF8, true)
   v.setUint16(10, 0, true) // stored
-  v.setUint16(12, dosTime(date), true)
-  v.setUint16(14, dosDate(date), true)
+  v.setUint16(12, dosTime(zipDate(date)), true)
+  v.setUint16(14, dosDate(zipDate(date)), true)
   v.setUint32(16, crc, true)
   v.setUint32(20, Math.min(size, MAX32), true)
   v.setUint32(24, Math.min(size, MAX32), true)
@@ -254,7 +260,7 @@ function centralEntries(cd: Uint8Array, count: number): IndexEntry[] | null {
       if (localOffset === MAX32) localOffset = next64()
     }
     if ([size, compressedSize, localOffset].some(Number.isNaN)) return null
-    entries.push({ name: decoder.decode(cd.subarray(at + 46, extraStart)), method: v.getUint16(at + 10, true), compressedSize, size, localOffset })
+    entries.push({ name: decoder.decode(cd.subarray(at + 46, extraStart)), method: v.getUint16(at + 10, true), compressedSize, size, localOffset, record: [at, next] })
     at = next
   }
   return at === cd.length ? entries : null
@@ -293,6 +299,12 @@ function dosTime(d: Date): number {
 
 function dosDate(d: Date): number {
   return ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()
+}
+
+/** `date` within what a zip entry can hold: 1980 to 2107, clamped to the nearest end. */
+export function zipDate(date: Date): Date {
+  const first = new Date(1980, 0, 1), last = new Date(2107, 11, 31, 23, 59, 58)
+  return Number.isNaN(date.getTime()) || date < first ? first : date > last ? last : date
 }
 
 function encode(text: string): Uint8Array {

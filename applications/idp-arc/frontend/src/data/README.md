@@ -17,7 +17,7 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
 | `requirements`, `pythonPath`, `install` | run | Override the repository setup below (defaults in `REPOSITORY_SETUP`, runProtocol.ts: `requirements.txt`; `["scripts"]`; `["scripts/install.py", "scripts/setup.py", "scripts/pyproject.toml"]`). OSB applies only the ones the repository has. Leave them out for a repository that follows the contract. |
 | `templatesZipUrl` | Protocols page, dialog | Archive of the protocol's templates (data sheets, instructions), downloaded by the **Download** buttons on the Protocols page and in the dialog's upload step. A path relative to `public/` (`protocols_archives/4c.zip`) or an absolute URL. Missing or empty = both buttons disabled. |
 | `inputFormats` | dialog, run | Extensions the analysis code can actually read. The dialog refuses other files before anything starts. **Without it, any file is accepted** (except an empty one, always refused). |
-| `bids` | dialog, upload | How the researcher's spreadsheets become a BIDS dataset in their dandiset (`core/bids/convert.ts`). `task` is the BIDS task label (letters and digits). `subjectId`, `sex` and `sessionDate` say where a workbook holds them: the cell right of the one reading `label`, on `sheet` (the date on each table's own sheet). `tables` lists the sheets that become tables: `sheet`, `acq` (the stage's label) and `header` (the first cell of the header row). `columns` describes each column by the name it gets (`latency_s`): `Description`, and `Units` or `Levels` when there are any; it is the same in every stage. `filledBy` (per table) names the columns that mark a row as a trial, `skipColumns` the columns left out, and `tableInfo` the cells above each table written to a JSON beside it. The dialog converts the file when it is picked and stops only on what BIDS can't do without: no Animal ID, no testing date, or no trial filled in anywhere; a missing sheet or header just leaves that stage out. PDFs in an uploaded zip go to `logs/`. |
+| `bids` | dialog, upload | How the researcher's spreadsheets become a BIDS dataset in their dandiset (`core/bids/convert.ts`). **Required**: every upload goes up as BIDS. `task` is the BIDS task label (letters and digits). `subjectId`, `sex` and `sessionDate` say where a workbook holds them: the cell right of the one reading `label`, on `sheet` (the date on each table's own sheet). `tables` lists the sheets that become tables: `sheet`, `acq` (the stage's label) and `header` (the first cell of the header row). `columns` describes each column by the name it gets (`latency_s`): `Description`, and `Units` or `Levels` when there are any; it is the same in every stage. `filledBy` (per table) names the columns that mark a row as a trial, `skipColumns` the columns left out, and `tableInfo` the cells above each table written to a JSON beside it. The dialog converts the file when it is picked and stops only on what BIDS can't do without: no Animal ID, no testing date, or no trial filled in anywhere; a missing sheet or header just leaves that stage out. PDFs in an uploaded zip go to `logs/`. |
 
 ## Where uploads go
 
@@ -26,11 +26,12 @@ Each upload goes to EMBER-DANDI, in up to two copies:
 | | Researcher's dandiset | MAABCD aggregate dandiset |
 |---|---|---|
 | Dandiset | picked in the dialog, or a new one | `maabcdAggregateDandisets` (the instance's), if the researcher shares |
-| Path | `<id>/<upload id>/<file>` | `<OSB user id>/<upload id>/<file>` |
+| Path | `sourcedata/upload-<UTC time>/<file>.zip`, plus the BIDS files made from it | `<OSB user id>/<upload id>/<file>.zip` |
 | Built and signed by | IDP, with the researcher's EMBER login | OSB, with the consortium's `DANDI_API_KEY` |
 
-`<upload id>` is a random UUID, so uploads never overwrite each other. OSB builds the MAABCD path
-from the caller's login, so no one can write into another's folder.
+Both copies are the same zip: the upload with a `README.md` added (`core/dandisetReadme.ts`) that
+links the researcher's dandiset. Each upload gets its own folder, so uploads never overwrite each
+other. OSB builds the MAABCD path from the caller's login, so no one can write into another's folder.
 
 ## What happens on "Upload and run" (core/use-cases/runProtocol.ts)
 

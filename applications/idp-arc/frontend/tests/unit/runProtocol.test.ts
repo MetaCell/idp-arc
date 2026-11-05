@@ -22,6 +22,7 @@ const FOUR_CHOICE = {
   repoZipUrl: 'https://codeload.github.com/maracbaylis/four-choice-example/zip/refs/heads/main',
   notebooksDir: 'notebooks',
   inputFormats: ['.xlsx', '.zip'],
+  bids: { task: 'fourchoice', subjectId: { sheet: 'METADATA', label: 'Animal ID: (XXX001)' }, tables: [{ sheet: 'DISC', acq: 'discrimination', header: 'Trial' }] },
 }
 const auth = { getToken: async () => 'token', tokenParsed: { sub: 'user-1' } }
 const file = () => new File(['x'], 'animal_01.xlsx')
@@ -274,7 +275,7 @@ test('a run that stops before any notebook (nothing listed) failed, and says so 
 
 test('a protocol without a repository fails clearly', async () => {
   const f = fakes()
-  const last = (await run(f, { protocol: { id: 'open-field', name: 'Open field task' } })).pop()!
+  const last = (await run(f, { protocol: { id: 'open-field', name: 'Open field task', bids: FOUR_CHOICE.bids } })).pop()!
   assert.equal(last.phase, 'failed')
   assert.match(last.error ?? '', /isn't available yet/)
 })

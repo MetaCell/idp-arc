@@ -172,6 +172,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
     dandisetId: string,
     path: string,
     blobId: string,
+    replace = false,
   ): Promise<RegisteredAsset> {
     const res = await fetch(
       `${this.baseUrl}/api/dandisets/${dandisetId}/versions/draft/assets/`,
@@ -186,27 +187,55 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
         }),
       },
     )
-    // Already registered at this path: a re-upload of the same file. Reuse it.
+    // Already registered at this path: a re-upload of the same file reuses it; with `replace`,
+    // different content takes its place.
     if (res.status === 409) {
-      return { assetPath: path, assetId: await this.findDraftAssetId(token, dandisetId, path) }
+      const existing = await this.findDraftAsset(token, dandisetId, path)
+      if (!replace || existing.blob === blobId) return { assetPath: path, assetId: existing.asset_id }
+      return this.replaceAsset(token, dandisetId, existing.asset_id, path, blobId)
     }
     if (!res.ok) await this.fail(res, 'register_asset')
     const body = await res.json()
     return { assetPath: body.path ?? path, assetId: body.asset_id }
   }
 
-  /** The 409 above carries no asset id, so look the existing asset up by path. EMBER's `path`
-   *  filter matches by prefix, hence the exact comparison. */
-  private async findDraftAssetId(token: string, dandisetId: string, path: string): Promise<string> {
+  /** `PUT …/assets/{id}/`: the asset at `path` gets the new content (DANDI makes it a new asset). */
+  private async replaceAsset(token: string, dandisetId: string, assetId: string, path: string, blobId: string): Promise<RegisteredAsset> {
+    const res = await fetch(`${this.baseUrl}/api/dandisets/${dandisetId}/versions/draft/assets/${assetId}/`, {
+      method: 'PUT',
+      headers: this.headers(token, true),
+      body: JSON.stringify({ metadata: { path, schemaKey: 'Asset', encodingFormat: guessContentType(path) }, blob_id: blobId }),
+    })
+    if (!res.ok) await this.fail(res, 'replace_asset')
+    const body = await res.json()
+    return { assetPath: body.path ?? path, assetId: body.asset_id }
+  }
+
+  /** The 409 above carries no asset id, so look the existing asset up by path. */
+  private async findDraftAsset(token: string, dandisetId: string, path: string): Promise<{ asset_id: string; blob?: string }> {
+    const asset = await this.draftAssetAt(token, dandisetId, path)
+    if (!asset) throw new Error(`EMBER reported ${path} as already registered but has no such asset`)
+    return asset
+  }
+
+  /** EMBER's `path` filter matches by prefix, hence the exact comparison. */
+  private async draftAssetAt(token: string, dandisetId: string, path: string): Promise<{ asset_id: string; blob?: string } | undefined> {
     const res = await fetch(
       `${this.baseUrl}/api/dandisets/${dandisetId}/versions/draft/assets/?path=${encodeURIComponent(path)}`,
       { headers: this.headers(token) },
     )
     if (!res.ok) await this.fail(res, 'asset lookup')
     const body = await res.json()
-    const asset = (body.results ?? []).find((a: { path: string }) => a.path === path)
-    if (!asset) throw new Error(`EMBER reported ${path} as already registered but has no such asset`)
-    return asset.asset_id
+    return (body.results ?? []).find((a: { path: string }) => a.path === path)
+  }
+
+  async readDraftFile(token: string, dandisetId: string, path: string): Promise<string | null> {
+    const asset = await this.draftAssetAt(token, dandisetId, path)
+    if (!asset) return null
+    // Redirects to the file's S3 URL; the browser drops the Authorization header on the way.
+    const res = await fetch(`${this.baseUrl}/api/assets/${asset.asset_id}/download/`, { headers: this.headers(token) })
+    if (!res.ok) await this.fail(res, `download of ${path}`)
+    return res.text()
   }
 
   async initUpload(
@@ -301,7 +330,7 @@ export class EmberDandiDirectClient implements IDandiDirectApi {
     }
 
     if (!blobId) throw new Error('No blob to register: neither an upload nor a dedup hit.')
-    return this.registerAsset(token, input.dandisetId, input.path, blobId)
+    return this.registerAsset(token, input.dandisetId, input.path, blobId, input.replace)
   }
 }
 

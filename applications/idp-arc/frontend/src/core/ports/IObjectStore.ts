@@ -1,3 +1,5 @@
+import type { BidsConfig } from '../bids/convert'
+
 /**
  * Where a researcher's upload is stored before OSB imports it into the workspace: EMBER-DANDI
  * (emberObjectStore.ts) or a public bucket (publicBucketObjectStore.ts). The run doesn't know which.
@@ -23,10 +25,20 @@ export interface ObjectUploadInput {
     /** The protocol's MAABCD dandiset (protocols.json `maabcdAggregateDandisets`, for the instance in use), uploaded to through OSB. */
     maabcd?: string
   }
+  /** How the file goes into the dandiset as BIDS (the protocol's `bids` block): the file itself in
+   *  `sourcedata/`, the tables made from it beside it. EMBER-DANDI only; the bucket ignores it. */
+  bids: {
+    config: BidsConfig
+    protocol: { name: string; description?: string; url?: string }
+    /** The dataset's authors when the EMBER-DANDI account has no name to give. */
+    authors?: string[]
+  }
   /** From an earlier, interrupted put of the same file: what it already did is not done again. */
   resume?: UploadCheckpoint
   /** Gets the checkpoint each time a part of the upload is done. */
   onCheckpoint?: (checkpoint: UploadCheckpoint) => void
+  /** Called as each BIDS file made from the upload is written (after the file itself). */
+  onBidsProgress?: (written: number, total: number) => void
 }
 
 /** An uploaded file, as plain data: kept with the run's checkpoint, which is saved across reloads. */

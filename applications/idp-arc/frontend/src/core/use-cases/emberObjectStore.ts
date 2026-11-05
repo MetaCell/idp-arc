@@ -4,10 +4,13 @@ import type { IEmberAuth } from '../ports/IEmberAuth'
 import type { IEmberUploadApi } from '../ports/IEmberUploadApi'
 import type { IObjectStore, ObjectUploadInput, StoredObject } from '../ports/IObjectStore'
 import { computeDandiEtag, type PartPlan } from '../dandiEtag'
-import { dandisetReadme, MAX_REPACK_BYTES, withReadme } from '../dandisetReadme'
+import { dandisetReadme, withReadme } from '../dandisetReadme'
+import { convertToBids, type OutputFile } from '../bids/convert'
+import { isMergedFile, mergeWithDraft } from '../bids/merge'
 import { pathSafe } from '../pathSafe'
+import { utcStamp } from '../workspaceLayout'
 import { EMBER_SIGN_IN, UserFacingError } from '../userMessages'
-import type { ProtocolDandisets } from './protocolDandisets'
+import { DANDISET_LICENSE, type ProtocolDandisets } from './protocolDandisets'
 
 export { EMBER_SIGN_IN }
 
@@ -33,11 +36,16 @@ export interface EmberUploadCheckpoint {
   path?: string
   /** Their own copy, once registered. */
   own?: { assetId: string; assetPath: string }
+  /** BIDS files made from it already in the dandiset, by path. */
+  bidsDone?: string[]
 }
+
+/** How many BIDS files are written at once: the browser opens at most ~6 connections per host. */
+export const BIDS_WRITES_AT_ONCE = 4
 
 export function createEmberObjectStore(
   osbAuth: Pick<IAuthClient, 'getToken'>,
-  emberAuth: Pick<IEmberAuth, 'getToken'>,
+  emberAuth: Pick<IEmberAuth, 'getToken' | 'getAccount'>,
   direct: IDandiDirectApi,
   osb: IEmberUploadApi,
   dandisets: Pick<ProtocolDandisets, 'createForProtocol' | 'recordWorkspace'>,
@@ -69,18 +77,24 @@ export function createEmberObjectStore(
       if (saved.userDandisetId !== userDandisetId) save({ userDandisetId })
       // The dandiset's own name: a re-upload into an existing one keeps the name it has.
       const name = await dandisetName(token, userDandisetId) || input.dandisets?.newName || protocol.name
-      const readme = input.file.size <= MAX_REPACK_BYTES ? dandisetReadme({
+      // The upload is the dataset's source data, one folder per upload: BIDS leaves sourcedata/ unchecked.
+      const folder = saved.path ? saved.path.slice(0, saved.path.lastIndexOf('/')) : `sourcedata/upload-${utcStamp(new Date())}`
+      const readme = dandisetReadme({
         name,
         dandisetId: userDandisetId,
         dandisetUrl: `${emberWebOrigin.replace(/\/+$/, '')}/dandiset/${userDandisetId}`,
         protocol,
         originalName: input.file.name,
-      }) : undefined
-      if (readme) file = await withReadme(input.file, readme)
+        folder,
+      })
+      file = await withReadme(input.file, readme)
+      const path = saved.path ?? `${folder}/${pathSafe(file.name)}`
+      // Converted and checked before anything is written, so a problem leaves the dandiset as it was.
+      const files = await bidsFilesFor(input.file, input.bids, { name, authors: await authorsOf(input.bids.authors) }, path)
+      await checkAnimalIds(token, userDandisetId, files)
       let asset = saved.own
       if (!asset) {
         const { etag, parts: plan } = await computeDandiEtag(file)
-        const path = saved.path ?? `${pathSafe(input.protocolId)}/${crypto.randomUUID()}/${pathSafe(file.name)}`
         save({ etag, path })
         const init = await direct.initUpload(token, userDandisetId, file.size, etag)
         const uploaded = await putParts(init.parts, plan, file, progress)
@@ -89,6 +103,7 @@ export function createEmberObjectStore(
         })
         save({ own: { assetId: asset.assetId, assetPath: asset.assetPath } })
       }
+      await putBidsFiles(token, userDandisetId, files, saved, save, input.onBidsProgress)
       progress(file.size)
 
       return {
@@ -98,7 +113,7 @@ export function createEmberObjectStore(
         size: file.size,
         dandisetId: userDandisetId,
         etag: saved.etag,
-        ...(readme ? { readme } : {}),
+        readme,
       }
     },
 
@@ -130,9 +145,92 @@ export function createEmberObjectStore(
     },
   }
 
+  /** BIDS files from an upload's file, as put makes them; `source` is where the upload itself is. */
+  async function bidsFilesFor(file: File, bids: ObjectUploadInput['bids'], made: { name: string; authors?: string[] },
+    source: string): Promise<OutputFile[]> {
+    const conversion = await convertToBids(file, bids.config, {
+      name: made.name,
+      protocol: bids.protocol,
+      license: DANDISET_LICENSE[0].replace(/^spdx:/, ''),
+      authors: made.authors,
+      source,
+    })
+    const problem = conversion.problems.find((p) => p.level === 'error')
+    if (problem) throw new UserFacingError(problem.message)
+    // The upload itself is already in sourcedata/ (with its README): only what was made from it.
+    return conversion.files.filter((f) => !f.path.startsWith('sourcedata/'))
+  }
+
+  /** Stops an Animal ID the dandiset already has in other upper/lower case: BIDS labels must not differ only in case. */
+  async function checkAnimalIds(token: string, dandisetId: string, files: OutputFile[]) {
+    const incoming = files.find((f) => f.path === 'participants.tsv')?.content
+    if (typeof incoming !== 'string') return
+    const existing = await direct.readDraftFile(token, dandisetId, 'participants.tsv')
+    if (!existing) return
+    const ids = (tsv: string) => tsv.split('\n').slice(1).map((l) => l.split('\t')[0]).filter(Boolean)
+    const known = new Map(ids(existing).map((id) => [id.toLowerCase(), id]))
+    for (const id of ids(incoming)) {
+      const other = known.get(id.toLowerCase())
+      if (other && other !== id) {
+        const [mine, theirs] = [id.replace(/^sub-/, ''), other.replace(/^sub-/, '')]
+        throw new UserFacingError(`Animal ID ${mine} is already in this dandiset as ${theirs}. Write it ${theirs} to update that animal, or use a different ID.`)
+      }
+    }
+  }
+
+  /** `content`, merged with the dandiset's copy at `draftPath` when `path` is a per-animal file. */
+  async function mergedWithDraft(token: string, dandisetId: string, path: string, draftPath: string,
+    content: OutputFile['content']): Promise<OutputFile['content']> {
+    const existing = isMergedFile(path) ? await direct.readDraftFile(token, dandisetId, draftPath) : null
+    if (existing === null) return content
+    const incoming = typeof content === 'string' ? content : content instanceof Blob ? await content.text() : new TextDecoder().decode(content)
+    return mergeWithDraft(path, existing, incoming)
+  }
+
+  /** The EMBER-DANDI account's name, which the archive credits; `fallback` when it has none or can't be read. */
+  async function authorsOf(fallback: string[] | undefined): Promise<string[] | undefined> {
+    const account = await emberAuth.getAccount().catch(() => null)
+    const name = account?.name?.trim()
+    return name ? [name] : fallback
+  }
+
   async function dandisetName(token: string, dandisetId: string): Promise<string | undefined> {
     const { name } = await direct.getDraftMetadata(token, dandisetId)
     return typeof name === 'string' && name.trim() ? name.trim() : undefined
+  }
+
+  /** Each BIDS file into the dandiset, BIDS_WRITES_AT_ONCE at a time; one already there with other
+   *  content is replaced (a shared description, or a corrected table), except the per-animal files,
+   *  which are merged with it. Each is recorded, so a retry skips it. After a failure no new write
+   *  starts; the running ones finish, then the failure is thrown. */
+  async function putBidsFiles(token: string, dandisetId: string, files: OutputFile[], saved: EmberUploadCheckpoint,
+    save: (patch: EmberUploadCheckpoint) => void, onWritten?: (written: number, total: number) => void) {
+    const todo = files.filter((f) => !saved.bidsDone?.includes(f.path))
+    let written = files.length - todo.length
+    onWritten?.(written, files.length)
+    let failure: { error: unknown } | undefined
+    const worker = async () => {
+      for (let next = todo.shift(); next && !failure; next = todo.shift()) {
+        try {
+          await putBidsFile(token, dandisetId, next)
+          save({ bidsDone: [...(saved.bidsDone ?? []), next.path] })
+          onWritten?.(++written, files.length)
+        } catch (error) {
+          failure ??= { error }
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: BIDS_WRITES_AT_ONCE }, worker))
+    if (failure) throw failure.error
+  }
+
+  async function putBidsFile(token: string, dandisetId: string, { path, content }: OutputFile) {
+    const merged = await mergedWithDraft(token, dandisetId, path, path, content)
+    const file = new File([merged as BlobPart], path.slice(path.lastIndexOf('/') + 1))
+    const { etag, parts: plan } = await computeDandiEtag(file)
+    const init = await direct.initUpload(token, dandisetId, file.size, etag)
+    const uploaded = await putParts(init.parts, plan, file, () => {})
+    await direct.finalizeUpload(token, { uploadId: init.uploadId, dandisetId, path, parts: uploaded, blobId: init.blobId, replace: true })
   }
 
   async function putParts(parts: { partNumber: number; url: string }[], plan: PartPlan[], file: File,

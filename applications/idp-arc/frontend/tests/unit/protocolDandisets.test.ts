@@ -66,6 +66,7 @@ function fakeEmber(metadata: Record<string, DandisetMetadata>, publishing: {
       return { version, status: s.status as VersionStatus, errors: s.errors ?? [], filesBeingChecked: s.filesBeingChecked ?? 0 }
     },
     async publishDraft(_t, id) { calls.push(`publish:${id}`) },
+    async readDraftFile() { return null },
     async getLatestPublished() {
       const all = publishing.versions ?? [null]
       return all[Math.min(versionReads++, all.length - 1)]

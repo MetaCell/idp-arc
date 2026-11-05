@@ -89,6 +89,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const workspaceLookup = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const user = typeof tokenParsed?.sub === 'string' ? tokenParsed.sub : null
+  const researcher = typeof tokenParsed?.name === 'string' ? tokenParsed.name.trim() || undefined : undefined
 
   // Once the user is known, their run saved before a reload comes back.
   useEffect(() => { if (user) restoreSession(user) }, [user])
@@ -224,7 +225,8 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
   /** What every attempt is given: it carries on from `checkpoint` where that applies. */
   const inputFor = (selectedProtocol: RunnableProtocol, file: File | null): RunProtocolInput => ({
-    protocol: selectedProtocol,
+    // protocols.json is typed by what it holds, so its rule types are plain strings here.
+    protocol: selectedProtocol as RunProtocolInput['protocol'],
     file,
     // `spawnedWorkspaceId` is set as soon as the run has a workspace, so a retry reuses it
     // instead of creating another one.
@@ -232,6 +234,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
     workspaceName: selectedProtocol.name,
     dandisetId: dandisetId || undefined,
     dandisetName: dandisetId ? undefined : dandisetName,
+    researcher,
     shareWithMaabcd,
     resume: checkpoint,
   })

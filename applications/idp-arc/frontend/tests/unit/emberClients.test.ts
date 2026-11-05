@@ -132,3 +132,23 @@ test('an empty page ends the list early', async () => {
   await new EmberDandiDirectClient('/ember-proxy').listOwnDandisets('ember-token')
   assert.equal(requests.length, 1)
 })
+
+test('a file already at the path: kept when its content is the same or replace is off, replaced when it differs', async () => {
+  const at = (blob: string) => (url: string) => url.endsWith('/assets/') ? { status: 409 }
+    : url.includes('/assets/?path=') ? { json: { results: [{ path: 'README.md', asset_id: 'old-asset', blob }] } }
+      : { json: { asset_id: 'new-asset', path: 'README.md' } }
+  const ember = new EmberDandiDirectClient('/ember-proxy')
+  const finalize = (replace: boolean) => ember.finalizeUpload('t', { dandisetId: '000777', path: 'README.md', parts: [], blobId: 'blob-new', replace })
+
+  recordFetch(at('blob-new'))
+  assert.deepEqual(await finalize(true), { assetPath: 'README.md', assetId: 'old-asset' })
+  recordFetch(at('blob-old'))
+  assert.deepEqual(await finalize(false), { assetPath: 'README.md', assetId: 'old-asset' })
+
+  const requests = recordFetch(at('blob-old'))
+  assert.deepEqual(await finalize(true), { assetPath: 'README.md', assetId: 'new-asset' })
+  const put = requests.at(-1)!
+  assert.equal(put.method, 'PUT')
+  assert.equal(put.url, '/ember-proxy/api/dandisets/000777/versions/draft/assets/old-asset/')
+  assert.deepEqual(put.body, { metadata: { path: 'README.md', schemaKey: 'Asset', encodingFormat: 'text/markdown' }, blob_id: 'blob-new' })
+})

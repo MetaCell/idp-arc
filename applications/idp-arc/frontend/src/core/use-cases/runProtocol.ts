@@ -4,6 +4,7 @@ import { RUN_STEP, type RunCheckpoint, type RunStep, type RunStepId } from '../t
 import type { IWorkspaceApi, WorkspaceResourceState } from '../ports/IWorkspaceApi'
 import { formatBytes } from '../formatBytes'
 import { inputFileProblem } from '../inputFormats'
+import type { BidsConfig } from '../bids/convert'
 import { parseRepoZipUrl, repoPage } from '../protocolRepo'
 import { RUN_SETTINGS } from '../runSettings'
 import { DONE_EARLIER, UserFacingError, userMessage } from '../userMessages'
@@ -33,8 +34,10 @@ export interface RunProtocolDefinition {
    *  `maabcdAggregateDandisets`), which each upload is also copied into (through OSB). Empty or
    *  absent: no MAABCD copy. */
   maabcdAggregateDandisetId?: string
-  /** What the task is: written into the upload's README. */
+  /** What the task is: the BIDS dataset's description. */
   description?: string
+  /** How the researcher's spreadsheets become BIDS. */
+  bids: BidsConfig
 }
 
 export interface RunProtocolInput {
@@ -50,6 +53,8 @@ export interface RunProtocolInput {
   dandisetId?: string
   /** Name for the dandiset created when `dandisetId` is undefined; the protocol's name when empty. */
   dandisetName?: string
+  /** The researcher's OSB name: the author of the BIDS dataset when their EMBER-DANDI account has none. */
+  researcher?: string
   /** Also upload into the protocol's MAABCD dandiset, when it has one (the default). */
   shareWithMaabcd?: boolean
   /** From an earlier attempt that stopped: the run carries on from there when canResume allows. */
@@ -289,12 +294,15 @@ export function createRunProtocolUseCase(
         file, protocolId: protocol.id, userSub: userId,
         resume: checkpoint.upload,
         onCheckpoint: (upload) => save({ upload }),
+        // After the file itself, the BIDS files made from it go up one by one: shown, so it isn't taken for stuck.
+        onBidsProgress: (written, total) => progress.update(RUN_STEP.upload, `Writing BIDS files: ${written} of ${total}`, message),
         dandisets: {
           user: input.dandisetId,
           newName: input.dandisetName?.trim() || protocol.name,
           protocol: { ...protocolRef(), description: protocol.description },
           maabcd: input.shareWithMaabcd === false ? undefined : protocol.maabcdAggregateDandisetId,
         },
+        bids: bidsInput(),
       }, (sent, total) => {
         if (Date.now() - lastReport < RUN_SETTINGS.uploadProgressMs && sent < total) return
         lastReport = Date.now()
@@ -309,6 +317,15 @@ export function createRunProtocolUseCase(
 
     function protocolRef() {
       return { id: protocol.id, name: protocol.name, url: repoPage(protocol.repoZipUrl) }
+    }
+
+    /** How the upload is put into the researcher's dandiset as BIDS (the MAABCD copy is the zip only). */
+    function bidsInput() {
+      return {
+        config: protocol.bids,
+        protocol: { ...protocolRef(), description: protocol.description },
+        ...(input.researcher ? { authors: [input.researcher] } : {}),
+      }
     }
 
     /** The MAABCD copy's step; a failure is left for its Retry. */
