@@ -35,6 +35,8 @@ export interface DirectFinalizeInput {
   path: string
   parts: DirectUploadedPart[]
   blobId?: string
+  /** A file already at `path` with other content is replaced; by default it is kept. */
+  replace?: boolean
 }
 
 /** An asset as registered in a dandiset's draft. */
@@ -129,4 +131,7 @@ export interface IDandiDirectApi {
 
   /** complete → validate → register the asset, all direct to EMBER. */
   finalizeUpload(token: string, input: DirectFinalizeInput): Promise<RegisteredAsset>
+
+  /** The content of the draft's file at `path`, as text; null when there is none. */
+  readDraftFile(token: string, dandisetId: string, path: string): Promise<string | null>
 }

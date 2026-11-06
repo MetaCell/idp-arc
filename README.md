@@ -86,6 +86,26 @@ researcher's workspace from there.
 - **`bucket`**: a public bucket open for anonymous writes, named by `VITE_UPLOAD_BUCKET_URL`.
   Its CORS must allow PUT from this app's origin. Needs only the OSB login.
 
+### Testing on a sandbox (local only)
+
+Deployments always use EMBER-DANDI. To test on a sandbox instead, add this to
+`applications/idp-arc/frontend/.env.local` and restart `yarn start:dev`:
+
+```bash
+# dandi-sandbox or ember-dandi-sandbox
+VITE_DANDI_INSTANCE=dandi-sandbox
+```
+
+MAABCD copies then go to the protocol's dandiset for that sandbox in `src/data/protocols.json`
+(none listed: nothing is shared).
+
+The sandboxes have no OAuth app for us, so also add your API key on that sandbox there. The dev
+server signs DANDI calls with it, so it never reaches the browser, and `yarn build` ignores it:
+
+```bash
+DANDI_SANDBOX_API_KEY=<your sandbox API key>
+```
+
 ---
 
 ## Docker (Local Build + Run)

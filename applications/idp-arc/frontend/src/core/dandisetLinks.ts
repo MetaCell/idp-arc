@@ -1,5 +1,5 @@
 /**
- * What an IDP dandiset is for, recorded in its own EMBER-DANDI metadata: the protocol it holds
+ * What a MAABCD dandiset is for, recorded in its own EMBER-DANDI metadata: the protocol it holds
  * data for, and the OSB workspace that data runs in. Choosing a protocol in the upload dialog lists
  * the researcher's dandisets for that protocol, and picking one picks its workspace too.
  *
@@ -12,7 +12,7 @@
 /** A dandiset's draft metadata document, exactly as EMBER returns it. Written back whole. */
 export type DandisetMetadata = Record<string, unknown>
 
-const PROTOCOL_PREFIX = 'idp-protocol:'
+const PROTOCOL_PREFIX = 'maabcd-protocol:'
 const WORKSPACE_PREFIX = 'osb-workspace'
 
 /** The identifier of a protocol's link, as recorded in the metadata (and found by EMBER's search). */
@@ -64,7 +64,7 @@ export function withProtocolLink(
   return withEntry(metadata, PROTOCOL_PREFIX, {
     schemaKey: 'Resource',
     identifier: protocolLinkId(protocol.id),
-    name: `IDP protocol: ${protocol.name}`,
+    name: `MAABCD protocol: ${protocol.name}`,
     ...(protocol.url ? { url: protocol.url } : {}),
     relation: 'dcite:IsDescribedBy',
   })

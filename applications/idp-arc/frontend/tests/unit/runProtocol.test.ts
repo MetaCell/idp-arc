@@ -22,6 +22,7 @@ const FOUR_CHOICE = {
   repoZipUrl: 'https://codeload.github.com/maracbaylis/four-choice-example/zip/refs/heads/main',
   notebooksDir: 'notebooks',
   inputFormats: ['.xlsx', '.zip'],
+  bids: { task: 'fourchoice', subjectId: { sheet: 'METADATA', label: 'Animal ID: (XXX001)' }, tables: [{ sheet: 'DISC', acq: 'discrimination', header: 'Trial' }] },
 }
 const auth = { getToken: async () => 'token', tokenParsed: { sub: 'user-1' } }
 const file = () => new File(['x'], 'animal_01.xlsx')
@@ -274,7 +275,7 @@ test('a run that stops before any notebook (nothing listed) failed, and says so 
 
 test('a protocol without a repository fails clearly', async () => {
   const f = fakes()
-  const last = (await run(f, { protocol: { id: 'open-field', name: 'Open field task' } })).pop()!
+  const last = (await run(f, { protocol: { id: 'open-field', name: 'Open field task', bids: FOUR_CHOICE.bids } })).pop()!
   assert.equal(last.phase, 'failed')
   assert.match(last.error ?? '', /isn't available yet/)
 })
@@ -334,10 +335,32 @@ test('an EMBER-DANDI upload gets the run\'s workspace recorded in its dandiset, 
   const create = f.calls.findIndex((c) => c.startsWith('create:'))
   assert.equal(f.calls[create + 1], 'record:42')
   assert.deepEqual(seen.dandisets, {
-    user: '000123', newName: 'Four-choice reversal digging task (IDP)', maabcd: '000533',
-    protocol: { id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/maracbaylis/four-choice-example' },
+    user: '000123', newName: 'Four-choice reversal digging task', maabcd: '000533',
+    protocol: {
+      id: 'four-choice-reversal', name: 'Four-choice reversal digging task', url: 'https://github.com/maracbaylis/four-choice-example',
+      description: FOUR_CHOICE.description,
+    },
   })
 })
+
+for (const [typed, expected] of [
+  ['  Cohort A, week 3  ', 'Cohort A, week 3'],
+  ['   ', 'Four-choice reversal digging task'],
+  [undefined, 'Four-choice reversal digging task'],
+] as const) {
+  test(`a new dandiset is named ${JSON.stringify(typed)} -> "${expected}"`, async () => {
+    const seen: { dandisets?: { newName?: string } } = {}
+    const store: IObjectStore = {
+      async put(input) {
+        seen.dandisets = input.dandisets
+        return { url: 'https://api-dandi.example.org/api/assets/a/download/', key: 'k', name: 'animal_01.xlsx', dandisetId: '000777' }
+      },
+    }
+    await createRunProtocolUseCase(auth, fakes().api, store)(
+      { protocol: FOUR_CHOICE, file: file(), workspaceName: 'Four-choice', dandisetName: typed }, () => {})
+    assert.equal(seen.dandisets?.newName, expected)
+  })
+}
 
 test('with "Share with MAABCD" unticked, nothing goes to the protocol\'s MAABCD dandiset', async () => {
   const f = fakes()

@@ -20,7 +20,7 @@ test('the protocol and the workspace are relatedResource entries, alongside any 
   assert.equal(readProtocolLink(linked), 'four-choice-reversal')
   assert.equal(readWorkspaceLink(linked, DEV), 42)
   const entries = linked.relatedResource as { identifier: string; schemaKey?: string }[]
-  assert.deepEqual(entries.map((r) => r.identifier), ['doi:10/x', 'idp-protocol:four-choice-reversal', `osb-workspace:${DEV}:42`])
+  assert.deepEqual(entries.map((r) => r.identifier), ['doi:10/x', 'maabcd-protocol:four-choice-reversal', `osb-workspace:${DEV}:42`])
   assert.ok(entries.slice(1).every((r) => r.schemaKey === 'Resource'))
   assert.equal(linked.name, 'Mine')
 })
@@ -66,6 +66,7 @@ function fakeEmber(metadata: Record<string, DandisetMetadata>, publishing: {
       return { version, status: s.status as VersionStatus, errors: s.errors ?? [], filesBeingChecked: s.filesBeingChecked ?? 0 }
     },
     async publishDraft(_t, id) { calls.push(`publish:${id}`) },
+    async readDraftFile() { return null },
     async getLatestPublished() {
       const all = publishing.versions ?? [null]
       return all[Math.min(versionReads++, all.length - 1)]
@@ -84,7 +85,7 @@ test('the protocol\'s dandisets come from one search for its link, with no metad
   const { uc, calls, drafts } = fakeEmber({ '000001': withProtocolLink({}, FOUR) })
 
   assert.deepEqual(await uc.listForProtocol('four-choice-reversal'), [{ id: '000001', name: 'set 000001' }])
-  assert.deepEqual(calls, ['list:idp-protocol:four-choice-reversal'])
+  assert.deepEqual(calls, ['list:maabcd-protocol:four-choice-reversal'])
   assert.deepEqual(drafts, [])
 })
 

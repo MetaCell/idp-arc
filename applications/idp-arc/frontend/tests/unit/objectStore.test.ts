@@ -20,6 +20,6 @@ test('object key segments are path-safe: no traversal, no slashes, no spaces', (
 
 test('without a bucket URL the upload fails with a message for the user, before anything is sent', async () => {
   const file = new File(['x'], 'animal_01.xlsx')
-  await assert.rejects(new PublicBucketObjectStore(undefined).put({ file, protocolId: 'p', userSub: 'u' }),
+  await assert.rejects(new PublicBucketObjectStore(undefined).put({ file, protocolId: 'p', userSub: 'u', bids: { config: { task: 't', subjectId: { sheet: 'S', label: 'L' }, tables: [] }, protocol: { name: 'P' } } }),
     (err: unknown) => err instanceof UserFacingError && err.message === UPLOADS_NOT_SET_UP && /VITE_UPLOAD_BUCKET_URL/.test(err.details ?? ''))
 })

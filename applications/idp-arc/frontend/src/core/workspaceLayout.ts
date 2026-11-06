@@ -22,10 +22,13 @@ const FAILED_SUFFIX = '.failed'
 /** The run task's log. */
 const LOG_FILE = 'run.log'
 
+/** A UTC time as a folder name: no `:` (not allowed on Windows or in macOS Finder); sorts in order. */
+export function utcStamp(at: Date): string {
+  return at.toISOString().replace(/\.\d+Z$/, 'Z').replace(/:/g, '-')
+}
+
 export function workspaceLayout(protocolId: string, startedAt: Date) {
-  // No `:` (not allowed in file names on Windows or in macOS Finder); sorts in run order.
-  const stamp = startedAt.toISOString().replace(/\.\d+Z$/, 'Z').replace(/:/g, '-')
-  const run = `${protocolId}/run-${protocolId}-${stamp}`
+  const run = `${protocolId}/run-${protocolId}-${utcStamp(startedAt)}`
   return {
     run,
     inputs: `${run}/${INPUTS_DIR}`,

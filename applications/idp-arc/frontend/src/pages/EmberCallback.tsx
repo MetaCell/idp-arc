@@ -38,7 +38,7 @@ export default function EmberCallback() {
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, p: 4, textAlign: 'center' }}>
       {inPopup ? (
-        <Typography variant="body1">You can close this window and go back to IDP.</Typography>
+        <Typography variant="body1">You can close this window and go back to MAABCD.</Typography>
       ) : error ? (
         <>
           <Typography variant="body1" sx={{ color: 'error.main' }}>

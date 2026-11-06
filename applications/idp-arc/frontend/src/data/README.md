@@ -1,7 +1,7 @@
 # Protocols (`protocols.json`)
 
 One entry per behavioral task / protocol. It drives the Protocols page and the upload dialog, and
-it tells IDP which analysis to run on a researcher's data and what input that analysis can read.
+it tells IDP/MAABCD which analysis to run on a researcher's data and what input that analysis can read.
 Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `notebooksDir`).
 
 ## Fields
@@ -13,10 +13,11 @@ Field names follow the MAABCD–OSB Integration design (`id`, `repoZipUrl`, `not
 | `description`, `imageUrl`, `videoUrl` | Protocols page | Text and media shown for the protocol. |
 | `repoZipUrl` | run | GitHub archive of the analysis repository, `https://codeload.github.com/<owner>/<repo>/zip/refs/heads/<branch>` (or `refs/tags/<tag>`, or `/zip/<commit>`). A **branch** follows the latest fixes; a **commit** freezes the code. An empty `repoZipUrl` = no analysis yet: the upload dialog doesn't offer the protocol. |
 | `notebooksDir` | run | Repository-relative folder of the notebooks (`notebooks`). |
-| `maabcdAggregateDandisetId` | upload | The protocol's MAABCD consortium dandiset on EMBER-DANDI (`000607`): six digits, owned by the consortium account. When the researcher shares their upload, a copy goes there through OSB's `/dandi` endpoints, signed with that account's key. Leave it out and uploads for the protocol aren't shared. |
+| `maabcdAggregateDandisets` | upload | The protocol's MAABCD consortium dandiset on each DANDI instance, by instance name (`{ "ember-dandi": "000607", "dandi-sandbox": "219158" }`; names in `src/core/dandiInstances.ts`, six digits each, owned by the consortium account there). The one for the instance in use (`VITE_DANDI_INSTANCE`) is where a shared copy goes, through OSB's `/dandi` endpoints, signed with that account's key. No entry for the instance, or no field: uploads for the protocol aren't shared there. |
 | `requirements`, `pythonPath`, `install` | run | Override the repository setup below (defaults in `REPOSITORY_SETUP`, runProtocol.ts: `requirements.txt`; `["scripts"]`; `["scripts/install.py", "scripts/setup.py", "scripts/pyproject.toml"]`). OSB applies only the ones the repository has. Leave them out for a repository that follows the contract. |
 | `templatesZipUrl` | Protocols page, dialog | Archive of the protocol's templates (data sheets, instructions), downloaded by the **Download** buttons on the Protocols page and in the dialog's upload step. A path relative to `public/` (`protocols_archives/4c.zip`) or an absolute URL. Missing or empty = both buttons disabled. |
 | `inputFormats` | dialog, run | Extensions the analysis code can actually read. The dialog refuses other files before anything starts. **Without it, any file is accepted** (except an empty one, always refused). |
+| `bids` | dialog, upload | How the researcher's spreadsheets become a BIDS dataset in their dandiset (`core/bids/convert.ts`). **Required**: every upload goes up as BIDS. `task` is the BIDS task label (letters and digits). `subjectId`, `sex` and `sessionDate` say where a workbook holds them: the cell right of the one reading `label`, on `sheet` (the date on each table's own sheet). `tables` lists the sheets that become tables: `sheet`, `acq` (the stage's label) and `header` (the first cell of the header row). `columns` describes each column by the name it gets (`latency_s`): `Description`, and `Units` or `Levels` when there are any; it is the same in every stage. `filledBy` (per table) names the columns that mark a row as a trial, `skipColumns` the columns left out, and `tableInfo` the cells above each table written to a JSON beside it. The dialog converts the file when it is picked and stops only on what BIDS can't do without: no Animal ID, no testing date, or no trial filled in anywhere; a missing sheet or header just leaves that stage out. PDFs in an uploaded zip go to `logs/`. |
 
 ## Where uploads go
 
@@ -24,12 +25,13 @@ Each upload goes to EMBER-DANDI, in up to two copies:
 
 | | Researcher's dandiset | MAABCD aggregate dandiset |
 |---|---|---|
-| Dandiset | picked in the dialog, or a new one | `maabcdAggregateDandisetId`, if the researcher shares |
-| Path | `<id>/<upload id>/<file>` | `<OSB user id>/<upload id>/<file>` |
-| Built and signed by | IDP, with the researcher's EMBER login | OSB, with the consortium's `DANDI_API_KEY` |
+| Dandiset | picked in the dialog, or a new one | `maabcdAggregateDandisets` (the instance's), if the researcher shares |
+| Path | `sourcedata/upload-<UTC time>/<file>.zip`, plus the BIDS files made from it | `<OSB user id>/<upload id>/<file>.zip` |
+| Built and signed by | IDP/MAABCD, with the researcher's EMBER login | OSB, with the consortium's `DANDI_API_KEY` |
 
-`<upload id>` is a random UUID, so uploads never overwrite each other. OSB builds the MAABCD path
-from the caller's login, so no one can write into another's folder.
+Both copies are the same zip: the upload with a `README.md` added (`core/dandisetReadme.ts`) that
+links the researcher's dandiset. Each upload gets its own folder, so uploads never overwrite each
+other. OSB builds the MAABCD path from the caller's login, so no one can write into another's folder.
 
 ## What happens on "Upload and run" (core/use-cases/runProtocol.ts)
 
@@ -43,11 +45,11 @@ protocol doesn't read.
 2. OSB imports both into this run's folder (`POST /workspaceresource`; names in
    core/workspaceLayout.ts): `<id>/run-<id>-<UTC timestamp>/<repo>-<ref>/` for the code, fresh for
    every run, and `…/inputs/` for the upload (a `.zip` is unpacked there).
-3. When the imports are done, IDP lists the notebooks OSB found in `notebooksDir` and sorts them.
+3. When the imports are done, IDP/MAABCD lists the notebooks OSB found in `notebooksDir` and sorts them.
    It then asks OSB to run exactly those, in that order (`POST /workspace/{id}/run`, papermill in
    an Argo task), with the run's `inputs/` and `outputs/` as the notebooks' `INPUT_DIR` and
    `OUTPUT_DIR` parameters. OSB sets up `requirements.txt` and `scripts/` first; which notebooks run
-   and where they read and write is IDP's decision.
+   and where they read and write is IDP/MAABCD's decision.
 4. Results, in the same run folder (e.g. `four-choice-reversal/run-four-choice-reversal-2026-10-05T10-54-43Z/`):
    `inputs/` (the upload), `outputs/` (what the notebooks wrote), the executed notebooks and `run.log`. The
    run task removes the code once it has copied it, so the next run gets the current code.
@@ -64,8 +66,8 @@ protocol doesn't read.
 
 ## What a protocol repository must look like
 
-Agreed with the protocol authors on 30 Sep 2026. These conventions live in IDP (`REPOSITORY_SETUP`
-and `notebooksDir`): IDP tells OSB which notebooks to run, in what order, and which setup files to
+Agreed with the protocol authors on 30 Sep 2026. These conventions live in IDP/MAABCD (`REPOSITORY_SETUP`
+and `notebooksDir`): IDP/MAABCD tells OSB which notebooks to run, in what order, and which setup files to
 use; OSB applies the ones the repository has.
 
 1. `requirements.txt` at the root — **optional**, installed first. Pin versions: the task image
@@ -79,7 +81,7 @@ use; OSB applies the ones the repository has.
    `2_x`), each with its own folder as working directory. The first failing notebook stops the run.
 4. **Input and output: a cell tagged `parameters`** (papermill's convention) in every notebook, setting
    `INPUT_DIR` and `OUTPUT_DIR` to its own defaults (e.g. its example data). The notebooks read from
-   `INPUT_DIR` and write everything they produce to `OUTPUT_DIR`; for a run, IDP passes the run's
+   `INPUT_DIR` and write everything they produce to `OUTPUT_DIR`; for a run, IDP/MAABCD passes the run's
    `inputs/` and `outputs/`. A run stops at the first notebook without that cell.
 
 ## Per protocol

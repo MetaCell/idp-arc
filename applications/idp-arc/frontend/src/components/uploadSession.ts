@@ -30,6 +30,8 @@ export interface FormState {
   runSteps: RunStep[]
   /** EMBER-DANDI only: the researcher's dandiset to upload into; empty creates a new one. */
   dandisetId: string
+  /** The name of the new dandiset, when none is chosen; empty uses the protocol's name. */
+  dandisetName: string
   /** Also upload into the protocol's MAABCD dandiset; on by default. */
   shareWithMaabcd: boolean
   /** What the last attempt got done: a retry carries on from there (the run checks it still applies). */
@@ -50,13 +52,14 @@ export const INITIAL_FORM: FormState = {
   outputsDir: '',
   runSteps: [],
   dandisetId: '',
+  dandisetName: '',
   shareWithMaabcd: true,
 }
 
 export const session = createSessionStore<FormState>(INITIAL_FORM)
 
 /** What is saved across a reload: the run, not the form around it. */
-type SavedRun = Pick<FormState, 'step' | 'protocol' | 'dandisetId' | 'spawnedWorkspaceId' | 'shareWithMaabcd'
+type SavedRun = Pick<FormState, 'step' | 'protocol' | 'dandisetId' | 'dandisetName' | 'spawnedWorkspaceId' | 'shareWithMaabcd'
   | 'checkpoint' | 'runSteps' | 'outputsDir' | 'uploadMessage'>
 
 const RUN_INTERRUPTED = 'The run stopped unexpectedly. Retry to carry on from where it stopped.'
@@ -73,9 +76,9 @@ if (typeof window !== 'undefined') {
 
 session.subscribe(() => {
   if (!savingFor || leaving) return
-  const { step, protocol, dandisetId, spawnedWorkspaceId, shareWithMaabcd, checkpoint, runSteps, outputsDir, uploadMessage, resultSeen } = session.get()
+  const { step, protocol, dandisetId, dandisetName, spawnedWorkspaceId, shareWithMaabcd, checkpoint, runSteps, outputsDir, uploadMessage, resultSeen } = session.get()
   if (!checkpoint || resultSeen) return clearRun(savingFor)
-  const run: SavedRun = { step, protocol, dandisetId, spawnedWorkspaceId, shareWithMaabcd, checkpoint, runSteps, outputsDir, uploadMessage }
+  const run: SavedRun = { step, protocol, dandisetId, dandisetName, spawnedWorkspaceId, shareWithMaabcd, checkpoint, runSteps, outputsDir, uploadMessage }
   saveRun(savingFor, run)
 })
 

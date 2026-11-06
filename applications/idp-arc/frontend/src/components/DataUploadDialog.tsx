@@ -10,6 +10,7 @@ import {
   MenuItem,
   Select,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined'
@@ -21,7 +22,8 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlineOutlined'
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty'
 
-import { emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, recordedWorkspace, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
+import { DANDI_INSTANCE, emberAuth, getWorkspaceUrl, listProtocolDandisets, publishDandiset, recordedWorkspace, runProtocol, UPLOAD_BACKEND, type ProtocolDandiset } from '../app/container'
+import { maabcdDandisetFor } from '../core/dandiInstances'
 import { EMBER_SIGN_IN, UserFacingError, userMessage } from '../core/userMessages'
 import { withRunLock } from './runStorage'
 import { INITIAL_FORM, restoreSession, session } from './uploadSession'
@@ -35,10 +37,16 @@ import { isNonBlocking, PUBLISH_STEP, PUBLISHING_LABEL, type RunProtocolInput } 
 import { formatBytes } from '../core/formatBytes'
 import { templatesZipFileName, templatesZipHref } from '../core/protocolTemplates'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
+import type { BidsConfig } from '../core/bids/convert'
+import { useBidsCheck } from './useBidsCheck'
+import BidsStructureButton from './BidsStructureButton'
 import protocols from '../data/protocols.json'
 
-/** Only protocols with an analysis repository can be run, so only those are offered. */
-const runnableProtocols = protocols.filter((p) => 'repoZipUrl' in p && p.repoZipUrl)
+/** Only protocols with an analysis repository can be run, so only those are offered. Each carries
+ *  its MAABCD dandiset on the DANDI instance in use (none: nothing is shared). */
+const runnableProtocols = protocols
+  .filter((p) => 'repoZipUrl' in p && p.repoZipUrl)
+  .map((p) => ({ ...p, maabcdAggregateDandisetId: maabcdDandisetFor(p, DANDI_INSTANCE.name) }))
 type RunnableProtocol = (typeof runnableProtocols)[number]
 
 export interface DataUploadDialogProps {
@@ -69,7 +77,7 @@ const MIN_ATTEMPT_MS = 300
 export default function DataUploadDialog({ open, initialProtocol, onClose, onAuthRequired }: DataUploadDialogProps) {
   const { tokenParsed } = useAppContext()
   const [form] = useSessionStore(session)
-  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, shareWithMaabcd, doi, publishing, publishError, checkpoint } = form
+  const { step, protocol, file, isDragging, uploadMessage, spawnedWorkspaceId, outputsDir, runSteps, dandisetId, dandisetName, shareWithMaabcd, doi, publishing, publishError, checkpoint } = form
   // EMBER-DANDI: the upload goes to the researcher's own account. Choosing a protocol lists their
   // dandisets for it, each with the workspace it runs in, so choosing one chooses both.
   const usesEmber = UPLOAD_BACKEND === 'ember'
@@ -81,6 +89,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const workspaceLookup = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const user = typeof tokenParsed?.sub === 'string' ? tokenParsed.sub : null
+  const researcher = typeof tokenParsed?.name === 'string' ? tokenParsed.name.trim() || undefined : undefined
 
   // Once the user is known, their run saved before a reload comes back.
   useEffect(() => { if (user) restoreSession(user) }, [user])
@@ -192,9 +201,14 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
   const inputFormats = inputFormatsFor(selectedProtocol?.inputFormats)
   const templatesHref = templatesZipHref(selectedProtocol)
   const fileProblem = file ? inputFileProblem(file, selectedProtocol?.name ?? 'This protocol', selectedProtocol?.inputFormats) : null
+  // The file is converted to BIDS on pick, and its errors stop the upload.
+  const bidsConfig = selectedProtocol?.bids as BidsConfig | undefined
+  const bidsCheck = useBidsCheck(fileProblem ? null : file, bidsConfig, selectedProtocol?.name ?? '')
+  const bidsProblems = bidsCheck.result?.problems ?? []
+  const bidsBlocks = bidsCheck.checking || bidsProblems.some((p) => p.level === 'error')
 
   const handleUpload = async () => {
-    if (fileProblem || !selectedProtocol) return
+    if (fileProblem || bidsBlocks || !selectedProtocol) return
     // Picked up after a reload: the file is needed again unless it was already uploaded.
     if (!file) {
       if (checkpoint?.stored) return runLocked(selectedProtocol, null)
@@ -211,13 +225,16 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
   /** What every attempt is given: it carries on from `checkpoint` where that applies. */
   const inputFor = (selectedProtocol: RunnableProtocol, file: File | null): RunProtocolInput => ({
-    protocol: selectedProtocol,
+    // protocols.json is typed by what it holds, so its rule types are plain strings here.
+    protocol: selectedProtocol as RunProtocolInput['protocol'],
     file,
     // `spawnedWorkspaceId` is set as soon as the run has a workspace, so a retry reuses it
     // instead of creating another one.
     workspaceId: spawnedWorkspaceId,
     workspaceName: selectedProtocol.name,
     dandisetId: dandisetId || undefined,
+    dandisetName: dandisetId ? undefined : dandisetName,
+    researcher,
     shareWithMaabcd,
     resume: checkpoint,
   })
@@ -308,7 +325,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
 
   const stepIndex = step === 'select' ? 0 : 1
   const canGoNext = !!protocol && (!usesEmber || (emberSignedIn && protocolDandisets !== null && !findingWorkspace))
-  const canUpload = !!file && !fileProblem && emberSignedIn
+  const canUpload = !!file && !fileProblem && !bidsBlocks && emberSignedIn
 
   return (
     <Dialog
@@ -465,7 +482,24 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                       )}
                     </>
                   )}
+                  {emberSignedIn && protocolDandisets !== null && !dandisetId && (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="Name of the new dandiset"
+                      placeholder={selectedProtocol?.name}
+                      value={dandisetName}
+                      onChange={(e) => setForm((prev) => ({ ...prev, dandisetName: e.target.value }))}
+                      slotProps={{ htmlInput: { style: { fontFamily: 'Inter, sans-serif', fontSize: '14px' } } }}
+                      sx={{ mt: 1.5 }}
+                    />
+                  )}
                 </Box>
+              )}
+              {usesEmber && selectedProtocol && 'maabcdAggregateDandisets' in selectedProtocol && !selectedProtocol.maabcdAggregateDandisetId && (
+                <Typography variant="body2" sx={{ opacity: 0.7 }}>
+                  No MAABCD dandiset on {DANDI_INSTANCE.name} for this protocol, so nothing is shared with the consortium.
+                </Typography>
               )}
               {usesEmber && selectedProtocol?.maabcdAggregateDandisetId && (
                 <FormControlLabel
@@ -511,7 +545,7 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
           )}
           {usesEmber && (
             <Typography variant="body2" sx={{ opacity: 0.7 }}>
-              {dandisetId ? `Uploading into your dandiset ${dandisetId}` : 'Uploading into a new dandiset in your EMBER-DANDI account'}
+              {dandisetId ? `Uploading into your dandiset ${dandisetId}` : `Uploading into a new dandiset${dandisetName.trim() ? ` "${dandisetName.trim()}"` : ''} in your EMBER-DANDI account`}
               {spawnedWorkspaceId !== undefined ? `, analyzed in workspace ${spawnedWorkspaceId}.` : ', analyzed in a new workspace.'}
             </Typography>
           )}
@@ -554,6 +588,30 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                         {fileProblem}
                       </Typography>
                     )}
+                    {bidsCheck.checking && (
+                      <Typography variant="body2" sx={{ opacity: 0.6 }}>Checking the file…</Typography>
+                    )}
+                    {bidsCheck.result && (
+                      <Stack sx={{ gap: 0.5, px: 4, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        {!bidsProblems.some((p) => p.level === 'error') && (
+                          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+                            <Typography variant="body2" sx={{ color: 'success.main' }}>
+                              Ready for DANDI: {bidsCheck.result.subjects.length === 1 ? '1 animal' : `${bidsCheck.result.subjects.length} animals`} ({bidsCheck.result.subjects.map((s) => s.id).join(', ')}),{' '}
+                              {bidsCheck.result.files.filter((f) => f.path.startsWith('sub-') && f.path.endsWith('.tsv')).length} tables
+                            </Typography>
+                            <BidsStructureButton files={bidsCheck.result.files} />
+                          </Stack>
+                        )}
+                        {bidsProblems.slice(0, 8).map((p, i) => (
+                          <Typography key={i} variant="body2" sx={{ color: p.level === 'error' ? 'error.main' : 'warning.main' }}>
+                            {p.message}
+                          </Typography>
+                        ))}
+                        {bidsProblems.length > 8 && (
+                          <Typography variant="body2" sx={{ opacity: 0.6 }}>…and {bidsProblems.length - 8} more</Typography>
+                        )}
+                      </Stack>
+                    )}
                   </>
                 ) : (
                   <>
@@ -571,6 +629,11 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
               <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: 1, color: '#FFFFFFCC' }}>
                 Download an example input file for this protocol and fill in your data the same way.
               </Typography>
+              {bidsConfig && (
+                <Typography sx={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: '14px', lineHeight: 1.4, color: '#FFFFFFCC' }}>
+                  Upload one filled reporting sheet per animal, or a zip of them. Other files in the zip, such as the weight log or the protocol PDFs, are kept with your data.
+                </Typography>
+              )}
               <Button
                 variant="outlined"
                 size="small"
@@ -608,7 +671,9 @@ export default function DataUploadDialog({ open, initialProtocol, onClose, onAut
                   {step === 'stillRunning' ? 'Results will be in' : 'Results are in'} <code>{outputsDir}/</code> in your workspace.
                 </Typography>
               )}
-              {step !== 'uploading' && spawnedWorkspaceId !== undefined && (
+              {/* Only once this run has its workspace: one merely recorded in the dandiset may not be touched yet. */}
+              {step !== 'uploading' && spawnedWorkspaceId !== undefined
+                && runSteps.some((s) => s.id === RUN_STEP.workspace && s.state === 'succeeded') && (
                 <Button variant="outlined" onClick={() => openWorkspaceTab(spawnedWorkspaceId)}>
                   Open workspace
                 </Button>
