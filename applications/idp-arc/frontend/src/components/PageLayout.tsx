@@ -26,7 +26,7 @@ import { Logo } from '../Icons'
 import DataUploadDialog from './DataUploadDialog'
 import { registerUploadOpener } from './UploadContext'
 import LoginDialog from './LoginDialog'
-import { OSB_LOGIN_POPUP_NAME, OsbUnreachable, takeLoginDialogReturn } from './loginReturn'
+import { clearOsbLoginPopup, markOsbLoginPopup, OSB_LOGIN_POPUP_NAME, OsbUnreachable, takeLoginDialogReturn } from './loginReturn'
 import { clearAllRuns, loadRun } from './runStorage'
 import type { RunStep } from '../core/types'
 import { SIGN_IN_AGAIN } from '../core/userMessages'
@@ -91,7 +91,9 @@ export default function PageLayout({
       return null
     }
     try {
-      popup.location.href = await authClient.getLoginUrl(`${window.location.origin}/`)
+      const loginUrl = await authClient.getLoginUrl(`${window.location.origin}/`)
+      markOsbLoginPopup(loginUrl)
+      popup.location.href = loginUrl
     } catch {
       // keycloak-js 26 + PKCE can throw if internal state is unset (e.g. after
       // token expiry). Fall back to a full-page redirect via kc.login().
@@ -99,15 +101,17 @@ export default function PageLayout({
       authClient.login()
       return null
     }
+    // `popup.closed` also reads true once a GitHub/ORCID sign-in has cut the popup off from this
+    // tab (loginReturn.ts), while it is still open: the button stops waiting, but the completion
+    // message (App.tsx) can still arrive and reload the page, reopening the dialog.
     const poll = setInterval(() => {
       if (popup.closed) {
         clearInterval(poll)
-        // Closed without completing (completing reloads the page first): no dialog to reopen.
         takeLoginDialogReturn()
         onEnded()
       }
     }, 500)
-    return { cancel: () => { clearInterval(poll); popup.close(); takeLoginDialogReturn(); onEnded() } }
+    return { cancel: () => { clearInterval(poll); popup.close(); clearOsbLoginPopup(); takeLoginDialogReturn(); onEnded() } }
   }
 
   const navigate = useNavigate()
@@ -122,7 +126,9 @@ export default function PageLayout({
   // EMBER's popup sign-in doesn't reload the page, so it updates this state.
   const needsEmber = UPLOAD_BACKEND === 'ember'
   const [emberSignedIn, setEmberSignedIn] = useState(() => emberAuth.isConnected())
-  const loginsDone = osbSignedIn && (!needsEmber || (emberSignedIn && emberAuth.isConnected()))
+  const emberLoggedIn = needsEmber && emberSignedIn && emberAuth.isConnected()
+  // The Login button stays while any login it offers is missing; hidden once all are done.
+  const loginsDone = osbSignedIn && (!needsEmber || emberLoggedIn)
   /**
    * Whether each login still holds, checked now rather than as of the page load: an EMBER token
    * expires, and an OSB session can end without the page knowing until a token is asked for (the
@@ -172,10 +178,9 @@ export default function PageLayout({
   const navItems = [
     { label: t('nav.protocols'), path: '/protocols' },
     { label: t('nav.about'), path: '/about' },
-    ...(isAuthenticated ? [
-      { label: t('nav.myWorkspaces'), path: OSB_WORKSPACES_URL, external: true },
-      ...(needsEmber ? [{ label: t('nav.myDandisets'), path: MY_DANDISETS_URL, external: true }] : []),
-    ] : []),
+    // Each account's page only while signed in to that account.
+    ...(osbSignedIn ? [{ label: t('nav.myWorkspaces'), path: OSB_WORKSPACES_URL, external: true }] : []),
+    ...(emberLoggedIn ? [{ label: t('nav.myDandisets'), path: MY_DANDISETS_URL, external: true }] : []),
   ]
 
   const isActive = (path: string) => location.pathname === path

@@ -17,16 +17,32 @@ import ProtocolsPage from './pages/ProtocolsPage'
 import AboutPage from './pages/AboutPage'
 import EmberCallback from './pages/EmberCallback'
 import NotFound from './pages/NotFound'
-import { OSB_LOGIN_POPUP_NAME } from './components/loginReturn'
+import {
+  isOsbLoginPopup, markLoginDialogReturn, OSB_LOGIN_CHANNEL, OSB_LOGIN_COMPLETE, osbLoginPopupOpenedHere,
+} from './components/loginReturn'
 
 /**
  * This window is OSB's (Keycloak) login popup, sent back here once the user has signed in. It only
  * finishes the sign-in, hands it to the main tab and closes; it never shows the app (it would
  * otherwise reopen the Login dialog: a popup starts with a copy of its opener's sessionStorage).
- * Told by its window name (OSB_LOGIN_POPUP_NAME). EMBER-DANDI's popup is handled on its callback route.
+ * Told by its window name or its callback's state (loginReturn.ts). EMBER-DANDI's popup is handled
+ * on its callback route.
  */
-const IN_OSB_LOGIN_POPUP = typeof window !== 'undefined' && window.name === OSB_LOGIN_POPUP_NAME
-  && window.location.pathname !== EMBER_CALLBACK_PATH
+const IN_OSB_LOGIN_POPUP = typeof window !== 'undefined' && window.location.pathname !== EMBER_CALLBACK_PATH
+  && isOsbLoginPopup()
+
+/** Tells the main tab the OSB sign-in completed: over the BroadcastChannel (works even when a
+ *  GitHub/ORCID sign-in cut the popup off from its opener), and to the opener when there is one. */
+function announceOsbLogin() {
+  try {
+    const channel = new BroadcastChannel(OSB_LOGIN_CHANNEL)
+    channel.postMessage({ type: OSB_LOGIN_COMPLETE })
+    channel.close()
+  } catch { /* no BroadcastChannel: the opener below */ }
+  try {
+    window.opener?.postMessage({ type: OSB_LOGIN_COMPLETE }, window.location.origin)
+  } catch { /* opener gone */ }
+}
 
 /** What the OSB login popup shows while it finishes the sign-in and closes itself. */
 function OsbLoginPopupScreen({ authState }: { authState: AuthState }) {
@@ -35,7 +51,7 @@ function OsbLoginPopupScreen({ authState }: { authState: AuthState }) {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, p: 4, textAlign: 'center' }}>
-        {authState === 'loading' || authState === 'authenticated' ? (
+        {authState === 'loading' ? (
           <>
             <CircularProgress size={28} />
             <Typography variant="body2" sx={{ opacity: 0.7 }}>{t('loginDialog.finishingSignIn')}</Typography>
@@ -86,10 +102,14 @@ function App() {
       authClient
         .init()
         .then((authenticated: boolean) => {
-          // If running inside the login popup, signal the parent and close.
-          if (authenticated && IN_OSB_LOGIN_POPUP && window.opener) {
-            window.opener.postMessage({ type: 'keycloak-login-complete' }, window.location.origin)
-            window.close()
+          // In the login popup: tell the main tab and close. A popup cut off from its opener may
+          // not be allowed to close itself; it then asks the user to (OsbLoginPopupScreen).
+          if (IN_OSB_LOGIN_POPUP) {
+            if (authenticated) {
+              announceOsbLogin()
+              window.close()
+            }
+            setAuthState(authenticated ? 'authenticated' : 'unauthenticated')
             return
           }
           setAuthState(authenticated ? 'authenticated' : 'unauthenticated')
@@ -115,15 +135,28 @@ function App() {
     }
   }, [t])
 
-  // Reload after popup login so check-sso picks up the new Keycloak session.
+  // Reload after popup login so check-sso picks up the new Keycloak session. Other IDP tabs hear it
+  // too (BroadcastChannel) and reload signed in; only the tab that opened the popup reopens the
+  // Login dialog. Both channels may deliver it: the first reload wins.
   useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      if (event.origin === window.location.origin && event.data?.type === 'keycloak-login-complete') {
-        window.location.reload()
-      }
+    if (IN_OSB_LOGIN_POPUP) return
+    const complete = () => {
+      if (osbLoginPopupOpenedHere()) markLoginDialogReturn()
+      window.location.reload()
     }
-    window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin === window.location.origin && event.data?.type === OSB_LOGIN_COMPLETE) complete()
+    }
+    window.addEventListener('message', onMessage)
+    let channel: BroadcastChannel | undefined
+    try {
+      channel = new BroadcastChannel(OSB_LOGIN_CHANNEL)
+      channel.onmessage = (event) => { if (event.data?.type === OSB_LOGIN_COMPLETE) complete() }
+    } catch { /* no BroadcastChannel: the opener's message alone */ }
+    return () => {
+      window.removeEventListener('message', onMessage)
+      channel?.close()
+    }
   }, [])
 
   const username =
