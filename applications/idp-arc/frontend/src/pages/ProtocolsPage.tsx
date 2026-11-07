@@ -94,7 +94,7 @@ export default function ProtocolsPage() {
                 <br />
                 <Box
                   component="a"
-                  href="mailto:arc@example.com"
+                  href="mailto:wilbrecht@berkeley.edu"
                 >
                   <Typography variant="caption" color="textPrimary"> Contact us</Typography>
                 </Box>
